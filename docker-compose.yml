@@ -1,0 +1,16 @@
+services:
+  mastablasta:
+    build: .
+    container_name: mastablasta-api
+    ports:
+      - "33766:33766"
+    environment:
+      - PORT=33766
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:33766/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
