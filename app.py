@@ -23,7 +23,6 @@ scheduler.start()
 
 # In-memory storage for posts (in production, use a database)
 posts_db = {}
-platforms_config = {}
 
 
 class PlatformAdapter:
@@ -47,7 +46,8 @@ class PlatformAdapter:
     def publish(self, post_data, credentials):
         """Publish post to platform"""
         # In a real implementation, this would call the platform's API
-        logger.info(f"Publishing to {self.platform_name}: {post_data}")
+        # Note: credentials are not logged to avoid exposing sensitive data
+        logger.info(f"Publishing to {self.platform_name}")
         return {
             'success': True,
             'platform': self.platform_name,
@@ -243,9 +243,11 @@ def schedule_post():
     
     # Parse scheduled time
     try:
-        scheduled_dt = datetime.fromisoformat(scheduled_time.replace('Z', '+00:00'))
+        # Handle both 'Z' suffix and explicit timezone formats
+        scheduled_time_normalized = scheduled_time.replace('Z', '+00:00')
+        scheduled_dt = datetime.fromisoformat(scheduled_time_normalized)
     except ValueError:
-        return jsonify({'error': 'Invalid scheduled_time format. Use ISO 8601 format'}), 400
+        return jsonify({'error': 'Invalid scheduled_time format. Use ISO 8601 format (e.g., 2026-01-08T10:00:00Z)'}), 400
     
     if scheduled_dt <= datetime.now(scheduled_dt.tzinfo):
         return jsonify({'error': 'Scheduled time must be in the future'}), 400
@@ -354,5 +356,6 @@ def index():
 
 
 if __name__ == '__main__':
+    # Development server - for production use gunicorn (see Dockerfile)
     port = int(os.environ.get('PORT', 33766))
     app.run(host='0.0.0.0', port=port, debug=False)
