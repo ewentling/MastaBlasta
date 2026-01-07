@@ -58,3 +58,8 @@ htmlcov/
 # Temporary files
 /tmp/
 *.tmp
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.memory import MemoryJobStore
@@ -21,8 +21,9 @@ jobstores = {
 scheduler = BackgroundScheduler(jobstores=jobstores, timezone='UTC')
 scheduler.start()
 
-# In-memory storage for posts (in production, use a database)
+# In-memory storage for posts and accounts (in production, use a database)
 posts_db = {}
+accounts_db = {}  # Stores platform accounts with credentials
 
 
 class PlatformAdapter:
@@ -143,6 +144,189 @@ def health_check():
     })
 
 
+@app.route('/api/accounts', methods=['GET'])
+def get_accounts():
+    """Get all configured platform accounts"""
+    accounts = []
+    for account_id, account in accounts_db.items():
+        # Return account info without sensitive credentials
+        accounts.append({
+            'id': account_id,
+            'platform': account['platform'],
+            'name': account['name'],
+            'username': account.get('username', ''),
+            'enabled': account.get('enabled', True),
+            'created_at': account.get('created_at', '')
+        })
+    
+    return jsonify({
+        'accounts': accounts,
+        'count': len(accounts)
+    })
+
+
+@app.route('/api/accounts', methods=['POST'])
+def add_account():
+    """Add a new platform account"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    platform = data.get('platform', '')
+    name = data.get('name', '')
+    username = data.get('username', '')
+    credentials = data.get('credentials', {})
+    
+    if not platform:
+        return jsonify({'error': 'Platform is required'}), 400
+    
+    if platform not in PLATFORM_ADAPTERS:
+        return jsonify({'error': f'Invalid platform: {platform}'}), 400
+    
+    if not name:
+        return jsonify({'error': 'Account name is required'}), 400
+    
+    # Create account record
+    account_id = str(uuid.uuid4())
+    account_record = {
+        'id': account_id,
+        'platform': platform,
+        'name': name,
+        'username': username,
+        'credentials': credentials,
+        'enabled': True,
+        'created_at': datetime.utcnow().isoformat()
+    }
+    
+    accounts_db[account_id] = account_record
+    
+    return jsonify({
+        'success': True,
+        'account_id': account_id,
+        'message': 'Account added successfully',
+        'account': {
+            'id': account_id,
+            'platform': platform,
+            'name': name,
+            'username': username,
+            'enabled': True
+        }
+    }), 201
+
+
+@app.route('/api/accounts/<account_id>', methods=['GET'])
+def get_account(account_id):
+    """Get a specific account"""
+    account = accounts_db.get(account_id)
+    
+    if not account:
+        return jsonify({'error': 'Account not found'}), 404
+    
+    # Return without sensitive credentials
+    return jsonify({
+        'account': {
+            'id': account_id,
+            'platform': account['platform'],
+            'name': account['name'],
+            'username': account.get('username', ''),
+            'enabled': account.get('enabled', True),
+            'created_at': account.get('created_at', '')
+        }
+    })
+
+
+@app.route('/api/accounts/<account_id>', methods=['PUT'])
+def update_account(account_id):
+    """Update an existing account"""
+    account = accounts_db.get(account_id)
+    
+    if not account:
+        return jsonify({'error': 'Account not found'}), 404
+    
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    # Update fields
+    if 'name' in data:
+        account['name'] = data['name']
+    if 'username' in data:
+        account['username'] = data['username']
+    if 'credentials' in data:
+        account['credentials'] = data['credentials']
+    if 'enabled' in data:
+        account['enabled'] = data['enabled']
+    
+    account['updated_at'] = datetime.utcnow().isoformat()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Account updated successfully',
+        'account': {
+            'id': account_id,
+            'platform': account['platform'],
+            'name': account['name'],
+            'username': account.get('username', ''),
+            'enabled': account.get('enabled', True)
+        }
+    })
+
+
+@app.route('/api/accounts/<account_id>', methods=['DELETE'])
+def delete_account(account_id):
+    """Delete an account"""
+    account = accounts_db.get(account_id)
+    
+    if not account:
+        return jsonify({'error': 'Account not found'}), 404
+    
+    del accounts_db[account_id]
+    
+    return jsonify({
+        'success': True,
+        'message': 'Account deleted successfully'
+    })
+
+
+@app.route('/api/accounts/<account_id>/test', methods=['POST'])
+def test_account(account_id):
+    """Test account credentials"""
+    account = accounts_db.get(account_id)
+    
+    if not account:
+        return jsonify({'error': 'Account not found'}), 404
+    
+    platform = account['platform']
+    credentials = account.get('credentials', {})
+    
+    if platform not in PLATFORM_ADAPTERS:
+        return jsonify({
+            'success': False,
+            'error': f'Platform {platform} not supported'
+        }), 400
+    
+    adapter = PLATFORM_ADAPTERS[platform]
+    
+    try:
+        # Validate credentials using the adapter
+        is_valid = adapter.validate_credentials(credentials)
+        
+        return jsonify({
+            'success': is_valid,
+            'message': 'Credentials are valid' if is_valid else 'Invalid credentials',
+            'platform': platform,
+            'account_name': account['name']
+        })
+    except Exception as e:
+        logger.error(f"Error testing credentials for {account_id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route('/api/platforms', methods=['GET'])
 def get_platforms():
     """Get list of supported platforms"""
@@ -170,14 +354,29 @@ def create_post():
     
     content = data.get('content', '')
     media = data.get('media', [])
+    account_ids = data.get('account_ids', [])
+    # Legacy support: allow platforms + credentials
     platforms = data.get('platforms', [])
     credentials = data.get('credentials', {})
     
     if not content:
         return jsonify({'error': 'Content is required'}), 400
     
-    if not platforms:
-        return jsonify({'error': 'At least one platform must be specified'}), 400
+    # Use account_ids if provided, otherwise fall back to platforms
+    if account_ids:
+        # Validate account IDs and build credentials dict
+        credentials = {}
+        platforms = []
+        for account_id in account_ids:
+            account = accounts_db.get(account_id)
+            if not account:
+                return jsonify({'error': f'Account {account_id} not found'}), 404
+            if not account.get('enabled', True):
+                return jsonify({'error': f'Account {account["name"]} is disabled'}), 400
+            platforms.append(account['platform'])
+            credentials[account['platform']] = account.get('credentials', {})
+    elif not platforms:
+        return jsonify({'error': 'At least one account or platform must be specified'}), 400
     
     # Validate platforms
     invalid_platforms = [p for p in platforms if p not in PLATFORM_ADAPTERS]
@@ -193,6 +392,7 @@ def create_post():
         'content': content,
         'media': media,
         'platforms': platforms,
+        'account_ids': account_ids,
         'status': 'publishing',
         'created_at': datetime.utcnow().isoformat(),
         'scheduled_for': None
@@ -221,6 +421,8 @@ def schedule_post():
     
     content = data.get('content', '')
     media = data.get('media', [])
+    account_ids = data.get('account_ids', [])
+    # Legacy support
     platforms = data.get('platforms', [])
     credentials = data.get('credentials', {})
     scheduled_time = data.get('scheduled_time')
@@ -228,8 +430,21 @@ def schedule_post():
     if not content:
         return jsonify({'error': 'Content is required'}), 400
     
-    if not platforms:
-        return jsonify({'error': 'At least one platform must be specified'}), 400
+    # Use account_ids if provided, otherwise fall back to platforms
+    if account_ids:
+        # Validate account IDs and build credentials dict
+        credentials = {}
+        platforms = []
+        for account_id in account_ids:
+            account = accounts_db.get(account_id)
+            if not account:
+                return jsonify({'error': f'Account {account_id} not found'}), 404
+            if not account.get('enabled', True):
+                return jsonify({'error': f'Account {account["name"]} is disabled'}), 400
+            platforms.append(account['platform'])
+            credentials[account['platform']] = account.get('credentials', {})
+    elif not platforms:
+        return jsonify({'error': 'At least one account or platform must be specified'}), 400
     
     if not scheduled_time:
         return jsonify({'error': 'Scheduled time is required'}), 400
@@ -259,6 +474,7 @@ def schedule_post():
         'content': content,
         'media': media,
         'platforms': platforms,
+        'account_ids': account_ids,
         'status': 'scheduled',
         'created_at': datetime.utcnow().isoformat(),
         'scheduled_for': scheduled_time
@@ -339,20 +555,40 @@ def delete_post(post_id):
 
 @app.route('/', methods=['GET'])
 def index():
-    """Root endpoint with API information"""
+    """Serve the frontend or API information"""
+    # Check if frontend build exists
+    frontend_path = os.path.join(os.path.dirname(__file__), 'frontend', 'dist')
+    if os.path.exists(os.path.join(frontend_path, 'index.html')):
+        return send_from_directory(frontend_path, 'index.html')
+    
+    # Fallback to API information if no frontend
     return jsonify({
         'name': 'MastaBlasta API',
         'version': '1.0.0',
         'description': 'Multi-platform social media posting service',
         'endpoints': {
             'health': '/api/health',
+            'accounts': '/api/accounts',
             'platforms': '/api/platforms',
             'post': '/api/post',
             'schedule': '/api/schedule',
             'posts': '/api/posts',
-            'delete_post': '/api/posts/:id'
+            'delete_post': '/api/posts/:id',
+            'test_account': '/api/accounts/:id/test'
         }
     })
+
+
+@app.route('/<path:path>')
+def serve_frontend(path):
+    """Serve frontend static files"""
+    frontend_path = os.path.join(os.path.dirname(__file__), 'frontend', 'dist')
+    if os.path.exists(os.path.join(frontend_path, path)):
+        return send_from_directory(frontend_path, path)
+    # For SPA routing, return index.html for non-API routes
+    if os.path.exists(os.path.join(frontend_path, 'index.html')) and not path.startswith('api/'):
+        return send_from_directory(frontend_path, 'index.html')
+    return jsonify({'error': 'Not found'}), 404
 
 
 if __name__ == '__main__':

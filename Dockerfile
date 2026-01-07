@@ -1,3 +1,14 @@
+# Multi-stage build
+# Stage 1: Build frontend
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Python backend
 FROM python:3.11-slim
 
 # Set working directory
@@ -9,6 +20,9 @@ RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host pypi.pytho
 
 # Copy application code
 COPY app.py .
+
+# Copy frontend build from first stage
+COPY --from=frontend-builder /frontend/dist ./frontend/dist
 
 # Expose port 33766
 EXPOSE 33766
