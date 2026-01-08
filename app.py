@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, redirect
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.memory import MemoryJobStore
@@ -26,6 +26,10 @@ scheduler.start()
 posts_db = {}
 accounts_db = {}  # Stores platform accounts with credentials
 oauth_states = {}  # Stores OAuth state tokens temporarily
+shortened_urls = {}  # Stores shortened URLs with click tracking
+url_clicks = {}  # Stores click data for URLs
+social_monitors = {}  # Stores social listening monitors
+monitor_results = {}  # Stores results from social monitoring
 
 
 class PlatformAdapter:
@@ -706,6 +710,441 @@ def delete_post(post_id):
     return jsonify({
         'success': True,
         'message': 'Post deleted successfully'
+    })
+
+
+@app.route('/', methods=['GET'])
+def index():
+    """Serve the frontend or API information"""
+    # Check if frontend build exists
+    frontend_path = os.path.join(os.path.dirname(__file__), 'frontend', 'dist')
+    if os.path.exists(os.path.join(frontend_path, 'index.html')):
+        return send_from_directory(frontend_path, 'index.html')
+    
+    # Fallback to API information if no frontend
+    return jsonify({
+        'name': 'MastaBlasta API',
+        'version': '1.0.0',
+        'description': 'Multi-platform social media posting service',
+        'endpoints': {
+            'health': '/api/health',
+            'accounts': '/api/accounts',
+            'platforms': '/api/platforms',
+            'post': '/api/post',
+            'schedule': '/api/schedule',
+            'posts': '/api/posts',
+            'delete_post': '/api/posts/:id',
+            'test_account': '/api/accounts/:id/test',
+            'shorten_url': '/api/urls/shorten',
+            'url_stats': '/api/urls/:short_code/stats',
+            'social_monitors': '/api/social-monitors',
+            'monitor_results': '/api/social-monitors/:id/results'
+        }
+    })
+
+
+# URL Shortening & Tracking Endpoints
+
+def generate_short_code():
+    """Generate a unique short code for URLs"""
+    import random
+    import string
+    chars = string.ascii_letters + string.digits
+    while True:
+        code = ''.join(random.choice(chars) for _ in range(6))
+        if code not in shortened_urls:
+            return code
+
+
+@app.route('/api/urls/shorten', methods=['POST'])
+def shorten_url():
+    """Shorten a URL with tracking capabilities"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    original_url = data.get('url', '')
+    utm_source = data.get('utm_source', '')
+    utm_medium = data.get('utm_medium', '')
+    utm_campaign = data.get('utm_campaign', '')
+    custom_code = data.get('custom_code', '')
+    
+    if not original_url:
+        return jsonify({'error': 'URL is required'}), 400
+    
+    # Check if custom code is already taken
+    if custom_code and custom_code in shortened_urls:
+        return jsonify({'error': 'Custom code already exists'}), 400
+    
+    # Generate or use custom code
+    short_code = custom_code if custom_code else generate_short_code()
+    
+    # Build URL with UTM parameters
+    final_url = original_url
+    utm_params = []
+    if utm_source:
+        utm_params.append(f'utm_source={utm_source}')
+    if utm_medium:
+        utm_params.append(f'utm_medium={utm_medium}')
+    if utm_campaign:
+        utm_params.append(f'utm_campaign={utm_campaign}')
+    
+    if utm_params:
+        separator = '&' if '?' in original_url else '?'
+        final_url = f"{original_url}{separator}{'&'.join(utm_params)}"
+    
+    # Store shortened URL
+    url_id = str(uuid.uuid4())
+    shortened_urls[short_code] = {
+        'id': url_id,
+        'short_code': short_code,
+        'original_url': original_url,
+        'final_url': final_url,
+        'utm_source': utm_source,
+        'utm_medium': utm_medium,
+        'utm_campaign': utm_campaign,
+        'created_at': datetime.utcnow().isoformat(),
+        'clicks': 0
+    }
+    
+    # Initialize click tracking
+    url_clicks[short_code] = []
+    
+    base_url = request.host_url.rstrip('/')
+    short_url = f"{base_url}/u/{short_code}"
+    
+    return jsonify({
+        'success': True,
+        'id': url_id,
+        'short_code': short_code,
+        'short_url': short_url,
+        'original_url': original_url,
+        'final_url': final_url,
+        'created_at': shortened_urls[short_code]['created_at']
+    }), 201
+
+
+@app.route('/u/<short_code>', methods=['GET'])
+def redirect_short_url(short_code):
+    """Redirect short URL and track click"""
+    if short_code not in shortened_urls:
+        return jsonify({'error': 'Short URL not found'}), 404
+    
+    url_data = shortened_urls[short_code]
+    
+    # Track click
+    click_data = {
+        'timestamp': datetime.utcnow().isoformat(),
+        'user_agent': request.headers.get('User-Agent', ''),
+        'referer': request.headers.get('Referer', ''),
+        'ip': request.remote_addr
+    }
+    url_clicks[short_code].append(click_data)
+    shortened_urls[short_code]['clicks'] += 1
+    
+    # Redirect to final URL
+    from flask import redirect
+    return redirect(url_data['final_url'], code=302)
+
+
+@app.route('/api/urls', methods=['GET'])
+def get_shortened_urls():
+    """Get all shortened URLs"""
+    urls = []
+    for short_code, url_data in shortened_urls.items():
+        urls.append({
+            'id': url_data['id'],
+            'short_code': short_code,
+            'original_url': url_data['original_url'],
+            'final_url': url_data['final_url'],
+            'clicks': url_data['clicks'],
+            'created_at': url_data['created_at'],
+            'utm_source': url_data.get('utm_source', ''),
+            'utm_medium': url_data.get('utm_medium', ''),
+            'utm_campaign': url_data.get('utm_campaign', '')
+        })
+    
+    # Sort by creation time (newest first)
+    urls.sort(key=lambda x: x['created_at'], reverse=True)
+    
+    return jsonify({
+        'urls': urls,
+        'count': len(urls)
+    })
+
+
+@app.route('/api/urls/<short_code>', methods=['DELETE'])
+def delete_shortened_url(short_code):
+    """Delete a shortened URL"""
+    if short_code not in shortened_urls:
+        return jsonify({'error': 'Short URL not found'}), 404
+    
+    del shortened_urls[short_code]
+    if short_code in url_clicks:
+        del url_clicks[short_code]
+    
+    return jsonify({
+        'success': True,
+        'message': 'Shortened URL deleted successfully'
+    })
+
+
+@app.route('/api/urls/<short_code>/stats', methods=['GET'])
+def get_url_stats(short_code):
+    """Get click statistics for a shortened URL"""
+    if short_code not in shortened_urls:
+        return jsonify({'error': 'Short URL not found'}), 404
+    
+    url_data = shortened_urls[short_code]
+    clicks = url_clicks.get(short_code, [])
+    
+    # Aggregate stats
+    total_clicks = len(clicks)
+    unique_ips = len(set(click['ip'] for click in clicks))
+    
+    # Group clicks by date
+    clicks_by_date = {}
+    for click in clicks:
+        date = click['timestamp'][:10]  # YYYY-MM-DD
+        clicks_by_date[date] = clicks_by_date.get(date, 0) + 1
+    
+    # Get top referers
+    referers = {}
+    for click in clicks:
+        ref = click['referer'] or 'Direct'
+        referers[ref] = referers.get(ref, 0) + 1
+    
+    return jsonify({
+        'short_code': short_code,
+        'original_url': url_data['original_url'],
+        'created_at': url_data['created_at'],
+        'total_clicks': total_clicks,
+        'unique_visitors': unique_ips,
+        'clicks_by_date': clicks_by_date,
+        'top_referers': sorted(referers.items(), key=lambda x: x[1], reverse=True)[:5],
+        'recent_clicks': clicks[-10:][::-1]  # Last 10 clicks, most recent first
+    })
+
+
+# Social Listening & Monitoring Endpoints
+
+@app.route('/api/social-monitors', methods=['GET'])
+def get_social_monitors():
+    """Get all social listening monitors"""
+    monitors = []
+    for monitor_id, monitor in social_monitors.items():
+        result_count = len(monitor_results.get(monitor_id, []))
+        monitors.append({
+            'id': monitor_id,
+            'name': monitor['name'],
+            'keywords': monitor['keywords'],
+            'platforms': monitor['platforms'],
+            'active': monitor['active'],
+            'created_at': monitor['created_at'],
+            'result_count': result_count
+        })
+    
+    # Sort by creation time (newest first)
+    monitors.sort(key=lambda x: x['created_at'], reverse=True)
+    
+    return jsonify({
+        'monitors': monitors,
+        'count': len(monitors)
+    })
+
+
+@app.route('/api/social-monitors', methods=['POST'])
+def create_social_monitor():
+    """Create a new social listening monitor"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    name = data.get('name', '')
+    keywords = data.get('keywords', [])
+    platforms = data.get('platforms', [])
+    
+    if not name:
+        return jsonify({'error': 'Monitor name is required'}), 400
+    
+    if not keywords:
+        return jsonify({'error': 'At least one keyword is required'}), 400
+    
+    if not platforms:
+        return jsonify({'error': 'At least one platform is required'}), 400
+    
+    # Create monitor
+    monitor_id = str(uuid.uuid4())
+    social_monitors[monitor_id] = {
+        'id': monitor_id,
+        'name': name,
+        'keywords': keywords,
+        'platforms': platforms,
+        'active': True,
+        'created_at': datetime.utcnow().isoformat()
+    }
+    
+    # Initialize results storage
+    monitor_results[monitor_id] = []
+    
+    # Simulate initial scan results
+    _simulate_monitor_scan(monitor_id)
+    
+    return jsonify({
+        'success': True,
+        'monitor_id': monitor_id,
+        'message': 'Social monitor created successfully',
+        'monitor': social_monitors[monitor_id]
+    }), 201
+
+
+def _simulate_monitor_scan(monitor_id):
+    """Simulate social media monitoring scan (demo data)"""
+    monitor = social_monitors.get(monitor_id)
+    if not monitor:
+        return
+    
+    # Generate some demo results
+    import random
+    from datetime import timedelta
+    
+    demo_users = ['@user1', '@user2', '@company_x', '@influencer', '@brand_y']
+    demo_sentiments = ['positive', 'neutral', 'negative']
+    
+    for keyword in monitor['keywords']:
+        for platform in monitor['platforms']:
+            # Generate 3-5 demo mentions per keyword/platform
+            num_mentions = random.randint(3, 5)
+            for _ in range(num_mentions):
+                result = {
+                    'id': str(uuid.uuid4()),
+                    'platform': platform,
+                    'keyword': keyword,
+                    'author': random.choice(demo_users),
+                    'content': f"Demo mention of '{keyword}' on {platform}",
+                    'url': f'https://{platform}.com/post/{random.randint(100000, 999999)}',
+                    'sentiment': random.choice(demo_sentiments),
+                    'engagement': {
+                        'likes': random.randint(0, 500),
+                        'shares': random.randint(0, 100),
+                        'comments': random.randint(0, 50)
+                    },
+                    'timestamp': (datetime.utcnow() - timedelta(hours=random.randint(0, 48))).isoformat(),
+                    'read': False
+                }
+                monitor_results[monitor_id].append(result)
+
+
+@app.route('/api/social-monitors/<monitor_id>', methods=['PUT'])
+def update_social_monitor(monitor_id):
+    """Update a social monitor"""
+    if monitor_id not in social_monitors:
+        return jsonify({'error': 'Monitor not found'}), 404
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    monitor = social_monitors[monitor_id]
+    
+    if 'name' in data:
+        monitor['name'] = data['name']
+    if 'keywords' in data:
+        monitor['keywords'] = data['keywords']
+    if 'platforms' in data:
+        monitor['platforms'] = data['platforms']
+    if 'active' in data:
+        monitor['active'] = data['active']
+    
+    monitor['updated_at'] = datetime.utcnow().isoformat()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Monitor updated successfully',
+        'monitor': monitor
+    })
+
+
+@app.route('/api/social-monitors/<monitor_id>', methods=['DELETE'])
+def delete_social_monitor(monitor_id):
+    """Delete a social monitor"""
+    if monitor_id not in social_monitors:
+        return jsonify({'error': 'Monitor not found'}), 404
+    
+    del social_monitors[monitor_id]
+    if monitor_id in monitor_results:
+        del monitor_results[monitor_id]
+    
+    return jsonify({
+        'success': True,
+        'message': 'Monitor deleted successfully'
+    })
+
+
+@app.route('/api/social-monitors/<monitor_id>/results', methods=['GET'])
+def get_monitor_results(monitor_id):
+    """Get results for a specific monitor"""
+    if monitor_id not in social_monitors:
+        return jsonify({'error': 'Monitor not found'}), 404
+    
+    results = monitor_results.get(monitor_id, [])
+    
+    # Filter parameters
+    platform = request.args.get('platform')
+    sentiment = request.args.get('sentiment')
+    unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+    
+    filtered_results = results
+    if platform:
+        filtered_results = [r for r in filtered_results if r['platform'] == platform]
+    if sentiment:
+        filtered_results = [r for r in filtered_results if r['sentiment'] == sentiment]
+    if unread_only:
+        filtered_results = [r for r in filtered_results if not r['read']]
+    
+    # Sort by timestamp (newest first)
+    filtered_results.sort(key=lambda x: x['timestamp'], reverse=True)
+    
+    return jsonify({
+        'monitor_id': monitor_id,
+        'results': filtered_results,
+        'count': len(filtered_results),
+        'total_count': len(results)
+    })
+
+
+@app.route('/api/social-monitors/<monitor_id>/results/<result_id>/mark-read', methods=['POST'])
+def mark_result_read(monitor_id, result_id):
+    """Mark a monitoring result as read"""
+    if monitor_id not in social_monitors:
+        return jsonify({'error': 'Monitor not found'}), 404
+    
+    results = monitor_results.get(monitor_id, [])
+    for result in results:
+        if result['id'] == result_id:
+            result['read'] = True
+            return jsonify({
+                'success': True,
+                'message': 'Result marked as read'
+            })
+    
+    return jsonify({'error': 'Result not found'}), 404
+
+
+@app.route('/api/social-monitors/<monitor_id>/refresh', methods=['POST'])
+def refresh_monitor(monitor_id):
+    """Manually refresh a monitor to fetch new results"""
+    if monitor_id not in social_monitors:
+        return jsonify({'error': 'Monitor not found'}), 404
+    
+    _simulate_monitor_scan(monitor_id)
+    
+    return jsonify({
+        'success': True,
+        'message': 'Monitor refreshed successfully',
+        'result_count': len(monitor_results.get(monitor_id, []))
     })
 
 

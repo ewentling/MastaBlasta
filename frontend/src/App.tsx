@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Home, Users, Send, Calendar, Settings } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
 import DashboardPage from './pages/DashboardPage';
+import URLShortenerPage from './pages/URLShortenerPage';
+import SocialMonitoringPage from './pages/SocialMonitoringPage';
 import SettingsModal from './components/SettingsModal';
 import { ThemeProvider } from './ThemeContext';
 import './App.css';
@@ -59,6 +61,18 @@ function Navigation() {
               <span>Scheduled Posts</span>
             </Link>
           </li>
+          <li>
+            <Link to="/url-shortener" className={isActive('/url-shortener')}>
+              <Link2 size={20} />
+              <span>URL Shortener</span>
+            </Link>
+          </li>
+          <li>
+            <Link to="/social-monitoring" className={isActive('/social-monitoring')}>
+              <TrendingUp size={20} />
+              <span>Social Monitoring</span>
+            </Link>
+          </li>
         </ul>
         <div className="sidebar-footer">
           <button className="settings-button" onClick={() => setShowSettings(true)}>
@@ -85,6 +99,8 @@ function App() {
                 <Route path="/accounts" element={<AccountsPage />} />
                 <Route path="/post" element={<PostPage />} />
                 <Route path="/scheduled" element={<ScheduledPostsPage />} />
+                <Route path="/url-shortener" element={<URLShortenerPage />} />
+                <Route path="/social-monitoring" element={<SocialMonitoringPage />} />
               </Routes>
             </main>
           </div>

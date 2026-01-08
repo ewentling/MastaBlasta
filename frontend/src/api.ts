@@ -105,3 +105,77 @@ export const oauthApi = {
     return response.data;
   },
 };
+
+export const urlsApi = {
+  getAll: async (): Promise<{ urls: any[]; count: number }> => {
+    const response = await api.get('/urls');
+    return response.data;
+  },
+
+  shorten: async (data: {
+    url: string;
+    utm_source?: string;
+    utm_medium?: string;
+    utm_campaign?: string;
+    custom_code?: string;
+  }): Promise<{ success: boolean; id: string; short_code: string; short_url: string; original_url: string }> => {
+    const response = await api.post('/urls/shorten', data);
+    return response.data;
+  },
+
+  delete: async (shortCode: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete(`/urls/${shortCode}`);
+    return response.data;
+  },
+
+  getStats: async (shortCode: string): Promise<any> => {
+    const response = await api.get(`/urls/${shortCode}/stats`);
+    return response.data;
+  },
+};
+
+export const socialMonitorsApi = {
+  getAll: async (): Promise<{ monitors: any[]; count: number }> => {
+    const response = await api.get('/social-monitors');
+    return response.data;
+  },
+
+  create: async (data: {
+    name: string;
+    keywords: string[];
+    platforms: string[];
+  }): Promise<{ success: boolean; monitor_id: string; monitor: any }> => {
+    const response = await api.post('/social-monitors', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: any): Promise<{ success: boolean; monitor: any }> => {
+    const response = await api.put(`/social-monitors/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete(`/social-monitors/${id}`);
+    return response.data;
+  },
+
+  getResults: async (id: string, filters?: {
+    platform?: string;
+    sentiment?: string;
+    unread_only?: boolean;
+  }): Promise<{ monitor_id: string; results: any[]; count: number; total_count: number }> => {
+    const response = await api.get(`/social-monitors/${id}/results`, { params: filters });
+    return response.data;
+  },
+
+  markRead: async (monitorId: string, resultId: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.post(`/social-monitors/${monitorId}/results/${resultId}/mark-read`);
+    return response.data;
+  },
+
+  refresh: async (id: string): Promise<{ success: boolean; message: string; result_count: number }> => {
+    const response = await api.post(`/social-monitors/${id}/refresh`);
+    return response.data;
+  },
+};
+
