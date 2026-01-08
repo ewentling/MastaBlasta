@@ -3,6 +3,9 @@ import type { ReactNode } from 'react';
 
 export type ThemeName = 'dark' | 'synthwave' | 'pixel' | 'crt' | 'neon';
 
+// Constants
+const THEME_STORAGE_KEY = 'mastablasta-theme';
+
 export interface Theme {
   name: ThemeName;
   displayName: string;
@@ -192,14 +195,14 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeName, setThemeName] = useState<ThemeName>(() => {
-    const saved = localStorage.getItem('mastablasta-theme');
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
     return (saved as ThemeName) || 'dark';
   });
 
   const theme = themes[themeName];
 
   useEffect(() => {
-    localStorage.setItem('mastablasta-theme', themeName);
+    localStorage.setItem(THEME_STORAGE_KEY, themeName);
     
     // Apply theme CSS variables to root
     const root = document.documentElement;

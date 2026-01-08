@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountsApi, platformsApi, oauthApi } from '../api';
 import { Plus, Trash2, Edit2, Check, X, TestTube, Zap } from 'lucide-react';
-import type { Account, CreateAccountRequest } from '../types';
+import type { Account, CreateAccountRequest, Platform } from '../types';
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
@@ -405,7 +405,7 @@ function OAuthModal({
   onClose,
   onSuccess,
 }: {
-  platforms: any[];
+  platforms: Platform[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -440,7 +440,13 @@ function OAuthModal({
 
       // Listen for OAuth callback message
       const handleMessage = async (event: MessageEvent) => {
-        // In production, verify event.origin for security
+        // Verify event origin for security
+        const allowedOrigin = window.location.origin;
+        if (event.origin !== allowedOrigin) {
+          console.warn('Ignoring message from unauthorized origin:', event.origin);
+          return;
+        }
+
         if (event.data.type === 'oauth_success') {
           window.removeEventListener('message', handleMessage);
           

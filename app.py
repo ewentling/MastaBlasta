@@ -6,6 +6,7 @@ from datetime import datetime
 import uuid
 import os
 import logging
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +25,7 @@ scheduler.start()
 # In-memory storage for posts and accounts (in production, use a database)
 posts_db = {}
 accounts_db = {}  # Stores platform accounts with credentials
+oauth_states = {}  # Stores OAuth state tokens temporarily
 
 
 class PlatformAdapter:
@@ -360,7 +362,6 @@ def oauth_init(platform):
     state_token = str(uuid.uuid4())
     
     # Store state token temporarily (in production, use a database or cache)
-    oauth_states = {}
     oauth_states[state_token] = {
         'platform': platform,
         'created_at': datetime.utcnow().isoformat()
@@ -434,7 +435,7 @@ def oauth_callback(platform):
                 window.opener.postMessage({{
                     type: 'oauth_success',
                     platform: '{platform}',
-                    data: {account_data}
+                    data: {json.dumps(account_data)}
                 }}, '*');
                 window.close();
             </script>
