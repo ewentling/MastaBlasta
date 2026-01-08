@@ -4,6 +4,7 @@ import { accountsApi, postsApi } from '../api';
 import { Send, Check, X, Sparkles, Hash, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAI } from '../contexts/AIContext';
+import { PlatformPreviews } from '../components/PlatformPreviews';
 
 export default function PostPage() {
   const navigate = useNavigate();
@@ -448,6 +449,13 @@ export default function PostPage() {
             </div>
           )}
         </div>
+
+        {/* Platform Previews */}
+        <PlatformPreviews
+          content={content}
+          selectedAccounts={selectedAccounts}
+          accounts={accounts}
+        />
 
         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
           <button
