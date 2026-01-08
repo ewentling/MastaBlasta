@@ -33,6 +33,10 @@ monitor_results = {}  # Stores results from social monitoring
 post_analytics = {}  # Stores analytics data for published posts
 bulk_imports = {}  # Stores bulk import job information
 templates_db = {}  # Stores post templates
+post_versions = {}  # Stores A/B test versions for posts
+ab_test_results = {}  # Stores A/B test performance data
+response_templates = {}  # Stores automated response templates
+chatbot_interactions = {}  # Stores chatbot conversation history
 
 
 class PlatformAdapter:
@@ -1789,6 +1793,373 @@ def template_detail(template_id):
         del templates_db[template_id]
         logger.info(f"Deleted template {template_id}")
         return jsonify({'message': 'Template deleted successfully'})
+
+
+###############################################################################
+# A/B TESTING & POST VERSIONING API ENDPOINTS
+###############################################################################
+
+@app.route('/api/post-versions', methods=['POST'])
+def create_post_version():
+    """Create a new version for A/B testing"""
+    data = request.json
+    
+    # Validate required fields
+    required_fields = ['original_post_id', 'version_name', 'content', 'platforms']
+    if not all(field in data for field in required_fields):
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    version_id = str(uuid.uuid4())
+    version = {
+        'id': version_id,
+        'original_post_id': data['original_post_id'],
+        'version_name': data['version_name'],
+        'content': data['content'],
+        'platforms': data['platforms'],
+        'hashtags': data.get('hashtags', []),
+        'cta': data.get('cta', ''),
+        'created_at': datetime.utcnow().isoformat(),
+        'status': 'draft'  # draft, testing, winner, archived
+    }
+    
+    # Store version
+    if data['original_post_id'] not in post_versions:
+        post_versions[data['original_post_id']] = []
+    
+    post_versions[data['original_post_id']].append(version)
+    
+    # Initialize test results
+    ab_test_results[version_id] = {
+        'impressions': 0,
+        'engagement': 0,
+        'clicks': 0,
+        'shares': 0,
+        'comments': 0,
+        'likes': 0,
+        'engagement_rate': 0.0,
+        'winner': False
+    }
+    
+    logger.info(f"Created post version {version_id} for post {data['original_post_id']}")
+    return jsonify(version), 201
+
+
+@app.route('/api/post-versions/<post_id>', methods=['GET'])
+def get_post_versions(post_id):
+    """Get all versions of a post"""
+    versions = post_versions.get(post_id, [])
+    
+    # Enhance with test results
+    enhanced_versions = []
+    for version in versions:
+        version_data = version.copy()
+        version_data['results'] = ab_test_results.get(version['id'], {})
+        enhanced_versions.append(version_data)
+    
+    return jsonify(enhanced_versions)
+
+
+@app.route('/api/post-versions/<version_id>/publish', methods=['POST'])
+def publish_version(version_id):
+    """Publish a specific version for A/B testing"""
+    # Find the version
+    version = None
+    for post_id, versions in post_versions.items():
+        for v in versions:
+            if v['id'] == version_id:
+                version = v
+                break
+    
+    if not version:
+        return jsonify({'error': 'Version not found'}), 404
+    
+    # Update status
+    version['status'] = 'testing'
+    version['published_at'] = datetime.utcnow().isoformat()
+    
+    # Simulate initial analytics (in production, integrate with platform APIs)
+    import random
+    ab_test_results[version_id] = {
+        'impressions': random.randint(1000, 5000),
+        'engagement': random.randint(50, 300),
+        'clicks': random.randint(20, 150),
+        'shares': random.randint(5, 50),
+        'comments': random.randint(3, 30),
+        'likes': random.randint(30, 200),
+        'engagement_rate': round(random.uniform(2.0, 8.0), 2),
+        'winner': False
+    }
+    
+    logger.info(f"Published version {version_id} for testing")
+    return jsonify({
+        'message': 'Version published for testing',
+        'version': version,
+        'results': ab_test_results[version_id]
+    })
+
+
+@app.route('/api/post-versions/<version_id>/winner', methods=['POST'])
+def mark_winner(version_id):
+    """Mark a version as the winner"""
+    # Find the version
+    version = None
+    post_id = None
+    for pid, versions in post_versions.items():
+        for v in versions:
+            if v['id'] == version_id:
+                version = v
+                post_id = pid
+                break
+    
+    if not version:
+        return jsonify({'error': 'Version not found'}), 404
+    
+    # Update all versions for this post
+    for v in post_versions[post_id]:
+        if v['id'] == version_id:
+            v['status'] = 'winner'
+            ab_test_results[v['id']]['winner'] = True
+        else:
+            v['status'] = 'archived'
+            ab_test_results[v['id']]['winner'] = False
+    
+    logger.info(f"Marked version {version_id} as winner")
+    return jsonify({
+        'message': 'Version marked as winner',
+        'version': version
+    })
+
+
+@app.route('/api/ab-tests/compare', methods=['POST'])
+def compare_versions():
+    """Compare multiple versions side-by-side"""
+    data = request.json
+    version_ids = data.get('version_ids', [])
+    
+    comparison = []
+    for version_id in version_ids:
+        # Find version
+        version = None
+        for post_id, versions in post_versions.items():
+            for v in versions:
+                if v['id'] == version_id:
+                    version = v
+                    break
+        
+        if version:
+            comparison.append({
+                'version': version,
+                'results': ab_test_results.get(version_id, {})
+            })
+    
+    return jsonify(comparison)
+
+
+###############################################################################
+# AUTOMATED RESPONSE TEMPLATES & CHATBOT API ENDPOINTS
+###############################################################################
+
+@app.route('/api/response-templates', methods=['GET', 'POST'])
+def response_templates_list():
+    """List or create response templates"""
+    if request.method == 'GET':
+        # Get query parameters for filtering
+        platform = request.args.get('platform')
+        category = request.args.get('category')
+        
+        templates = list(response_templates.values())
+        
+        # Apply filters
+        if platform:
+            templates = [t for t in templates if platform in t.get('platforms', [])]
+        if category:
+            templates = [t for t in templates if t.get('category') == category]
+        
+        return jsonify(templates)
+    
+    elif request.method == 'POST':
+        data = request.json
+        
+        # Validate required fields
+        if 'name' not in data or 'template' not in data:
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        template_id = str(uuid.uuid4())
+        template = {
+            'id': template_id,
+            'name': data['name'],
+            'template': data['template'],
+            'category': data.get('category', 'general'),
+            'platforms': data.get('platforms', ['twitter', 'facebook', 'instagram', 'linkedin']),
+            'sentiment': data.get('sentiment', 'neutral'),  # positive, neutral, negative, urgent
+            'keywords': data.get('keywords', []),
+            'auto_reply': data.get('auto_reply', False),
+            'created_at': datetime.utcnow().isoformat()
+        }
+        
+        response_templates[template_id] = template
+        logger.info(f"Created response template {template_id}")
+        return jsonify(template), 201
+
+
+@app.route('/api/response-templates/<template_id>', methods=['GET', 'PUT', 'DELETE'])
+def response_template_detail(template_id):
+    """Get, update, or delete a response template"""
+    if template_id not in response_templates:
+        return jsonify({'error': 'Template not found'}), 404
+    
+    if request.method == 'GET':
+        return jsonify(response_templates[template_id])
+    
+    elif request.method == 'PUT':
+        data = request.json
+        template = response_templates[template_id]
+        
+        # Update fields
+        template['name'] = data.get('name', template['name'])
+        template['template'] = data.get('template', template['template'])
+        template['category'] = data.get('category', template['category'])
+        template['platforms'] = data.get('platforms', template['platforms'])
+        template['sentiment'] = data.get('sentiment', template['sentiment'])
+        template['keywords'] = data.get('keywords', template['keywords'])
+        template['auto_reply'] = data.get('auto_reply', template['auto_reply'])
+        template['updated_at'] = datetime.utcnow().isoformat()
+        
+        logger.info(f"Updated response template {template_id}")
+        return jsonify(template)
+    
+    elif request.method == 'DELETE':
+        del response_templates[template_id]
+        logger.info(f"Deleted response template {template_id}")
+        return jsonify({'message': 'Template deleted successfully'})
+
+
+@app.route('/api/chatbot/suggest-response', methods=['POST'])
+def suggest_response():
+    """AI-powered response suggestion based on incoming message"""
+    data = request.json
+    
+    message = data.get('message', '')
+    platform = data.get('platform', 'twitter')
+    sentiment = data.get('sentiment', 'neutral')
+    
+    # Find matching templates based on keywords and sentiment
+    matching_templates = []
+    message_lower = message.lower()
+    
+    for template in response_templates.values():
+        # Check platform match
+        if platform not in template['platforms']:
+            continue
+        
+        # Check sentiment match
+        if sentiment != 'neutral' and template['sentiment'] == sentiment:
+            matching_templates.append(template)
+            continue
+        
+        # Check keyword match
+        for keyword in template['keywords']:
+            if keyword.lower() in message_lower:
+                matching_templates.append(template)
+                break
+    
+    # If no specific match, return general templates
+    if not matching_templates:
+        matching_templates = [t for t in response_templates.values() 
+                            if t['category'] == 'general' and platform in t['platforms']]
+    
+    # Return top 3 suggestions
+    suggestions = matching_templates[:3]
+    
+    return jsonify({
+        'message': message,
+        'platform': platform,
+        'sentiment': sentiment,
+        'suggestions': suggestions
+    })
+
+
+@app.route('/api/chatbot/interactions', methods=['GET', 'POST'])
+def chatbot_interactions_list():
+    """List or record chatbot interactions"""
+    if request.method == 'GET':
+        # Get query parameters
+        platform = request.args.get('platform')
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 20))
+        
+        interactions = list(chatbot_interactions.values())
+        
+        # Apply filters
+        if platform:
+            interactions = [i for i in interactions if i.get('platform') == platform]
+        
+        # Sort by timestamp (newest first)
+        interactions.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+        
+        # Paginate
+        start = (page - 1) * per_page
+        end = start + per_page
+        paginated = interactions[start:end]
+        
+        return jsonify({
+            'interactions': paginated,
+            'total': len(interactions),
+            'page': page,
+            'per_page': per_page
+        })
+    
+    elif request.method == 'POST':
+        data = request.json
+        
+        interaction_id = str(uuid.uuid4())
+        interaction = {
+            'id': interaction_id,
+            'platform': data.get('platform', 'twitter'),
+            'message': data.get('message', ''),
+            'response': data.get('response', ''),
+            'sentiment': data.get('sentiment', 'neutral'),
+            'auto_replied': data.get('auto_replied', False),
+            'template_used': data.get('template_used'),
+            'timestamp': datetime.utcnow().isoformat(),
+            'user': data.get('user', 'Unknown')
+        }
+        
+        chatbot_interactions[interaction_id] = interaction
+        logger.info(f"Recorded chatbot interaction {interaction_id}")
+        return jsonify(interaction), 201
+
+
+@app.route('/api/chatbot/stats', methods=['GET'])
+def chatbot_stats():
+    """Get chatbot statistics"""
+    total_interactions = len(chatbot_interactions)
+    auto_replies = sum(1 for i in chatbot_interactions.values() if i.get('auto_replied', False))
+    
+    # Count by platform
+    platform_counts = {}
+    for interaction in chatbot_interactions.values():
+        platform = interaction.get('platform', 'unknown')
+        platform_counts[platform] = platform_counts.get(platform, 0) + 1
+    
+    # Count by sentiment
+    sentiment_counts = {}
+    for interaction in chatbot_interactions.values():
+        sentiment = interaction.get('sentiment', 'neutral')
+        sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+    
+    # Average response time (simulated - in production, track actual times)
+    avg_response_time = 2.5  # seconds
+    
+    return jsonify({
+        'total_interactions': total_interactions,
+        'auto_replies': auto_replies,
+        'manual_replies': total_interactions - auto_replies,
+        'auto_reply_rate': round((auto_replies / total_interactions * 100), 2) if total_interactions > 0 else 0,
+        'platform_breakdown': platform_counts,
+        'sentiment_breakdown': sentiment_counts,
+        'avg_response_time_seconds': avg_response_time
+    })
 
 
 @app.route('/<path:path>')
