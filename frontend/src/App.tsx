@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -10,6 +10,8 @@ import URLShortenerPage from './pages/URLShortenerPage';
 import SocialMonitoringPage from './pages/SocialMonitoringPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import BulkImportPage from './pages/BulkImportPage';
+import ContentCalendarPage from './pages/ContentCalendarPage';
+import ContentLibraryPage from './pages/ContentLibraryPage';
 import SettingsModal from './components/SettingsModal';
 import { ThemeProvider } from './ThemeContext';
 import { AIProvider } from './contexts/AIContext';
@@ -88,6 +90,18 @@ function Navigation() {
               <span>Social Monitoring</span>
             </Link>
           </li>
+          <li>
+            <Link to="/calendar" className={isActive('/calendar')}>
+              <CalendarDays size={20} />
+              <span>Content Calendar</span>
+            </Link>
+          </li>
+          <li>
+            <Link to="/library" className={isActive('/library')}>
+              <Folder size={20} />
+              <span>Content Library</span>
+            </Link>
+          </li>
         </ul>
         <div className="sidebar-footer">
           <button className="settings-button" onClick={() => setShowSettings(true)}>
@@ -119,6 +133,8 @@ function App() {
                   <Route path="/bulk-import" element={<BulkImportPage />} />
                   <Route path="/url-shortener" element={<URLShortenerPage />} />
                   <Route path="/social-monitoring" element={<SocialMonitoringPage />} />
+                  <Route path="/calendar" element={<ContentCalendarPage />} />
+                  <Route path="/library" element={<ContentLibraryPage />} />
                 </Routes>
               </main>
             </div>

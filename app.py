@@ -32,6 +32,7 @@ social_monitors = {}  # Stores social listening monitors
 monitor_results = {}  # Stores results from social monitoring
 post_analytics = {}  # Stores analytics data for published posts
 bulk_imports = {}  # Stores bulk import job information
+templates_db = {}  # Stores post templates
 
 
 class PlatformAdapter:
@@ -1612,6 +1613,182 @@ def index():
             'test_account': '/api/accounts/:id/test'
         }
     })
+
+
+# ==================== Google Calendar Integration ====================
+
+@app.route('/api/google-calendar/auth', methods=['POST'])
+def google_calendar_auth():
+    """Exchange authorization code for tokens"""
+    data = request.json
+    code = data.get('code')
+    
+    # TODO: In production, exchange code for tokens with Google OAuth2
+    # This is a simplified mock response
+    return jsonify({
+        'access_token': f'mock_access_token_{uuid.uuid4()}',
+        'refresh_token': f'mock_refresh_token_{uuid.uuid4()}',
+        'expires_in': 3600
+    })
+
+
+@app.route('/api/google-calendar/sync', methods=['POST'])
+def sync_google_calendar():
+    """Sync posts with Google Calendar"""
+    data = request.json
+    access_token = data.get('access_token')
+    calendar_id = data.get('calendar_id', 'primary')
+    events = data.get('events', [])
+    
+    # TODO: In production, use Google Calendar API to create/update events
+    # This is a mock implementation
+    logger.info(f"Syncing {len(events)} events to Google Calendar {calendar_id}")
+    
+    return jsonify({
+        'success': True,
+        'synced_count': len(events),
+        'message': f'Successfully synced {len(events)} events to Google Calendar'
+    })
+
+
+# ==================== Google Drive Integration ====================
+
+@app.route('/api/google-drive/auth', methods=['POST'])
+def google_drive_auth():
+    """Exchange authorization code for tokens"""
+    data = request.json
+    code = data.get('code')
+    
+    # TODO: In production, exchange code for tokens with Google OAuth2
+    # This is a simplified mock response
+    return jsonify({
+        'access_token': f'mock_drive_access_token_{uuid.uuid4()}',
+        'refresh_token': f'mock_drive_refresh_token_{uuid.uuid4()}',
+        'expires_in': 3600
+    })
+
+
+@app.route('/api/google-drive/list', methods=['POST'])
+def list_drive_files():
+    """List files from Google Drive folder"""
+    data = request.json
+    access_token = data.get('access_token')
+    folder_id = data.get('folder_id', 'root')
+    
+    # TODO: In production, use Google Drive API to list files
+    # This is a mock implementation with sample files
+    import random
+    
+    mock_files = [
+        {
+            'id': str(uuid.uuid4()),
+            'name': 'Campaign Banner.jpg',
+            'mimeType': 'image/jpeg',
+            'type': 'file',
+            'size': '2458624',
+            'createdTime': '2026-01-01T12:00:00Z',
+            'thumbnailLink': 'https://via.placeholder.com/150',
+            'webViewLink': 'https://drive.google.com/file/d/sample'
+        },
+        {
+            'id': str(uuid.uuid4()),
+            'name': 'Product Video.mp4',
+            'mimeType': 'video/mp4',
+            'type': 'file',
+            'size': '15728640',
+            'createdTime': '2026-01-02T14:30:00Z',
+            'webViewLink': 'https://drive.google.com/file/d/sample'
+        },
+        {
+            'id': str(uuid.uuid4()),
+            'name': 'Press Release.pdf',
+            'mimeType': 'application/pdf',
+            'type': 'file',
+            'size': '524288',
+            'createdTime': '2026-01-03T09:15:00Z',
+            'webViewLink': 'https://drive.google.com/file/d/sample'
+        },
+        {
+            'id': str(uuid.uuid4()),
+            'name': 'Templates',
+            'mimeType': 'application/vnd.google-apps.folder',
+            'type': 'folder',
+            'createdTime': '2026-01-04T10:00:00Z',
+            'webViewLink': 'https://drive.google.com/drive/folders/sample'
+        },
+        {
+            'id': str(uuid.uuid4()),
+            'name': 'Social Media Images',
+            'mimeType': 'application/vnd.google-apps.folder',
+            'type': 'folder',
+            'createdTime': '2026-01-05T11:00:00Z',
+            'webViewLink': 'https://drive.google.com/drive/folders/sample'
+        }
+    ]
+    
+    # Add more random image files
+    for i in range(5):
+        mock_files.append({
+            'id': str(uuid.uuid4()),
+            'name': f'Image_{i+1}.png',
+            'mimeType': 'image/png',
+            'type': 'file',
+            'size': str(random.randint(500000, 3000000)),
+            'createdTime': f'2026-01-0{i+1}T15:00:00Z',
+            'thumbnailLink': 'https://via.placeholder.com/150',
+            'webViewLink': 'https://drive.google.com/file/d/sample'
+        })
+    
+    logger.info(f"Listing files from Google Drive folder {folder_id}")
+    
+    return jsonify(mock_files)
+
+
+# ==================== Templates API ====================
+
+@app.route('/api/templates', methods=['GET', 'POST'])
+def templates():
+    """Get all templates or create a new one"""
+    if request.method == 'GET':
+        return jsonify(list(templates_db.values()))
+    
+    elif request.method == 'POST':
+        data = request.json
+        template_id = str(uuid.uuid4())
+        
+        # Extract variables from content
+        import re
+        content = data.get('content', '')
+        variables = list(set(re.findall(r'\{\{(\w+)\}\}', content)))
+        
+        template = {
+            'id': template_id,
+            'name': data.get('name'),
+            'content': content,
+            'platforms': data.get('platforms', []),
+            'variables': variables,
+            'createdAt': datetime.utcnow().isoformat() + 'Z'
+        }
+        
+        templates_db[template_id] = template
+        logger.info(f"Created template {template_id}: {template['name']}")
+        
+        return jsonify(template), 201
+
+
+@app.route('/api/templates/<template_id>', methods=['GET', 'DELETE'])
+def template_detail(template_id):
+    """Get or delete a specific template"""
+    if template_id not in templates_db:
+        return jsonify({'error': 'Template not found'}), 404
+    
+    if request.method == 'GET':
+        return jsonify(templates_db[template_id])
+    
+    elif request.method == 'DELETE':
+        del templates_db[template_id]
+        logger.info(f"Deleted template {template_id}")
+        return jsonify({'message': 'Template deleted successfully'})
 
 
 @app.route('/<path:path>')
