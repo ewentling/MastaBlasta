@@ -357,17 +357,20 @@ def oauth_init(platform):
     # 1. Generate a state token for CSRF protection
     # 2. Build the OAuth authorization URL with client_id, redirect_uri, scope
     # 3. Return the URL to redirect the user to
+    # 4. Use environment variables for client IDs and redirect URIs
     
     # For demo purposes, we'll simulate the OAuth flow
     state_token = str(uuid.uuid4())
     
-    # Store state token temporarily (in production, use a database or cache)
+    # Store state token temporarily (in production, use a database or cache with expiration)
+    # TODO: Implement token expiration and cleanup mechanism
     oauth_states[state_token] = {
         'platform': platform,
         'created_at': datetime.utcnow().isoformat()
     }
     
     # Simulated OAuth URLs for each platform
+    # TODO: Move to environment variables for different deployment environments
     oauth_urls = {
         'twitter': f'https://twitter.com/i/oauth2/authorize?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/twitter&state={state_token}',
         'facebook': f'https://www.facebook.com/v18.0/dialog/oauth?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/facebook&state={state_token}',
@@ -427,6 +430,7 @@ def oauth_callback(platform):
     }
     
     # Return HTML that posts message to opener window and closes popup
+    # TODO: In production, specify exact frontend origin instead of '*' for security
     return f"""
     <html>
         <head><title>Authorization Successful</title></head>
@@ -456,7 +460,7 @@ def oauth_connect():
     
     platform = data.get('platform', '')
     oauth_data = data.get('oauth_data', {})
-    account_name = data.get('account_name', f'{platform.capitalize()} Account')
+    account_name = data.get('account_name', '') or f'{platform.capitalize()} Account'
     
     if not platform or platform not in PLATFORM_ADAPTERS:
         return jsonify({'error': 'Invalid platform'}), 400

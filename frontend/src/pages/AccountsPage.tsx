@@ -441,8 +441,9 @@ function OAuthModal({
       // Listen for OAuth callback message
       const handleMessage = async (event: MessageEvent) => {
         // Verify event origin for security
-        const allowedOrigin = window.location.origin;
-        if (event.origin !== allowedOrigin) {
+        // Accept messages from same origin (frontend) or API server origin
+        const allowedOrigins = [window.location.origin];
+        if (!allowedOrigins.includes(event.origin)) {
           console.warn('Ignoring message from unauthorized origin:', event.origin);
           return;
         }
@@ -455,7 +456,7 @@ function OAuthModal({
             await oauthApi.connect({
               platform: selectedPlatform,
               oauth_data: event.data.data,
-              account_name: accountName || `${selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)} Account`,
+              account_name: accountName,  // Send as-is, backend will use default if empty
             });
 
             setIsConnecting(false);
