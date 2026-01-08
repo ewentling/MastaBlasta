@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { accountsApi, platformsApi } from '../api';
-import { Plus, Trash2, Edit2, Check, X, TestTube } from 'lucide-react';
+import { accountsApi, platformsApi, oauthApi } from '../api';
+import { Plus, Trash2, Edit2, Check, X, TestTube, Zap } from 'lucide-react';
 import type { Account, CreateAccountRequest } from '../types';
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
+  const [showOAuthModal, setShowOAuthModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [testingAccount, setTestingAccount] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -78,10 +79,16 @@ export default function AccountsPage() {
       <div className="card">
         <div className="card-header">
           <h3>Connected Accounts</h3>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            <Plus size={18} />
-            Add Account
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="btn btn-primary" onClick={() => setShowOAuthModal(true)}>
+              <Zap size={18} />
+              Quick Connect
+            </button>
+            <button className="btn btn-secondary" onClick={() => setShowModal(true)}>
+              <Plus size={18} />
+              Manual Setup
+            </button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -164,6 +171,17 @@ export default function AccountsPage() {
           platforms={platforms}
           onClose={() => setShowModal(false)}
           onSave={(data) => createMutation.mutate(data)}
+        />
+      )}
+
+      {showOAuthModal && (
+        <OAuthModal
+          platforms={platforms}
+          onClose={() => setShowOAuthModal(false)}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['accounts'] });
+            setShowOAuthModal(false);
+          }}
         />
       )}
 
@@ -377,6 +395,159 @@ function EditAccountModal({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+function OAuthModal({
+  platforms,
+  onClose,
+  onSuccess,
+}: {
+  platforms: any[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [selectedPlatform, setSelectedPlatform] = useState('');
+  const [accountName, setAccountName] = useState('');
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleConnect = async () => {
+    if (!selectedPlatform) {
+      setError('Please select a platform');
+      return;
+    }
+
+    setIsConnecting(true);
+    setError('');
+
+    try {
+      // Initialize OAuth flow
+      const { oauth_url } = await oauthApi.initFlow(selectedPlatform);
+
+      // Open OAuth popup
+      const popup = window.open(
+        oauth_url,
+        'oauth_popup',
+        'width=600,height=700,scrollbars=yes'
+      );
+
+      if (!popup) {
+        throw new Error('Popup blocked. Please allow popups for this site.');
+      }
+
+      // Listen for OAuth callback message
+      const handleMessage = async (event: MessageEvent) => {
+        // In production, verify event.origin for security
+        if (event.data.type === 'oauth_success') {
+          window.removeEventListener('message', handleMessage);
+          
+          try {
+            // Complete the OAuth connection
+            await oauthApi.connect({
+              platform: selectedPlatform,
+              oauth_data: event.data.data,
+              account_name: accountName || `${selectedPlatform.charAt(0).toUpperCase() + selectedPlatform.slice(1)} Account`,
+            });
+
+            setIsConnecting(false);
+            onSuccess();
+          } catch (err: any) {
+            setError(err.response?.data?.error || 'Failed to connect account');
+            setIsConnecting(false);
+          }
+        } else if (event.data.type === 'oauth_error') {
+          window.removeEventListener('message', handleMessage);
+          setError(event.data.error || 'Authorization failed');
+          setIsConnecting(false);
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+
+      // Check if popup was closed
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkClosed);
+          window.removeEventListener('message', handleMessage);
+          setIsConnecting(false);
+        }
+      }, 1000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to initialize OAuth');
+      setIsConnecting(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Quick Connect with OAuth</h3>
+          <button className="close-button" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          {error && (
+            <div className="alert alert-error">
+              <X size={20} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
+            <Zap size={20} />
+            <span style={{ fontSize: '0.875rem' }}>
+              Connect your account in one click! You'll be redirected to authorize access.
+            </span>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Platform *</label>
+            <select
+              className="form-select"
+              value={selectedPlatform}
+              onChange={(e) => setSelectedPlatform(e.target.value)}
+              disabled={isConnecting}
+              required
+            >
+              <option value="">Select a platform</option>
+              {platforms.map(p => (
+                <option key={p.name} value={p.name}>{p.display_name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Account Name (Optional)</label>
+            <input
+              type="text"
+              className="form-input"
+              value={accountName}
+              onChange={(e) => setAccountName(e.target.value)}
+              placeholder="e.g., My Business Account"
+              disabled={isConnecting}
+            />
+            <p style={{ color: 'var(--color-textTertiary)', fontSize: '0.75rem', marginTop: '0.5rem' }}>
+              Leave empty to use default name
+            </p>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isConnecting}>
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            className="btn btn-primary" 
+            onClick={handleConnect}
+            disabled={isConnecting || !selectedPlatform}
+          >
+            <Zap size={18} />
+            {isConnecting ? 'Connecting...' : 'Connect'}
+          </button>
+        </div>
       </div>
     </div>
   );

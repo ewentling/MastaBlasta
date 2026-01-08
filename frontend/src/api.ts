@@ -89,3 +89,19 @@ export const healthApi = {
     return response.data;
   },
 };
+
+export const oauthApi = {
+  initFlow: async (platform: string): Promise<{ oauth_url: string; state: string; platform: string }> => {
+    const response = await api.get(`/oauth/init/${platform}`);
+    return response.data;
+  },
+
+  connect: async (data: {
+    platform: string;
+    oauth_data: any;
+    account_name?: string;
+  }): Promise<{ success: boolean; account_id: string; account: Account }> => {
+    const response = await api.post('/oauth/connect', data);
+    return response.data;
+  },
+};

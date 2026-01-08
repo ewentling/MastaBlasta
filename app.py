@@ -335,13 +335,164 @@ def get_platforms():
         platforms.append({
             'name': name,
             'display_name': name.capitalize(),
-            'available': True
+            'available': True,
+            'supports_oauth': True  # All platforms now support OAuth
         })
     
     return jsonify({
         'platforms': platforms,
         'count': len(platforms)
     })
+
+
+@app.route('/api/oauth/init/<platform>', methods=['GET'])
+def oauth_init(platform):
+    """Initialize OAuth flow for a platform"""
+    if platform not in PLATFORM_ADAPTERS:
+        return jsonify({'error': f'Invalid platform: {platform}'}), 400
+    
+    # In a real implementation, this would:
+    # 1. Generate a state token for CSRF protection
+    # 2. Build the OAuth authorization URL with client_id, redirect_uri, scope
+    # 3. Return the URL to redirect the user to
+    
+    # For demo purposes, we'll simulate the OAuth flow
+    state_token = str(uuid.uuid4())
+    
+    # Store state token temporarily (in production, use a database or cache)
+    oauth_states = {}
+    oauth_states[state_token] = {
+        'platform': platform,
+        'created_at': datetime.utcnow().isoformat()
+    }
+    
+    # Simulated OAuth URLs for each platform
+    oauth_urls = {
+        'twitter': f'https://twitter.com/i/oauth2/authorize?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/twitter&state={state_token}',
+        'facebook': f'https://www.facebook.com/v18.0/dialog/oauth?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/facebook&state={state_token}',
+        'instagram': f'https://api.instagram.com/oauth/authorize?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/instagram&state={state_token}',
+        'linkedin': f'https://www.linkedin.com/oauth/v2/authorization?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/linkedin&state={state_token}',
+    }
+    
+    return jsonify({
+        'oauth_url': oauth_urls.get(platform, ''),
+        'state': state_token,
+        'platform': platform
+    })
+
+
+@app.route('/api/oauth/callback/<platform>', methods=['GET'])
+def oauth_callback(platform):
+    """Handle OAuth callback from platform"""
+    if platform not in PLATFORM_ADAPTERS:
+        return jsonify({'error': f'Invalid platform: {platform}'}), 400
+    
+    # Get authorization code and state from query parameters
+    code = request.args.get('code')
+    state = request.args.get('state')
+    
+    if not code:
+        error = request.args.get('error', 'Authorization failed')
+        return f"""
+        <html>
+            <body>
+                <script>
+                    window.opener.postMessage({{
+                        type: 'oauth_error',
+                        platform: '{platform}',
+                        error: '{error}'
+                    }}, '*');
+                    window.close();
+                </script>
+                <p>Authorization failed. This window should close automatically.</p>
+            </body>
+        </html>
+        """
+    
+    # In a real implementation, this would:
+    # 1. Verify the state token
+    # 2. Exchange the code for an access token
+    # 3. Fetch user profile information
+    # 4. Store the credentials securely
+    
+    # For demo purposes, simulate successful OAuth
+    account_data = {
+        'code': code,
+        'state': state,
+        'platform': platform,
+        'username': f'demo_user_{platform}',
+        'access_token': f'demo_token_{uuid.uuid4()}',
+        'token_type': 'Bearer'
+    }
+    
+    # Return HTML that posts message to opener window and closes popup
+    return f"""
+    <html>
+        <head><title>Authorization Successful</title></head>
+        <body>
+            <script>
+                window.opener.postMessage({{
+                    type: 'oauth_success',
+                    platform: '{platform}',
+                    data: {account_data}
+                }}, '*');
+                window.close();
+            </script>
+            <p>Authorization successful! This window should close automatically.</p>
+            <p>If it doesn't, you can close it manually.</p>
+        </body>
+    </html>
+    """
+
+
+@app.route('/api/oauth/connect', methods=['POST'])
+def oauth_connect():
+    """Complete OAuth connection and create account"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    platform = data.get('platform', '')
+    oauth_data = data.get('oauth_data', {})
+    account_name = data.get('account_name', f'{platform.capitalize()} Account')
+    
+    if not platform or platform not in PLATFORM_ADAPTERS:
+        return jsonify({'error': 'Invalid platform'}), 400
+    
+    # Create account record with OAuth credentials
+    account_id = str(uuid.uuid4())
+    account_record = {
+        'id': account_id,
+        'platform': platform,
+        'name': account_name,
+        'username': oauth_data.get('username', ''),
+        'credentials': {
+            'access_token': oauth_data.get('access_token', ''),
+            'token_type': oauth_data.get('token_type', 'Bearer'),
+            'oauth': True
+        },
+        'enabled': True,
+        'created_at': datetime.utcnow().isoformat(),
+        'auth_method': 'oauth'
+    }
+    
+    accounts_db[account_id] = account_record
+    
+    return jsonify({
+        'success': True,
+        'account_id': account_id,
+        'message': 'Account connected successfully via OAuth',
+        'account': {
+            'id': account_id,
+            'platform': platform,
+            'name': account_name,
+            'username': oauth_data.get('username', ''),
+            'enabled': True,
+            'auth_method': 'oauth'
+        }
+    }), 201
+
 
 
 @app.route('/api/post', methods=['POST'])
