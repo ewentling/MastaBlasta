@@ -196,7 +196,9 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [themeName, setThemeName] = useState<ThemeName>(() => {
     const saved = localStorage.getItem(THEME_STORAGE_KEY);
-    return (saved as ThemeName) || 'dark';
+    // Validate saved theme name
+    const validThemes: ThemeName[] = ['dark', 'synthwave', 'pixel', 'crt', 'neon'];
+    return (saved && validThemes.includes(saved as ThemeName)) ? (saved as ThemeName) : 'dark';
   });
 
   const theme = themes[themeName];
