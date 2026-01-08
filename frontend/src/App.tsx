@@ -12,6 +12,7 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import BulkImportPage from './pages/BulkImportPage';
 import SettingsModal from './components/SettingsModal';
 import { ThemeProvider } from './ThemeContext';
+import { AIProvider } from './contexts/AIContext';
 import './App.css';
 
 const queryClient = new QueryClient({
@@ -103,25 +104,27 @@ function Navigation() {
 function App() {
   return (
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <Router>
-          <div className="app-container">
-            <Navigation />
-            <main className="main-content">
-              <Routes>
-                <Route path="/" element={<DashboardPage />} />
-                <Route path="/accounts" element={<AccountsPage />} />
-                <Route path="/post" element={<PostPage />} />
-                <Route path="/scheduled" element={<ScheduledPostsPage />} />
-                <Route path="/analytics" element={<AnalyticsPage />} />
-                <Route path="/bulk-import" element={<BulkImportPage />} />
-                <Route path="/url-shortener" element={<URLShortenerPage />} />
-                <Route path="/social-monitoring" element={<SocialMonitoringPage />} />
-              </Routes>
-            </main>
-          </div>
-        </Router>
-      </QueryClientProvider>
+      <AIProvider>
+        <QueryClientProvider client={queryClient}>
+          <Router>
+            <div className="app-container">
+              <Navigation />
+              <main className="main-content">
+                <Routes>
+                  <Route path="/" element={<DashboardPage />} />
+                  <Route path="/accounts" element={<AccountsPage />} />
+                  <Route path="/post" element={<PostPage />} />
+                  <Route path="/scheduled" element={<ScheduledPostsPage />} />
+                  <Route path="/analytics" element={<AnalyticsPage />} />
+                  <Route path="/bulk-import" element={<BulkImportPage />} />
+                  <Route path="/url-shortener" element={<URLShortenerPage />} />
+                  <Route path="/social-monitoring" element={<SocialMonitoringPage />} />
+                </Routes>
+              </main>
+            </div>
+          </Router>
+        </QueryClientProvider>
+      </AIProvider>
     </ThemeProvider>
   );
 }
