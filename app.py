@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory, redirect
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.memory import MemoryJobStore
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 import os
 import logging
@@ -30,6 +30,8 @@ shortened_urls = {}  # Stores shortened URLs with click tracking
 url_clicks = {}  # Stores click data for URLs
 social_monitors = {}  # Stores social listening monitors
 monitor_results = {}  # Stores results from social monitoring
+post_analytics = {}  # Stores analytics data for published posts
+bulk_imports = {}  # Stores bulk import job information
 
 
 class PlatformAdapter:
@@ -1145,6 +1147,444 @@ def refresh_monitor(monitor_id):
         'success': True,
         'message': 'Monitor refreshed successfully',
         'result_count': len(monitor_results.get(monitor_id, []))
+    })
+
+
+# ==================== POST ANALYTICS ENDPOINTS ====================
+
+def _simulate_post_analytics(post_id):
+    """Simulate analytics data for a post (in production, fetch from platform APIs)"""
+    import random
+    from datetime import timedelta
+    
+    if post_id not in posts_db:
+        return None
+    
+    post = posts_db[post_id]
+    
+    # Only generate analytics for published posts
+    if post['status'] != 'published':
+        return None
+    
+    # Simulate analytics if not already generated
+    if post_id not in post_analytics:
+        platforms_data = {}
+        
+        for platform in post.get('platforms', []):
+            base_impressions = random.randint(500, 10000)
+            base_engagement = int(base_impressions * random.uniform(0.02, 0.10))
+            
+            platforms_data[platform] = {
+                'impressions': base_impressions,
+                'reach': int(base_impressions * random.uniform(0.7, 0.9)),
+                'likes': random.randint(int(base_engagement * 0.4), int(base_engagement * 0.6)),
+                'comments': random.randint(int(base_engagement * 0.1), int(base_engagement * 0.2)),
+                'shares': random.randint(int(base_engagement * 0.1), int(base_engagement * 0.2)),
+                'clicks': random.randint(int(base_engagement * 0.2), int(base_engagement * 0.4)),
+                'engagement_rate': round(random.uniform(2.0, 8.0), 2)
+            }
+        
+        # Calculate totals
+        total_impressions = sum(p['impressions'] for p in platforms_data.values())
+        total_engagement = sum(p['likes'] + p['comments'] + p['shares'] for p in platforms_data.values())
+        
+        # Generate hourly data for the past 7 days
+        hourly_data = []
+        created_dt = datetime.fromisoformat(post['created_at'].replace('Z', '+00:00'))
+        for i in range(168):  # 7 days * 24 hours
+            hour_dt = created_dt + timedelta(hours=i)
+            hourly_data.append({
+                'timestamp': hour_dt.isoformat(),
+                'impressions': random.randint(10, 200),
+                'engagement': random.randint(1, 20)
+            })
+        
+        # Generate audience demographics
+        demographics = {
+            'age_groups': {
+                '18-24': random.randint(10, 30),
+                '25-34': random.randint(20, 40),
+                '35-44': random.randint(15, 30),
+                '45-54': random.randint(10, 20),
+                '55+': random.randint(5, 15)
+            },
+            'gender': {
+                'male': random.randint(40, 60),
+                'female': random.randint(40, 60)
+            },
+            'top_locations': [
+                {'country': 'United States', 'percentage': random.randint(30, 50)},
+                {'country': 'United Kingdom', 'percentage': random.randint(10, 20)},
+                {'country': 'Canada', 'percentage': random.randint(5, 15)},
+                {'country': 'Australia', 'percentage': random.randint(5, 10)},
+                {'country': 'Germany', 'percentage': random.randint(3, 8)}
+            ]
+        }
+        
+        post_analytics[post_id] = {
+            'post_id': post_id,
+            'platforms': platforms_data,
+            'totals': {
+                'impressions': total_impressions,
+                'engagement': total_engagement,
+                'engagement_rate': round((total_engagement / total_impressions * 100) if total_impressions > 0 else 0, 2)
+            },
+            'hourly_data': hourly_data,
+            'demographics': demographics,
+            'last_updated': datetime.utcnow().isoformat()
+        }
+    
+    return post_analytics[post_id]
+
+
+@app.route('/api/analytics/posts/<post_id>', methods=['GET'])
+def get_post_analytics(post_id):
+    """Get analytics for a specific post"""
+    if post_id not in posts_db:
+        return jsonify({'error': 'Post not found'}), 404
+    
+    analytics = _simulate_post_analytics(post_id)
+    
+    if not analytics:
+        return jsonify({'error': 'Analytics not available for this post'}), 404
+    
+    return jsonify(analytics)
+
+
+@app.route('/api/analytics/dashboard', methods=['GET'])
+def get_analytics_dashboard():
+    """Get overall analytics dashboard data"""
+    # Get date range from query params
+    days = int(request.args.get('days', 30))
+    
+    # Get all published posts
+    published_posts = [p for p in posts_db.values() if p['status'] == 'published']
+    
+    # Generate analytics for all published posts
+    all_analytics = []
+    for post in published_posts:
+        analytics = _simulate_post_analytics(post['id'])
+        if analytics:
+            all_analytics.append(analytics)
+    
+    # Calculate totals
+    total_impressions = sum(a['totals']['impressions'] for a in all_analytics)
+    total_engagement = sum(a['totals']['engagement'] for a in all_analytics)
+    avg_engagement_rate = sum(a['totals']['engagement_rate'] for a in all_analytics) / len(all_analytics) if all_analytics else 0
+    
+    # Platform breakdown
+    platform_totals = {}
+    for analytics in all_analytics:
+        for platform, data in analytics['platforms'].items():
+            if platform not in platform_totals:
+                platform_totals[platform] = {
+                    'impressions': 0,
+                    'engagement': 0,
+                    'posts': 0
+                }
+            platform_totals[platform]['impressions'] += data['impressions']
+            platform_totals[platform]['engagement'] += data['likes'] + data['comments'] + data['shares']
+            platform_totals[platform]['posts'] += 1
+    
+    # Top performing posts
+    top_posts = sorted(
+        [{'post_id': a['post_id'], 'engagement': a['totals']['engagement'], 
+          'impressions': a['totals']['impressions'], 'engagement_rate': a['totals']['engagement_rate']} 
+         for a in all_analytics],
+        key=lambda x: x['engagement'],
+        reverse=True
+    )[:10]
+    
+    # Engagement trends (aggregate hourly data)
+    trend_data = []
+    if all_analytics:
+        # Get the most recent analytics hourly data as template
+        for i in range(min(168, len(all_analytics[0]['hourly_data']))):
+            total_imp = sum(a['hourly_data'][i]['impressions'] for a in all_analytics if i < len(a['hourly_data']))
+            total_eng = sum(a['hourly_data'][i]['engagement'] for a in all_analytics if i < len(a['hourly_data']))
+            trend_data.append({
+                'timestamp': all_analytics[0]['hourly_data'][i]['timestamp'],
+                'impressions': total_imp,
+                'engagement': total_eng
+            })
+    
+    return jsonify({
+        'summary': {
+            'total_posts': len(published_posts),
+            'total_impressions': total_impressions,
+            'total_engagement': total_engagement,
+            'avg_engagement_rate': round(avg_engagement_rate, 2)
+        },
+        'platform_breakdown': platform_totals,
+        'top_posts': top_posts,
+        'engagement_trends': trend_data[-168:]  # Last 7 days
+    })
+
+
+@app.route('/api/analytics/compare', methods=['POST'])
+def compare_posts():
+    """Compare analytics between multiple posts"""
+    data = request.get_json()
+    post_ids = data.get('post_ids', [])
+    
+    if not post_ids:
+        return jsonify({'error': 'No post IDs provided'}), 400
+    
+    comparison_data = []
+    for post_id in post_ids:
+        if post_id in posts_db:
+            analytics = _simulate_post_analytics(post_id)
+            if analytics:
+                post = posts_db[post_id]
+                comparison_data.append({
+                    'post_id': post_id,
+                    'content': post['content'][:100] + '...' if len(post['content']) > 100 else post['content'],
+                    'platforms': list(analytics['platforms'].keys()),
+                    'metrics': analytics['totals'],
+                    'created_at': post['created_at']
+                })
+    
+    return jsonify({
+        'posts': comparison_data,
+        'count': len(comparison_data)
+    })
+
+
+# ==================== BULK IMPORT ENDPOINTS ====================
+
+@app.route('/api/bulk-import/validate', methods=['POST'])
+def validate_bulk_import():
+    """Validate CSV data before importing"""
+    data = request.get_json()
+    rows = data.get('rows', [])
+    
+    if not rows:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    # Validate each row
+    errors = []
+    warnings = []
+    valid_rows = []
+    
+    required_fields = ['content']
+    
+    for i, row in enumerate(rows):
+        row_errors = []
+        row_warnings = []
+        
+        # Check required fields
+        if 'content' not in row or not row['content'].strip():
+            row_errors.append('Content is required')
+        
+        # Validate platforms if provided
+        if 'platforms' in row:
+            platforms = row['platforms'] if isinstance(row['platforms'], list) else [p.strip() for p in row['platforms'].split(',')]
+            invalid_platforms = [p for p in platforms if p not in PLATFORM_ADAPTERS]
+            if invalid_platforms:
+                row_errors.append(f'Invalid platforms: {", ".join(invalid_platforms)}')
+        
+        # Validate scheduled_time if provided
+        if 'scheduled_time' in row and row['scheduled_time']:
+            try:
+                scheduled_dt = datetime.fromisoformat(row['scheduled_time'].replace('Z', '+00:00'))
+                if scheduled_dt <= datetime.now(scheduled_dt.tzinfo):
+                    row_warnings.append('Scheduled time is in the past')
+            except ValueError:
+                row_errors.append('Invalid scheduled_time format')
+        
+        # Validate account_ids if provided
+        if 'account_ids' in row and row['account_ids']:
+            account_ids = row['account_ids'] if isinstance(row['account_ids'], list) else [a.strip() for a in row['account_ids'].split(',')]
+            missing_accounts = [aid for aid in account_ids if aid not in accounts_db]
+            if missing_accounts:
+                row_errors.append(f'Accounts not found: {", ".join(missing_accounts)}')
+        
+        if row_errors:
+            errors.append({
+                'row': i + 1,
+                'errors': row_errors
+            })
+        elif row_warnings:
+            warnings.append({
+                'row': i + 1,
+                'warnings': row_warnings
+            })
+            valid_rows.append(i)
+        else:
+            valid_rows.append(i)
+    
+    return jsonify({
+        'valid': len(errors) == 0,
+        'total_rows': len(rows),
+        'valid_rows': len(valid_rows),
+        'errors': errors,
+        'warnings': warnings
+    })
+
+
+@app.route('/api/bulk-import/execute', methods=['POST'])
+def execute_bulk_import():
+    """Execute bulk import of posts from CSV data"""
+    data = request.get_json()
+    rows = data.get('rows', [])
+    schedule_all = data.get('schedule_all', False)
+    
+    if not rows:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    import_id = str(uuid.uuid4())
+    created_posts = []
+    failed_posts = []
+    
+    for i, row in enumerate(rows):
+        try:
+            content = row.get('content', '').strip()
+            if not content:
+                failed_posts.append({
+                    'row': i + 1,
+                    'error': 'Content is required'
+                })
+                continue
+            
+            # Parse platforms
+            platforms = []
+            if 'platforms' in row and row['platforms']:
+                platforms = row['platforms'] if isinstance(row['platforms'], list) else [p.strip() for p in row['platforms'].split(',')]
+            
+            # Parse account_ids
+            account_ids = []
+            if 'account_ids' in row and row['account_ids']:
+                account_ids = row['account_ids'] if isinstance(row['account_ids'], list) else [a.strip() for a in row['account_ids'].split(',')]
+            
+            # If no platforms or accounts specified, skip
+            if not platforms and not account_ids:
+                failed_posts.append({
+                    'row': i + 1,
+                    'error': 'Either platforms or account_ids must be specified'
+                })
+                continue
+            
+            # Get credentials from accounts
+            credentials = {}
+            if account_ids:
+                for account_id in account_ids:
+                    account = accounts_db.get(account_id)
+                    if account:
+                        platforms.append(account['platform'])
+                        credentials[account['platform']] = account.get('credentials', {})
+            
+            # Parse scheduled_time
+            scheduled_time = row.get('scheduled_time')
+            
+            # Create post
+            post_id = str(uuid.uuid4())
+            
+            if scheduled_time or schedule_all:
+                # Schedule the post
+                if not scheduled_time:
+                    # Auto-schedule at intervals
+                    scheduled_dt = datetime.utcnow() + timedelta(minutes=len(created_posts) * 5)
+                    scheduled_time = scheduled_dt.isoformat() + 'Z'
+                
+                scheduled_dt = datetime.fromisoformat(scheduled_time.replace('Z', '+00:00'))
+                
+                post_record = {
+                    'id': post_id,
+                    'content': content,
+                    'media': row.get('media'),
+                    'platforms': list(set(platforms)),  # Remove duplicates
+                    'account_ids': account_ids,
+                    'status': 'scheduled',
+                    'created_at': datetime.utcnow().isoformat(),
+                    'scheduled_for': scheduled_time,
+                    'bulk_import_id': import_id
+                }
+                
+                posts_db[post_id] = post_record
+                
+                # Schedule the job
+                scheduler.add_job(
+                    publish_to_platforms,
+                    'date',
+                    run_date=scheduled_dt,
+                    args=[post_id, list(set(platforms)), content, row.get('media'), credentials],
+                    id=post_id
+                )
+            else:
+                # Publish immediately
+                post_record = {
+                    'id': post_id,
+                    'content': content,
+                    'media': row.get('media'),
+                    'platforms': list(set(platforms)),
+                    'account_ids': account_ids,
+                    'status': 'publishing',
+                    'created_at': datetime.utcnow().isoformat(),
+                    'bulk_import_id': import_id
+                }
+                
+                posts_db[post_id] = post_record
+                
+                # Publish immediately
+                results = publish_to_platforms(post_id, list(set(platforms)), content, row.get('media'), credentials)
+            
+            created_posts.append({
+                'row': i + 1,
+                'post_id': post_id,
+                'status': post_record['status']
+            })
+            
+        except Exception as e:
+            logger.error(f"Error importing row {i + 1}: {str(e)}")
+            failed_posts.append({
+                'row': i + 1,
+                'error': str(e)
+            })
+    
+    # Store import job info
+    bulk_imports[import_id] = {
+        'id': import_id,
+        'created_at': datetime.utcnow().isoformat(),
+        'total_rows': len(rows),
+        'successful': len(created_posts),
+        'failed': len(failed_posts),
+        'created_posts': created_posts,
+        'failed_posts': failed_posts
+    }
+    
+    return jsonify({
+        'success': True,
+        'import_id': import_id,
+        'summary': {
+            'total': len(rows),
+            'successful': len(created_posts),
+            'failed': len(failed_posts)
+        },
+        'created_posts': created_posts,
+        'failed_posts': failed_posts
+    }), 201
+
+
+@app.route('/api/bulk-import/<import_id>', methods=['GET'])
+def get_bulk_import_status(import_id):
+    """Get status of a bulk import job"""
+    import_job = bulk_imports.get(import_id)
+    
+    if not import_job:
+        return jsonify({'error': 'Import job not found'}), 404
+    
+    return jsonify(import_job)
+
+
+@app.route('/api/bulk-import', methods=['GET'])
+def list_bulk_imports():
+    """List all bulk import jobs"""
+    imports = list(bulk_imports.values())
+    imports.sort(key=lambda x: x['created_at'], reverse=True)
+    
+    return jsonify({
+        'imports': imports,
+        'count': len(imports)
     })
 
 

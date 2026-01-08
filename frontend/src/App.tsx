@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
 import DashboardPage from './pages/DashboardPage';
 import URLShortenerPage from './pages/URLShortenerPage';
 import SocialMonitoringPage from './pages/SocialMonitoringPage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import BulkImportPage from './pages/BulkImportPage';
 import SettingsModal from './components/SettingsModal';
 import { ThemeProvider } from './ThemeContext';
 import './App.css';
@@ -62,6 +64,18 @@ function Navigation() {
             </Link>
           </li>
           <li>
+            <Link to="/analytics" className={isActive('/analytics')}>
+              <BarChart2 size={20} />
+              <span>Analytics</span>
+            </Link>
+          </li>
+          <li>
+            <Link to="/bulk-import" className={isActive('/bulk-import')}>
+              <Upload size={20} />
+              <span>Bulk Import</span>
+            </Link>
+          </li>
+          <li>
             <Link to="/url-shortener" className={isActive('/url-shortener')}>
               <Link2 size={20} />
               <span>URL Shortener</span>
@@ -99,6 +113,8 @@ function App() {
                 <Route path="/accounts" element={<AccountsPage />} />
                 <Route path="/post" element={<PostPage />} />
                 <Route path="/scheduled" element={<ScheduledPostsPage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
+                <Route path="/bulk-import" element={<BulkImportPage />} />
                 <Route path="/url-shortener" element={<URLShortenerPage />} />
                 <Route path="/social-monitoring" element={<SocialMonitoringPage />} />
               </Routes>
