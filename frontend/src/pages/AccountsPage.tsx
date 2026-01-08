@@ -99,16 +99,17 @@ export default function AccountsPage() {
                 key={account.id}
                 style={{
                   padding: '1.25rem',
-                  border: '1px solid #e2e8f0',
+                  border: '1px solid var(--color-borderLight)',
                   borderRadius: '8px',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
+                  backgroundColor: 'var(--color-bgSecondary)',
                 }}
               >
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                    <div style={{ fontWeight: '700', fontSize: '1.125rem', color: '#1a202c' }}>
+                    <div style={{ fontWeight: '700', fontSize: '1.125rem', color: 'var(--color-textPrimary)' }}>
                       {account.name}
                     </div>
                     <span className="badge badge-info">{account.platform}</span>
@@ -119,7 +120,7 @@ export default function AccountsPage() {
                     )}
                   </div>
                   {account.username && (
-                    <div style={{ color: '#718096', fontSize: '0.875rem' }}>
+                    <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
                       @{account.username}
                     </div>
                   )}
@@ -260,12 +261,12 @@ function AccountModal({
             {fields.length > 0 && (
               <>
                 <div style={{ 
-                  borderTop: '1px solid #e2e8f0', 
+                  borderTop: '1px solid var(--color-borderLight)', 
                   paddingTop: '1rem', 
                   marginTop: '1rem',
                   marginBottom: '1rem'
                 }}>
-                  <div style={{ fontWeight: '600', marginBottom: '1rem', color: '#2d3748' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '1rem', color: 'var(--color-textPrimary)' }}>
                     API Credentials
                   </div>
                 </div>
