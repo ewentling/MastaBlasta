@@ -1911,32 +1911,6 @@ def list_bulk_imports():
     })
 
 
-@app.route('/', methods=['GET'])
-def index():
-    """Serve the frontend or API information"""
-    # Check if frontend build exists
-    frontend_path = os.path.join(os.path.dirname(__file__), 'frontend', 'dist')
-    if os.path.exists(os.path.join(frontend_path, 'index.html')):
-        return send_from_directory(frontend_path, 'index.html')
-    
-    # Fallback to API information if no frontend
-    return jsonify({
-        'name': 'MastaBlasta API',
-        'version': '1.0.0',
-        'description': 'Multi-platform social media posting service',
-        'endpoints': {
-            'health': '/api/health',
-            'accounts': '/api/accounts',
-            'platforms': '/api/platforms',
-            'post': '/api/post',
-            'schedule': '/api/schedule',
-            'posts': '/api/posts',
-            'delete_post': '/api/posts/:id',
-            'test_account': '/api/accounts/:id/test'
-        }
-    })
-
-
 # ==================== Google Calendar Integration ====================
 
 @app.route('/api/google-calendar/auth', methods=['POST'])
