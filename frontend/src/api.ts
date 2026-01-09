@@ -89,8 +89,40 @@ export const postsApi = {
     return response.data;
   },
 
+  preview: async (data: {
+    content: string;
+    media?: string[];
+    platforms: string[];
+    post_type?: string;
+  }): Promise<{ previews: any[]; count: number }> => {
+    const response = await api.post('/post/preview', data);
+    return response.data;
+  },
+
+  optimize: async (data: {
+    content: string;
+    platforms: string[];
+    post_type?: string;
+  }): Promise<{ optimizations: Record<string, any>; overall_status: string }> => {
+    const response = await api.post('/post/optimize', data);
+    return response.data;
+  },
+
   schedule: async (data: SchedulePostRequest): Promise<{ success: boolean; post_id: string; post: Post }> => {
     const response = await api.post('/schedule', data);
+    return response.data;
+  },
+
+  checkScheduleConflicts: async (data: {
+    scheduled_time: string;
+    platforms: string[];
+  }): Promise<{ 
+    has_conflicts: boolean; 
+    conflicts: any[]; 
+    conflict_count: number;
+    suggestions: any[];
+  }> => {
+    const response = await api.post('/schedule/conflicts', data);
     return response.data;
   },
 

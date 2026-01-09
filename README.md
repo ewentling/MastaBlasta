@@ -6,12 +6,17 @@ A multi-platform social media posting service that allows easy posting to multip
 - **Web UI**: Modern React TypeScript interface for managing accounts and posting
 - **Multi-Account Management**: Configure and manage multiple accounts per platform
 - **Credential Testing**: Test platform credentials before posting
-- **Multi-Platform Support**: Post to Twitter, Facebook, Instagram, and LinkedIn from a single interface
-- **Scheduling**: Schedule posts for future publishing
+- **Multi-Platform Support**: Post to 9 social platforms from a single interface
+- **Scheduling**: Schedule posts for future publishing with conflict detection
 - **REST API**: Simple REST API for integration with other services
 - **Docker Support**: Run in Docker containers for easy deployment
 - **Platform Adapters**: Automatic content formatting for each platform's requirements
 - **Background Processing**: Asynchronous post publishing with APScheduler
+- **⚡ Parallel Execution**: Concurrent posting to multiple platforms for faster delivery
+- **📊 Content Optimization**: AI-powered suggestions to optimize content for each platform
+- **👁️ Post Preview**: See how your post will appear before publishing
+- **🚫 Conflict Detection**: Automatically detect scheduling conflicts
+- **⏱️ Rate Limit Awareness**: Built-in rate limit information for each platform
 
 ## Supported Platforms
 
@@ -394,13 +399,113 @@ Content-Type: application/json
   "success": true,
   "post_id": "550e8400-e29b-41d4-a716-446655440000",
   "message": "Post is being published",
+  "parallel_execution": true,
   "post": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
     "content": "Your post content here",
     "platforms": ["twitter", "facebook"],
     "status": "publishing",
-    "created_at": "2026-01-07T05:46:44.996Z"
+    "created_at": "2026-01-07T05:46:44.996Z",
+    "execution_time_seconds": 0.15
   }
+}
+```
+
+### Preview Post Before Publishing
+```bash
+POST /api/post/preview
+Content-Type: application/json
+
+{
+  "content": "Check out this amazing product!",
+  "platforms": ["twitter", "instagram"],
+  "post_type": "standard",
+  "media": ["image.jpg"]
+}
+```
+
+**Response:**
+```json
+{
+  "previews": [
+    {
+      "platform": "twitter",
+      "post_type": "standard",
+      "content": "Check out this amazing product!",
+      "media_count": 1,
+      "character_count": 33,
+      "estimated_display": "Check out this amazing product!",
+      "character_limit": 280,
+      "characters_remaining": 247
+    }
+  ],
+  "count": 2
+}
+```
+
+### Get Content Optimization Suggestions
+```bash
+POST /api/post/optimize
+Content-Type: application/json
+
+{
+  "content": "This is a very long message that might exceed platform limits...",
+  "platforms": ["twitter"],
+  "post_type": "standard"
+}
+```
+
+**Response:**
+```json
+{
+  "optimizations": {
+    "twitter": {
+      "suggestions": [
+        {
+          "type": "length",
+          "severity": "warning",
+          "message": "Content is close to 280 character limit (265 chars)",
+          "suggestion": "Consider shortening for better readability"
+        }
+      ],
+      "has_errors": false,
+      "has_warnings": true
+    }
+  },
+  "overall_status": "ok"
+}
+```
+
+### Check Scheduling Conflicts
+```bash
+POST /api/schedule/conflicts
+Content-Type: application/json
+
+{
+  "scheduled_time": "2026-01-10T10:00:00Z",
+  "platforms": ["twitter", "instagram"]
+}
+```
+
+**Response:**
+```json
+{
+  "has_conflicts": true,
+  "conflicts": [
+    {
+      "post_id": "abc-123",
+      "scheduled_for": "2026-01-10T10:02:00Z",
+      "shared_platforms": ["twitter"],
+      "time_difference_seconds": 120
+    }
+  ],
+  "conflict_count": 1,
+  "suggestions": [
+    {
+      "time": "2026-01-10T10:10:00Z",
+      "reason": "Avoids scheduling conflicts"
+    }
+  ]
 }
 ```
 

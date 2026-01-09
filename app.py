@@ -3,10 +3,12 @@ from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.memory import MemoryJobStore
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid
 import os
 import logging
 import json
+import time
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,10 +44,12 @@ chatbot_interactions = {}  # Stores chatbot conversation history
 class PlatformAdapter:
     """Base adapter for social media platforms"""
     
-    def __init__(self, platform_name, supported_post_types=None, post_type_descriptions=None):
+    def __init__(self, platform_name, supported_post_types=None, post_type_descriptions=None, rate_limits=None):
         self.platform_name = platform_name
         self.supported_post_types = supported_post_types or ['standard']
         self.post_type_descriptions = post_type_descriptions or {}
+        # Rate limits: {post_type: {'requests_per_hour': X, 'requests_per_day': Y}}
+        self.rate_limits = rate_limits or {}
     
     def split_text_at_word_boundaries(self, text, max_length):
         """Split text into chunks at word boundaries"""
@@ -84,13 +88,18 @@ class PlatformAdapter:
         """Get list of supported post types for this platform"""
         return self.supported_post_types
     
+    def get_rate_limits(self):
+        """Get rate limit information for this platform"""
+        return self.rate_limits
+    
     def get_post_type_info(self):
         """Get detailed information about supported post types"""
         return [
             {
                 'type': post_type,
                 'description': self.post_type_descriptions.get(post_type, ''),
-                'requirements': self.get_post_type_requirements(post_type)
+                'requirements': self.get_post_type_requirements(post_type),
+                'rate_limits': self.rate_limits.get(post_type, {})
             }
             for post_type in self.supported_post_types
         ]
@@ -102,6 +111,49 @@ class PlatformAdapter:
     def validate_media_requirements(self, post_type, media):
         """Validate media requirements for post type (can be overridden by subclasses)"""
         return True, None  # Returns (is_valid, error_message)
+    
+    def optimize_content(self, content, post_type='standard'):
+        """Provide content optimization suggestions for the platform"""
+        suggestions = []
+        requirements = self.get_post_type_requirements(post_type)
+        
+        # Check length
+        if 'max_length' in requirements:
+            max_len = requirements['max_length']
+            if len(content) > max_len:
+                suggestions.append({
+                    'type': 'length',
+                    'severity': 'error',
+                    'message': f'Content exceeds {max_len} character limit ({len(content)} chars)',
+                    'suggestion': f'Shorten content by {len(content) - max_len} characters'
+                })
+            elif len(content) > max_len * 0.9:
+                suggestions.append({
+                    'type': 'length',
+                    'severity': 'warning',
+                    'message': f'Content is close to {max_len} character limit ({len(content)} chars)',
+                    'suggestion': 'Consider shortening for better readability'
+                })
+        
+        return suggestions
+    
+    def generate_preview(self, content, media=None, post_type='standard'):
+        """Generate a preview of how the post will appear on the platform"""
+        preview = {
+            'platform': self.platform_name,
+            'post_type': post_type,
+            'content': content,
+            'media_count': len(media) if media else 0,
+            'character_count': len(content),
+            'estimated_display': content[:100] + '...' if len(content) > 100 else content
+        }
+        
+        requirements = self.get_post_type_requirements(post_type)
+        if 'max_length' in requirements:
+            preview['character_limit'] = requirements['max_length']
+            preview['characters_remaining'] = requirements['max_length'] - len(content)
+        
+        return preview
     
     def format_post(self, content, media=None, post_type='standard', **kwargs):
         """Format post content for specific platform"""
@@ -148,9 +200,14 @@ class TwitterAdapter(PlatformAdapter):
             'standard': 'Regular tweet with 280 character limit',
             'thread': 'Multi-tweet thread for longer content, automatically split at word boundaries'
         }
+        rate_limits = {
+            'standard': {'requests_per_hour': 50, 'requests_per_day': 500},
+            'thread': {'requests_per_hour': 30, 'requests_per_day': 300}
+        }
         super().__init__('twitter', 
                         supported_post_types=['standard', 'thread'],
-                        post_type_descriptions=descriptions)
+                        post_type_descriptions=descriptions,
+                        rate_limits=rate_limits)
     
     def get_post_type_requirements(self, post_type):
         """Get requirements for Twitter post types"""
@@ -545,41 +602,116 @@ PLATFORM_ADAPTERS = {
 }
 
 
-def publish_to_platforms(post_id, platforms, content, media, credentials_dict, post_type='standard', post_options=None):
-    """Background task to publish to multiple platforms"""
+def publish_to_single_platform(platform, content, media, credentials, post_type, platform_options):
+    """Publish to a single platform (used for parallel execution)"""
+    if platform not in PLATFORM_ADAPTERS:
+        return {
+            'success': False,
+            'platform': platform,
+            'error': 'Platform adapter not found'
+        }
+    
+    adapter = PLATFORM_ADAPTERS[platform]
+    
+    try:
+        formatted_post = adapter.format_post(
+            content, 
+            media, 
+            post_type=post_type,
+            **platform_options
+        )
+        result = adapter.publish(formatted_post, credentials)
+        logger.info(f"Successfully posted to {platform}")
+        return result
+    except Exception as e:
+        logger.error(f"Error posting to {platform}: {str(e)}")
+        return {
+            'success': False,
+            'platform': platform,
+            'error': str(e)
+        }
+
+
+def publish_to_platforms(post_id, platforms, content, media, credentials_dict, post_type='standard', post_options=None, parallel=True):
+    """Background task to publish to multiple platforms
+    
+    Args:
+        parallel: If True, publish to platforms concurrently for faster execution
+    """
     results = []
     post_options = post_options or {}
+    start_time = time.time()
     
-    for platform in platforms:
-        if platform in PLATFORM_ADAPTERS:
-            adapter = PLATFORM_ADAPTERS[platform]
-            credentials = credentials_dict.get(platform, {})
+    if parallel and len(platforms) > 1:
+        # Use ThreadPoolExecutor for concurrent publishing
+        with ThreadPoolExecutor(max_workers=min(len(platforms), 5)) as executor:
+            # Submit all publishing tasks
+            future_to_platform = {}
+            for platform in platforms:
+                if platform in PLATFORM_ADAPTERS:
+                    credentials = credentials_dict.get(platform, {})
+                    platform_options_dict = post_options.get(platform, {})
+                    
+                    future = executor.submit(
+                        publish_to_single_platform,
+                        platform,
+                        content,
+                        media,
+                        credentials,
+                        post_type,
+                        platform_options_dict
+                    )
+                    future_to_platform[future] = platform
             
-            try:
-                # Get platform-specific options
-                platform_options = post_options.get(platform, {})
-                formatted_post = adapter.format_post(
-                    content, 
-                    media, 
-                    post_type=post_type,
-                    **platform_options
-                )
-                result = adapter.publish(formatted_post, credentials)
-                results.append(result)
-                logger.info(f"Successfully posted to {platform}")
-            except Exception as e:
-                logger.error(f"Error posting to {platform}: {str(e)}")
-                results.append({
-                    'success': False,
-                    'platform': platform,
-                    'error': str(e)
-                })
+            # Collect results as they complete
+            for future in as_completed(future_to_platform):
+                platform = future_to_platform[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    logger.error(f"Error in concurrent publishing to {platform}: {str(e)}")
+                    results.append({
+                        'success': False,
+                        'platform': platform,
+                        'error': str(e)
+                    })
+    else:
+        # Sequential publishing (original behavior)
+        for platform in platforms:
+            if platform in PLATFORM_ADAPTERS:
+                adapter = PLATFORM_ADAPTERS[platform]
+                credentials = credentials_dict.get(platform, {})
+                
+                try:
+                    # Get platform-specific options
+                    platform_options_dict = post_options.get(platform, {})
+                    formatted_post = adapter.format_post(
+                        content, 
+                        media, 
+                        post_type=post_type,
+                        **platform_options_dict
+                    )
+                    result = adapter.publish(formatted_post, credentials)
+                    results.append(result)
+                    logger.info(f"Successfully posted to {platform}")
+                except Exception as e:
+                    logger.error(f"Error posting to {platform}: {str(e)}")
+                    results.append({
+                        'success': False,
+                        'platform': platform,
+                        'error': str(e)
+                    })
+    
+    execution_time = time.time() - start_time
     
     # Update post status
     if post_id in posts_db:
         posts_db[post_id]['status'] = 'published'
         posts_db[post_id]['results'] = results
         posts_db[post_id]['published_at'] = datetime.utcnow().isoformat()
+        posts_db[post_id]['execution_time_seconds'] = round(execution_time, 2)
+        posts_db[post_id]['parallel_execution'] = parallel
 
 
 @app.route('/api/health', methods=['GET'])
@@ -830,7 +962,151 @@ def get_platform_post_types_details(platform):
     adapter = PLATFORM_ADAPTERS[platform]
     return jsonify({
         'platform': platform,
-        'post_types': adapter.get_post_type_info()
+        'post_types': adapter.get_post_type_info(),
+        'rate_limits': adapter.get_rate_limits()
+    })
+
+
+@app.route('/api/post/preview', methods=['POST'])
+def preview_post():
+    """Generate preview of how post will appear across platforms"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    content = data.get('content', '')
+    media = data.get('media', [])
+    platforms = data.get('platforms', [])
+    post_type = data.get('post_type', 'standard')
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    if not platforms:
+        return jsonify({'error': 'At least one platform must be specified'}), 400
+    
+    previews = []
+    for platform in platforms:
+        if platform in PLATFORM_ADAPTERS:
+            adapter = PLATFORM_ADAPTERS[platform]
+            try:
+                preview = adapter.generate_preview(content, media, post_type)
+                previews.append(preview)
+            except Exception as e:
+                previews.append({
+                    'platform': platform,
+                    'error': str(e)
+                })
+    
+    return jsonify({
+        'previews': previews,
+        'count': len(previews)
+    })
+
+
+@app.route('/api/post/optimize', methods=['POST'])
+def optimize_post():
+    """Get content optimization suggestions for platforms"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    content = data.get('content', '')
+    platforms = data.get('platforms', [])
+    post_type = data.get('post_type', 'standard')
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    if not platforms:
+        return jsonify({'error': 'At least one platform must be specified'}), 400
+    
+    optimizations = {}
+    for platform in platforms:
+        if platform in PLATFORM_ADAPTERS:
+            adapter = PLATFORM_ADAPTERS[platform]
+            try:
+                suggestions = adapter.optimize_content(content, post_type)
+                optimizations[platform] = {
+                    'suggestions': suggestions,
+                    'has_errors': any(s['severity'] == 'error' for s in suggestions),
+                    'has_warnings': any(s['severity'] == 'warning' for s in suggestions)
+                }
+            except Exception as e:
+                optimizations[platform] = {
+                    'error': str(e)
+                }
+    
+    return jsonify({
+        'optimizations': optimizations,
+        'overall_status': 'error' if any(o.get('has_errors') for o in optimizations.values()) else 'ok'
+    })
+
+
+@app.route('/api/schedule/conflicts', methods=['POST'])
+def check_schedule_conflicts():
+    """Check for scheduling conflicts and optimal posting times"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    scheduled_time = data.get('scheduled_time')
+    platforms = data.get('platforms', [])
+    
+    if not scheduled_time:
+        return jsonify({'error': 'Scheduled time is required'}), 400
+    
+    if not platforms:
+        return jsonify({'error': 'At least one platform must be specified'}), 400
+    
+    # Parse scheduled time
+    try:
+        scheduled_time_normalized = scheduled_time.replace('Z', '+00:00')
+        scheduled_dt = datetime.fromisoformat(scheduled_time_normalized)
+    except ValueError:
+        return jsonify({'error': 'Invalid scheduled_time format'}), 400
+    
+    # Check for conflicts with existing scheduled posts
+    conflicts = []
+    time_window = timedelta(minutes=5)
+    
+    for post_id, post in posts_db.items():
+        if post.get('status') == 'scheduled' and post.get('scheduled_for'):
+            existing_time = datetime.fromisoformat(post['scheduled_for'].replace('Z', '+00:00'))
+            time_diff = abs((scheduled_dt - existing_time).total_seconds())
+            
+            # Check if within 5 minute window and shares platforms
+            if time_diff < time_window.total_seconds():
+                shared_platforms = set(platforms) & set(post.get('platforms', []))
+                if shared_platforms:
+                    conflicts.append({
+                        'post_id': post_id,
+                        'scheduled_for': post['scheduled_for'],
+                        'shared_platforms': list(shared_platforms),
+                        'time_difference_seconds': time_diff
+                    })
+    
+    # Generate optimal time suggestions (simple heuristic)
+    suggestions = []
+    if conflicts:
+        # Suggest times around the conflicts
+        suggestions.append({
+            'time': (scheduled_dt + timedelta(minutes=10)).isoformat(),
+            'reason': 'Avoids scheduling conflicts'
+        })
+        suggestions.append({
+            'time': (scheduled_dt - timedelta(minutes=10)).isoformat(),
+            'reason': 'Avoids scheduling conflicts (earlier)'
+        })
+    
+    return jsonify({
+        'has_conflicts': len(conflicts) > 0,
+        'conflicts': conflicts,
+        'conflict_count': len(conflicts),
+        'suggestions': suggestions
     })
 
 
@@ -1068,13 +1344,15 @@ def create_post():
     
     posts_db[post_id] = post_record
     
-    # Publish immediately
-    publish_to_platforms(post_id, platforms, content, media, credentials, post_type, post_options)
+    # Publish immediately (use parallel execution if multiple platforms)
+    parallel = data.get('parallel_execution', True)  # Enable by default
+    publish_to_platforms(post_id, platforms, content, media, credentials, post_type, post_options, parallel=parallel)
     
     return jsonify({
         'success': True,
         'post_id': post_id,
         'message': 'Post is being published',
+        'parallel_execution': parallel,
         'post': post_record
     }), 201
 
