@@ -265,6 +265,41 @@ Returns the supported post types for a specific platform.
 }
 ```
 
+### Get Detailed Post Type Information
+```bash
+GET /api/platforms/{platform}/post-types/details
+```
+
+Returns detailed information about each post type including descriptions and requirements.
+
+**Example Response for Instagram:**
+```json
+{
+  "platform": "instagram",
+  "post_types": [
+    {
+      "type": "feed_post",
+      "description": "Standard Instagram post (requires image or video)",
+      "requirements": {
+        "media_required": true,
+        "media_types": ["image", "video"]
+      }
+    },
+    {
+      "type": "carousel",
+      "description": "Multi-image or video post (2-10 items)",
+      "requirements": {
+        "media_required": true,
+        "media_types": ["image", "video"],
+        "min_items": 2,
+        "max_items": 10,
+        "mixed_media": true
+      }
+    }
+  ]
+}
+```
+
 ### Post Immediately
 ```bash
 POST /api/post
@@ -281,6 +316,11 @@ Content-Type: application/json
   }
 }
 ```
+
+**Validation:**
+- The API validates post types against each platform's supported types
+- Media requirements are automatically validated (e.g., Instagram requires media for all post types)
+- Clear error messages indicate which platforms don't support the specified post type
 
 **Parameters:**
 - `content` (required): The text content of the post

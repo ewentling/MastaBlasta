@@ -42,9 +42,10 @@ chatbot_interactions = {}  # Stores chatbot conversation history
 class PlatformAdapter:
     """Base adapter for social media platforms"""
     
-    def __init__(self, platform_name, supported_post_types=None):
+    def __init__(self, platform_name, supported_post_types=None, post_type_descriptions=None):
         self.platform_name = platform_name
         self.supported_post_types = supported_post_types or ['standard']
+        self.post_type_descriptions = post_type_descriptions or {}
     
     def split_text_at_word_boundaries(self, text, max_length):
         """Split text into chunks at word boundaries"""
@@ -75,12 +76,47 @@ class PlatformAdapter:
         """Validate platform credentials"""
         return True
     
+    def validate_post_type(self, post_type):
+        """Validate if post type is supported by this platform"""
+        return post_type in self.supported_post_types
+    
     def get_supported_post_types(self):
         """Get list of supported post types for this platform"""
         return self.supported_post_types
     
+    def get_post_type_info(self):
+        """Get detailed information about supported post types"""
+        return [
+            {
+                'type': post_type,
+                'description': self.post_type_descriptions.get(post_type, ''),
+                'requirements': self.get_post_type_requirements(post_type)
+            }
+            for post_type in self.supported_post_types
+        ]
+    
+    def get_post_type_requirements(self, post_type):
+        """Get requirements for a specific post type (can be overridden by subclasses)"""
+        return {}
+    
+    def validate_media_requirements(self, post_type, media):
+        """Validate media requirements for post type (can be overridden by subclasses)"""
+        return True, None  # Returns (is_valid, error_message)
+    
     def format_post(self, content, media=None, post_type='standard', **kwargs):
         """Format post content for specific platform"""
+        # Validate post type
+        if not self.validate_post_type(post_type):
+            raise ValueError(
+                f"Unsupported post type '{post_type}' for {self.platform_name}. "
+                f"Supported types: {', '.join(self.supported_post_types)}"
+            )
+        
+        # Validate media requirements
+        is_valid, error_msg = self.validate_media_requirements(post_type, media)
+        if not is_valid:
+            raise ValueError(error_msg)
+        
         return {
             'platform': self.platform_name,
             'content': content,
@@ -108,9 +144,38 @@ class TwitterAdapter(PlatformAdapter):
     TWEET_MAX_LENGTH = 280
     
     def __init__(self):
-        super().__init__('twitter', supported_post_types=['standard', 'thread'])
+        descriptions = {
+            'standard': 'Regular tweet with 280 character limit',
+            'thread': 'Multi-tweet thread for longer content, automatically split at word boundaries'
+        }
+        super().__init__('twitter', 
+                        supported_post_types=['standard', 'thread'],
+                        post_type_descriptions=descriptions)
+    
+    def get_post_type_requirements(self, post_type):
+        """Get requirements for Twitter post types"""
+        if post_type == 'standard':
+            return {
+                'max_length': self.TWEET_MAX_LENGTH,
+                'media_optional': True,
+                'max_media': 4
+            }
+        elif post_type == 'thread':
+            return {
+                'max_length_per_tweet': self.TWEET_MAX_LENGTH,
+                'auto_split': True,
+                'media_optional': True
+            }
+        return {}
     
     def format_post(self, content, media=None, post_type='standard', **kwargs):
+        # Validate post type first
+        if not self.validate_post_type(post_type):
+            raise ValueError(
+                f"Unsupported post type '{post_type}' for {self.platform_name}. "
+                f"Supported types: {', '.join(self.supported_post_types)}"
+            )
+        
         if post_type == 'thread':
             # Split content into tweets for threads at word boundaries
             tweets = self.split_text_at_word_boundaries(content, self.TWEET_MAX_LENGTH)
@@ -167,9 +232,73 @@ class FacebookAdapter(PlatformAdapter):
 class InstagramAdapter(PlatformAdapter):
     """Instagram adapter supporting Feed posts, Reels, Stories, and Carousels"""
     def __init__(self):
-        super().__init__('instagram', supported_post_types=['feed_post', 'reel', 'story', 'carousel'])
+        descriptions = {
+            'feed_post': 'Standard Instagram post (requires image or video)',
+            'reel': 'Short-form vertical video (3-90 seconds, 9:16 aspect ratio)',
+            'story': 'Ephemeral 24-hour content (15 seconds, 9:16 aspect ratio)',
+            'carousel': 'Multi-image or video post (2-10 items)'
+        }
+        super().__init__('instagram', 
+                        supported_post_types=['feed_post', 'reel', 'story', 'carousel'],
+                        post_type_descriptions=descriptions)
+    
+    def get_post_type_requirements(self, post_type):
+        """Get requirements for Instagram post types"""
+        base_req = {'media_required': True}
+        
+        if post_type == 'feed_post':
+            return {**base_req, 'media_types': ['image', 'video']}
+        elif post_type == 'reel':
+            return {
+                **base_req,
+                'media_types': ['video'],
+                'min_duration': 3,
+                'max_duration': 90,
+                'aspect_ratio': '9:16'
+            }
+        elif post_type == 'story':
+            return {
+                **base_req,
+                'media_types': ['image', 'video'],
+                'duration': 15,
+                'aspect_ratio': '9:16',
+                'ephemeral': True
+            }
+        elif post_type == 'carousel':
+            return {
+                **base_req,
+                'media_types': ['image', 'video'],
+                'min_items': 2,
+                'max_items': 10,
+                'mixed_media': True
+            }
+        return base_req
+    
+    def validate_media_requirements(self, post_type, media):
+        """Validate media requirements for Instagram"""
+        if not media or len(media) == 0:
+            return False, f"Instagram {post_type} requires media"
+        
+        if post_type == 'carousel' and len(media) < 2:
+            return False, "Instagram carousel requires at least 2 media items"
+        
+        if post_type == 'carousel' and len(media) > 10:
+            return False, "Instagram carousel supports maximum 10 media items"
+        
+        return True, None
     
     def format_post(self, content, media=None, post_type='feed_post', **kwargs):
+        # Validate post type and media
+        if not self.validate_post_type(post_type):
+            raise ValueError(
+                f"Unsupported post type '{post_type}' for {self.platform_name}. "
+                f"Supported types: {', '.join(self.supported_post_types)}"
+            )
+        
+        is_valid, error_msg = self.validate_media_requirements(post_type, media)
+        if not is_valid:
+            raise ValueError(error_msg)
+        
         # Instagram requires media for all post types
         formatted = {
             'platform': self.platform_name,
@@ -692,6 +821,19 @@ def get_platform_post_types(platform):
     })
 
 
+@app.route('/api/platforms/<platform>/post-types/details', methods=['GET'])
+def get_platform_post_types_details(platform):
+    """Get detailed information about post types for a specific platform"""
+    if platform not in PLATFORM_ADAPTERS:
+        return jsonify({'error': f'Invalid platform: {platform}'}), 404
+    
+    adapter = PLATFORM_ADAPTERS[platform]
+    return jsonify({
+        'platform': platform,
+        'post_types': adapter.get_post_type_info()
+    })
+
+
 @app.route('/api/oauth/init/<platform>', methods=['GET'])
 def oauth_init(platform):
     """Initialize OAuth flow for a platform"""
@@ -893,6 +1035,22 @@ def create_post():
             'error': f'Invalid platforms: {", ".join(invalid_platforms)}'
         }), 400
     
+    # Validate post type for each platform
+    validation_errors = []
+    for platform in set(platforms):  # Use set to check unique platforms
+        adapter = PLATFORM_ADAPTERS[platform]
+        if not adapter.validate_post_type(post_type):
+            validation_errors.append(
+                f"{platform}: unsupported post type '{post_type}' "
+                f"(supported: {', '.join(adapter.get_supported_post_types())})"
+            )
+    
+    if validation_errors:
+        return jsonify({
+            'error': 'Post type validation failed',
+            'details': validation_errors
+        }), 400
+    
     # Create post record
     post_id = str(uuid.uuid4())
     post_record = {
@@ -966,6 +1124,22 @@ def schedule_post():
     if invalid_platforms:
         return jsonify({
             'error': f'Invalid platforms: {", ".join(invalid_platforms)}'
+        }), 400
+    
+    # Validate post type for each platform
+    validation_errors = []
+    for platform in set(platforms):  # Use set to check unique platforms
+        adapter = PLATFORM_ADAPTERS[platform]
+        if not adapter.validate_post_type(post_type):
+            validation_errors.append(
+                f"{platform}: unsupported post type '{post_type}' "
+                f"(supported: {', '.join(adapter.get_supported_post_types())})"
+            )
+    
+    if validation_errors:
+        return jsonify({
+            'error': 'Post type validation failed',
+            'details': validation_errors
         }), 400
     
     # Parse scheduled time
