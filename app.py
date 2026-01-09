@@ -45,6 +45,31 @@ class PlatformAdapter:
     def __init__(self, platform_name, supported_post_types=None):
         self.platform_name = platform_name
         self.supported_post_types = supported_post_types or ['standard']
+    
+    def split_text_at_word_boundaries(self, text, max_length):
+        """Split text into chunks at word boundaries"""
+        chunks = []
+        remaining = text
+        
+        while remaining:
+            if len(remaining) <= max_length:
+                chunks.append(remaining)
+                break
+            
+            # Find the last space within max_length
+            chunk = remaining[:max_length]
+            last_space = chunk.rfind(' ')
+            
+            if last_space > 0:
+                # Split at the last space
+                chunks.append(remaining[:last_space])
+                remaining = remaining[last_space + 1:]
+            else:
+                # No space found, split at max_length
+                chunks.append(remaining[:max_length])
+                remaining = remaining[max_length:]
+        
+        return chunks
         
     def validate_credentials(self, credentials):
         """Validate platform credentials"""
@@ -80,19 +105,15 @@ class PlatformAdapter:
 
 class TwitterAdapter(PlatformAdapter):
     """Twitter/X adapter supporting standard posts and threads"""
+    TWEET_MAX_LENGTH = 280
+    
     def __init__(self):
         super().__init__('twitter', supported_post_types=['standard', 'thread'])
     
     def format_post(self, content, media=None, post_type='standard', **kwargs):
-        # Twitter has 280 character limit per tweet
         if post_type == 'thread':
-            # Split content into tweets for threads
-            tweets = []
-            remaining = content
-            while remaining:
-                chunk = remaining[:280]
-                tweets.append(chunk)
-                remaining = remaining[280:]
+            # Split content into tweets for threads at word boundaries
+            tweets = self.split_text_at_word_boundaries(content, self.TWEET_MAX_LENGTH)
             
             return {
                 'platform': self.platform_name,
@@ -104,7 +125,7 @@ class TwitterAdapter(PlatformAdapter):
             }
         else:
             # Standard tweet
-            truncated_content = content[:280] if len(content) > 280 else content
+            truncated_content = content[:self.TWEET_MAX_LENGTH] if len(content) > self.TWEET_MAX_LENGTH else content
             return {
                 'platform': self.platform_name,
                 'content': truncated_content,
@@ -183,6 +204,8 @@ class InstagramAdapter(PlatformAdapter):
 
 class LinkedInAdapter(PlatformAdapter):
     """LinkedIn adapter supporting personal profiles and company pages"""
+    MAX_CONTENT_LENGTH = 3000
+    
     def __init__(self):
         super().__init__('linkedin', supported_post_types=['personal_profile', 'company_page'])
     
@@ -200,8 +223,8 @@ class LinkedInAdapter(PlatformAdapter):
                 formatted['company_id'] = company_id
         
         # LinkedIn supports up to 3000 characters
-        if len(content) > 3000:
-            formatted['content'] = content[:3000]
+        if len(content) > self.MAX_CONTENT_LENGTH:
+            formatted['content'] = content[:self.MAX_CONTENT_LENGTH]
             formatted['truncated'] = True
         
         return formatted
@@ -209,6 +232,8 @@ class LinkedInAdapter(PlatformAdapter):
 
 class ThreadsAdapter(PlatformAdapter):
     """Threads adapter supporting single posts and thread-style posts"""
+    MAX_POST_LENGTH = 500
+    
     def __init__(self):
         super().__init__('threads', supported_post_types=['standard', 'thread'])
     
@@ -222,19 +247,14 @@ class ThreadsAdapter(PlatformAdapter):
         
         if post_type == 'thread':
             # Threads has 500 character limit per post
-            posts = []
-            remaining = content
-            while remaining:
-                chunk = remaining[:500]
-                posts.append(chunk)
-                remaining = remaining[500:]
+            posts = self.split_text_at_word_boundaries(content, self.MAX_POST_LENGTH)
             
             formatted['posts'] = posts
             formatted['thread_length'] = len(posts)
         else:
             # Single post with 500 character limit
-            if len(content) > 500:
-                formatted['content'] = content[:500]
+            if len(content) > self.MAX_POST_LENGTH:
+                formatted['content'] = content[:self.MAX_POST_LENGTH]
                 formatted['truncated'] = True
         
         return formatted
@@ -242,6 +262,8 @@ class ThreadsAdapter(PlatformAdapter):
 
 class BlueskyAdapter(PlatformAdapter):
     """Bluesky adapter supporting single posts and thread-style posts"""
+    MAX_POST_LENGTH = 300
+    
     def __init__(self):
         super().__init__('bluesky', supported_post_types=['standard', 'thread'])
     
@@ -255,19 +277,14 @@ class BlueskyAdapter(PlatformAdapter):
         
         if post_type == 'thread':
             # Bluesky has 300 character limit per post
-            posts = []
-            remaining = content
-            while remaining:
-                chunk = remaining[:300]
-                posts.append(chunk)
-                remaining = remaining[300:]
+            posts = self.split_text_at_word_boundaries(content, self.MAX_POST_LENGTH)
             
             formatted['posts'] = posts
             formatted['thread_length'] = len(posts)
         else:
             # Single post with 300 character limit
-            if len(content) > 300:
-                formatted['content'] = content[:300]
+            if len(content) > self.MAX_POST_LENGTH:
+                formatted['content'] = content[:self.MAX_POST_LENGTH]
                 formatted['truncated'] = True
         
         return formatted
@@ -275,6 +292,8 @@ class BlueskyAdapter(PlatformAdapter):
 
 class YouTubeAdapter(PlatformAdapter):
     """YouTube adapter supporting long-form videos and Shorts"""
+    MAX_VIDEO_DURATION = 12 * 60 * 60  # 12 hours in seconds
+    
     def __init__(self):
         super().__init__('youtube', supported_post_types=['video', 'short'])
     
@@ -297,7 +316,7 @@ class YouTubeAdapter(PlatformAdapter):
             # Long-form video
             formatted['video_specs'] = {
                 'min_duration': 1,
-                'max_duration': 43200,  # 12 hours
+                'max_duration': self.MAX_VIDEO_DURATION,
                 'supports_chapters': True,
                 'supports_end_screens': True
             }
@@ -307,6 +326,8 @@ class YouTubeAdapter(PlatformAdapter):
 
 class PinterestAdapter(PlatformAdapter):
     """Pinterest adapter supporting Pins and Video Pins"""
+    MAX_VIDEO_DURATION = 15 * 60  # 15 minutes in seconds
+    
     def __init__(self):
         super().__init__('pinterest', supported_post_types=['pin', 'video_pin'])
     
@@ -327,7 +348,7 @@ class PinterestAdapter(PlatformAdapter):
             formatted['requires_video'] = True
             formatted['video_specs'] = {
                 'min_duration': 4,
-                'max_duration': 15 * 60,  # 15 minutes
+                'max_duration': self.MAX_VIDEO_DURATION,
                 'recommended_aspect_ratio': '2:3'
             }
         else:
@@ -341,6 +362,9 @@ class PinterestAdapter(PlatformAdapter):
 
 class TikTokAdapter(PlatformAdapter):
     """TikTok adapter supporting videos and slideshows"""
+    MAX_CAPTION_LENGTH = 2200
+    MAX_VIDEO_DURATION = 10 * 60  # 10 minutes in seconds
+    
     def __init__(self):
         super().__init__('tiktok', supported_post_types=['video', 'slideshow'])
     
@@ -365,14 +389,14 @@ class TikTokAdapter(PlatformAdapter):
             formatted['requires_video'] = True
             formatted['video_specs'] = {
                 'min_duration': 3,
-                'max_duration': 10 * 60,  # 10 minutes
+                'max_duration': self.MAX_VIDEO_DURATION,
                 'aspect_ratio': '9:16',
                 'vertical_only': True
             }
         
         # TikTok caption limit
-        if len(content) > 2200:
-            formatted['content'] = content[:2200]
+        if len(content) > self.MAX_CAPTION_LENGTH:
+            formatted['content'] = content[:self.MAX_CAPTION_LENGTH]
             formatted['truncated'] = True
         
         return formatted
@@ -626,11 +650,24 @@ def test_account(account_id):
 @app.route('/api/platforms', methods=['GET'])
 def get_platforms():
     """Get list of supported platforms"""
+    # Define proper display names for platforms
+    display_names = {
+        'twitter': 'Twitter/X',
+        'facebook': 'Facebook',
+        'instagram': 'Instagram',
+        'linkedin': 'LinkedIn',
+        'threads': 'Threads',
+        'bluesky': 'Bluesky',
+        'youtube': 'YouTube',
+        'pinterest': 'Pinterest',
+        'tiktok': 'TikTok'
+    }
+    
     platforms = []
     for name, adapter in PLATFORM_ADAPTERS.items():
         platforms.append({
             'name': name,
-            'display_name': name.replace('_', ' ').title(),
+            'display_name': display_names.get(name, name.capitalize()),
             'available': True,
             'supports_oauth': True,  # All platforms now support OAuth
             'supported_post_types': adapter.get_supported_post_types()
