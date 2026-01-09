@@ -54,6 +54,11 @@ export const platformsApi = {
     const response = await api.get('/platforms');
     return response.data;
   },
+
+  getPostTypes: async (platform: string): Promise<{ platform: string; supported_post_types: string[] }> => {
+    const response = await api.get(`/platforms/${platform}/post-types`);
+    return response.data;
+  },
 };
 
 export const postsApi = {

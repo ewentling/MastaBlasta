@@ -42,70 +42,340 @@ chatbot_interactions = {}  # Stores chatbot conversation history
 class PlatformAdapter:
     """Base adapter for social media platforms"""
     
-    def __init__(self, platform_name):
+    def __init__(self, platform_name, supported_post_types=None):
         self.platform_name = platform_name
+        self.supported_post_types = supported_post_types or ['standard']
         
     def validate_credentials(self, credentials):
         """Validate platform credentials"""
         return True
     
-    def format_post(self, content, media=None):
+    def get_supported_post_types(self):
+        """Get list of supported post types for this platform"""
+        return self.supported_post_types
+    
+    def format_post(self, content, media=None, post_type='standard', **kwargs):
         """Format post content for specific platform"""
         return {
             'platform': self.platform_name,
             'content': content,
-            'media': media
+            'media': media,
+            'post_type': post_type
         }
     
     def publish(self, post_data, credentials):
         """Publish post to platform"""
         # In a real implementation, this would call the platform's API
         # Note: credentials are not logged to avoid exposing sensitive data
-        logger.info(f"Publishing to {self.platform_name}")
+        post_type = post_data.get('post_type', 'standard')
+        logger.info(f"Publishing {post_type} to {self.platform_name}")
         return {
             'success': True,
             'platform': self.platform_name,
             'post_id': str(uuid.uuid4()),
+            'post_type': post_type,
             'message': f'Post published to {self.platform_name}'
         }
 
 
 class TwitterAdapter(PlatformAdapter):
+    """Twitter/X adapter supporting standard posts and threads"""
     def __init__(self):
-        super().__init__('twitter')
+        super().__init__('twitter', supported_post_types=['standard', 'thread'])
     
-    def format_post(self, content, media=None):
-        # Twitter has 280 character limit
-        truncated_content = content[:280] if len(content) > 280 else content
-        return {
-            'platform': self.platform_name,
-            'content': truncated_content,
-            'media': media
-        }
+    def format_post(self, content, media=None, post_type='standard', **kwargs):
+        # Twitter has 280 character limit per tweet
+        if post_type == 'thread':
+            # Split content into tweets for threads
+            tweets = []
+            remaining = content
+            while remaining:
+                chunk = remaining[:280]
+                tweets.append(chunk)
+                remaining = remaining[280:]
+            
+            return {
+                'platform': self.platform_name,
+                'content': content,
+                'tweets': tweets,
+                'media': media,
+                'post_type': post_type,
+                'thread_length': len(tweets)
+            }
+        else:
+            # Standard tweet
+            truncated_content = content[:280] if len(content) > 280 else content
+            return {
+                'platform': self.platform_name,
+                'content': truncated_content,
+                'media': media,
+                'post_type': post_type
+            }
 
 
 class FacebookAdapter(PlatformAdapter):
+    """Facebook adapter supporting Page posts and Reels (Pages only, not personal profiles or groups)"""
     def __init__(self):
-        super().__init__('facebook')
-
-
-class InstagramAdapter(PlatformAdapter):
-    def __init__(self):
-        super().__init__('instagram')
+        super().__init__('facebook', supported_post_types=['feed_post', 'reel'])
     
-    def format_post(self, content, media=None):
-        # Instagram requires media
-        return {
+    def format_post(self, content, media=None, post_type='feed_post', **kwargs):
+        page_id = kwargs.get('page_id')
+        
+        formatted = {
             'platform': self.platform_name,
             'content': content,
             'media': media,
+            'post_type': post_type,
+            'target_type': 'page'  # Pages only
+        }
+        
+        if page_id:
+            formatted['page_id'] = page_id
+            
+        if post_type == 'reel':
+            formatted['requires_video'] = True
+            formatted['reel_specs'] = {
+                'min_duration': 3,
+                'max_duration': 90,
+                'aspect_ratio': '9:16'
+            }
+        
+        return formatted
+
+
+class InstagramAdapter(PlatformAdapter):
+    """Instagram adapter supporting Feed posts, Reels, Stories, and Carousels"""
+    def __init__(self):
+        super().__init__('instagram', supported_post_types=['feed_post', 'reel', 'story', 'carousel'])
+    
+    def format_post(self, content, media=None, post_type='feed_post', **kwargs):
+        # Instagram requires media for all post types
+        formatted = {
+            'platform': self.platform_name,
+            'content': content,
+            'media': media,
+            'post_type': post_type,
             'requires_media': True
         }
+        
+        if post_type == 'reel':
+            formatted['requires_video'] = True
+            formatted['reel_specs'] = {
+                'min_duration': 3,
+                'max_duration': 90,
+                'aspect_ratio': '9:16'
+            }
+        elif post_type == 'story':
+            formatted['story_specs'] = {
+                'duration': 15,
+                'aspect_ratio': '9:16',
+                'ephemeral': True
+            }
+        elif post_type == 'carousel':
+            formatted['carousel_specs'] = {
+                'min_items': 2,
+                'max_items': 10,
+                'supports_mixed_media': True
+            }
+        
+        return formatted
 
 
 class LinkedInAdapter(PlatformAdapter):
+    """LinkedIn adapter supporting personal profiles and company pages"""
     def __init__(self):
-        super().__init__('linkedin')
+        super().__init__('linkedin', supported_post_types=['personal_profile', 'company_page'])
+    
+    def format_post(self, content, media=None, post_type='personal_profile', **kwargs):
+        formatted = {
+            'platform': self.platform_name,
+            'content': content,
+            'media': media,
+            'post_type': post_type
+        }
+        
+        if post_type == 'company_page':
+            company_id = kwargs.get('company_id')
+            if company_id:
+                formatted['company_id'] = company_id
+        
+        # LinkedIn supports up to 3000 characters
+        if len(content) > 3000:
+            formatted['content'] = content[:3000]
+            formatted['truncated'] = True
+        
+        return formatted
+
+
+class ThreadsAdapter(PlatformAdapter):
+    """Threads adapter supporting single posts and thread-style posts"""
+    def __init__(self):
+        super().__init__('threads', supported_post_types=['standard', 'thread'])
+    
+    def format_post(self, content, media=None, post_type='standard', **kwargs):
+        formatted = {
+            'platform': self.platform_name,
+            'content': content,
+            'media': media,
+            'post_type': post_type
+        }
+        
+        if post_type == 'thread':
+            # Threads has 500 character limit per post
+            posts = []
+            remaining = content
+            while remaining:
+                chunk = remaining[:500]
+                posts.append(chunk)
+                remaining = remaining[500:]
+            
+            formatted['posts'] = posts
+            formatted['thread_length'] = len(posts)
+        else:
+            # Single post with 500 character limit
+            if len(content) > 500:
+                formatted['content'] = content[:500]
+                formatted['truncated'] = True
+        
+        return formatted
+
+
+class BlueskyAdapter(PlatformAdapter):
+    """Bluesky adapter supporting single posts and thread-style posts"""
+    def __init__(self):
+        super().__init__('bluesky', supported_post_types=['standard', 'thread'])
+    
+    def format_post(self, content, media=None, post_type='standard', **kwargs):
+        formatted = {
+            'platform': self.platform_name,
+            'content': content,
+            'media': media,
+            'post_type': post_type
+        }
+        
+        if post_type == 'thread':
+            # Bluesky has 300 character limit per post
+            posts = []
+            remaining = content
+            while remaining:
+                chunk = remaining[:300]
+                posts.append(chunk)
+                remaining = remaining[300:]
+            
+            formatted['posts'] = posts
+            formatted['thread_length'] = len(posts)
+        else:
+            # Single post with 300 character limit
+            if len(content) > 300:
+                formatted['content'] = content[:300]
+                formatted['truncated'] = True
+        
+        return formatted
+
+
+class YouTubeAdapter(PlatformAdapter):
+    """YouTube adapter supporting long-form videos and Shorts"""
+    def __init__(self):
+        super().__init__('youtube', supported_post_types=['video', 'short'])
+    
+    def format_post(self, content, media=None, post_type='video', **kwargs):
+        formatted = {
+            'platform': self.platform_name,
+            'content': content,  # Used as video title/description
+            'media': media,
+            'post_type': post_type,
+            'requires_video': True
+        }
+        
+        if post_type == 'short':
+            formatted['short_specs'] = {
+                'max_duration': 60,
+                'aspect_ratio': '9:16',
+                'vertical_only': True
+            }
+        else:
+            # Long-form video
+            formatted['video_specs'] = {
+                'min_duration': 1,
+                'max_duration': 43200,  # 12 hours
+                'supports_chapters': True,
+                'supports_end_screens': True
+            }
+        
+        return formatted
+
+
+class PinterestAdapter(PlatformAdapter):
+    """Pinterest adapter supporting Pins and Video Pins"""
+    def __init__(self):
+        super().__init__('pinterest', supported_post_types=['pin', 'video_pin'])
+    
+    def format_post(self, content, media=None, post_type='pin', **kwargs):
+        formatted = {
+            'platform': self.platform_name,
+            'content': content,  # Used as pin description
+            'media': media,
+            'post_type': post_type,
+            'requires_media': True
+        }
+        
+        board_id = kwargs.get('board_id')
+        if board_id:
+            formatted['board_id'] = board_id
+        
+        if post_type == 'video_pin':
+            formatted['requires_video'] = True
+            formatted['video_specs'] = {
+                'min_duration': 4,
+                'max_duration': 15 * 60,  # 15 minutes
+                'recommended_aspect_ratio': '2:3'
+            }
+        else:
+            formatted['pin_specs'] = {
+                'recommended_aspect_ratio': '2:3',
+                'supports_carousel': True
+            }
+        
+        return formatted
+
+
+class TikTokAdapter(PlatformAdapter):
+    """TikTok adapter supporting videos and slideshows"""
+    def __init__(self):
+        super().__init__('tiktok', supported_post_types=['video', 'slideshow'])
+    
+    def format_post(self, content, media=None, post_type='video', **kwargs):
+        formatted = {
+            'platform': self.platform_name,
+            'content': content,  # Used as video caption
+            'media': media,
+            'post_type': post_type,
+            'requires_media': True
+        }
+        
+        if post_type == 'slideshow':
+            formatted['slideshow_specs'] = {
+                'min_images': 1,
+                'max_images': 35,
+                'aspect_ratio': '9:16',
+                'supports_music': True
+            }
+        else:
+            # Video
+            formatted['requires_video'] = True
+            formatted['video_specs'] = {
+                'min_duration': 3,
+                'max_duration': 10 * 60,  # 10 minutes
+                'aspect_ratio': '9:16',
+                'vertical_only': True
+            }
+        
+        # TikTok caption limit
+        if len(content) > 2200:
+            formatted['content'] = content[:2200]
+            formatted['truncated'] = True
+        
+        return formatted
 
 
 # Initialize platform adapters
@@ -114,12 +384,18 @@ PLATFORM_ADAPTERS = {
     'facebook': FacebookAdapter(),
     'instagram': InstagramAdapter(),
     'linkedin': LinkedInAdapter(),
+    'threads': ThreadsAdapter(),
+    'bluesky': BlueskyAdapter(),
+    'youtube': YouTubeAdapter(),
+    'pinterest': PinterestAdapter(),
+    'tiktok': TikTokAdapter(),
 }
 
 
-def publish_to_platforms(post_id, platforms, content, media, credentials_dict):
+def publish_to_platforms(post_id, platforms, content, media, credentials_dict, post_type='standard', post_options=None):
     """Background task to publish to multiple platforms"""
     results = []
+    post_options = post_options or {}
     
     for platform in platforms:
         if platform in PLATFORM_ADAPTERS:
@@ -127,7 +403,14 @@ def publish_to_platforms(post_id, platforms, content, media, credentials_dict):
             credentials = credentials_dict.get(platform, {})
             
             try:
-                formatted_post = adapter.format_post(content, media)
+                # Get platform-specific options
+                platform_options = post_options.get(platform, {})
+                formatted_post = adapter.format_post(
+                    content, 
+                    media, 
+                    post_type=post_type,
+                    **platform_options
+                )
                 result = adapter.publish(formatted_post, credentials)
                 results.append(result)
                 logger.info(f"Successfully posted to {platform}")
@@ -347,14 +630,28 @@ def get_platforms():
     for name, adapter in PLATFORM_ADAPTERS.items():
         platforms.append({
             'name': name,
-            'display_name': name.capitalize(),
+            'display_name': name.replace('_', ' ').title(),
             'available': True,
-            'supports_oauth': True  # All platforms now support OAuth
+            'supports_oauth': True,  # All platforms now support OAuth
+            'supported_post_types': adapter.get_supported_post_types()
         })
     
     return jsonify({
         'platforms': platforms,
         'count': len(platforms)
+    })
+
+
+@app.route('/api/platforms/<platform>/post-types', methods=['GET'])
+def get_platform_post_types(platform):
+    """Get supported post types for a specific platform"""
+    if platform not in PLATFORM_ADAPTERS:
+        return jsonify({'error': f'Invalid platform: {platform}'}), 404
+    
+    adapter = PLATFORM_ADAPTERS[platform]
+    return jsonify({
+        'platform': platform,
+        'supported_post_types': adapter.get_supported_post_types()
     })
 
 
@@ -387,6 +684,11 @@ def oauth_init(platform):
         'facebook': f'https://www.facebook.com/v18.0/dialog/oauth?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/facebook&state={state_token}',
         'instagram': f'https://api.instagram.com/oauth/authorize?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/instagram&state={state_token}',
         'linkedin': f'https://www.linkedin.com/oauth/v2/authorization?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/linkedin&state={state_token}',
+        'threads': f'https://threads.net/oauth/authorize?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/threads&state={state_token}',
+        'bluesky': f'https://bsky.app/oauth/authorize?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/bluesky&state={state_token}',
+        'youtube': f'https://accounts.google.com/o/oauth2/v2/auth?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/youtube&state={state_token}&scope=https://www.googleapis.com/auth/youtube.upload',
+        'pinterest': f'https://www.pinterest.com/oauth/?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/pinterest&state={state_token}',
+        'tiktok': f'https://www.tiktok.com/auth/authorize?client_key=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/tiktok&state={state_token}',
     }
     
     return jsonify({
@@ -522,6 +824,8 @@ def create_post():
     content = data.get('content', '')
     media = data.get('media', [])
     account_ids = data.get('account_ids', [])
+    post_type = data.get('post_type', 'standard')
+    post_options = data.get('post_options', {})
     # Legacy support: allow platforms + credentials
     platforms = data.get('platforms', [])
     credentials = data.get('credentials', {})
@@ -560,6 +864,8 @@ def create_post():
         'media': media,
         'platforms': platforms,
         'account_ids': account_ids,
+        'post_type': post_type,
+        'post_options': post_options,
         'status': 'publishing',
         'created_at': datetime.utcnow().isoformat(),
         'scheduled_for': None
@@ -568,7 +874,7 @@ def create_post():
     posts_db[post_id] = post_record
     
     # Publish immediately
-    publish_to_platforms(post_id, platforms, content, media, credentials)
+    publish_to_platforms(post_id, platforms, content, media, credentials, post_type, post_options)
     
     return jsonify({
         'success': True,
@@ -589,6 +895,8 @@ def schedule_post():
     content = data.get('content', '')
     media = data.get('media', [])
     account_ids = data.get('account_ids', [])
+    post_type = data.get('post_type', 'standard')
+    post_options = data.get('post_options', {})
     # Legacy support
     platforms = data.get('platforms', [])
     credentials = data.get('credentials', {})
@@ -642,6 +950,8 @@ def schedule_post():
         'media': media,
         'platforms': platforms,
         'account_ids': account_ids,
+        'post_type': post_type,
+        'post_options': post_options,
         'status': 'scheduled',
         'created_at': datetime.utcnow().isoformat(),
         'scheduled_for': scheduled_time
@@ -654,7 +964,7 @@ def schedule_post():
         publish_to_platforms,
         'date',
         run_date=scheduled_dt,
-        args=[post_id, platforms, content, media, credentials],
+        args=[post_id, platforms, content, media, credentials, post_type, post_options],
         id=post_id
     )
     
@@ -1481,6 +1791,10 @@ def execute_bulk_import():
             # Parse scheduled_time
             scheduled_time = row.get('scheduled_time')
             
+            # Get post type and options
+            post_type = row.get('post_type', 'standard')
+            post_options = row.get('post_options', {})
+            
             # Create post
             post_id = str(uuid.uuid4())
             
@@ -1499,6 +1813,8 @@ def execute_bulk_import():
                     'media': row.get('media'),
                     'platforms': list(set(platforms)),  # Remove duplicates
                     'account_ids': account_ids,
+                    'post_type': post_type,
+                    'post_options': post_options,
                     'status': 'scheduled',
                     'created_at': datetime.utcnow().isoformat(),
                     'scheduled_for': scheduled_time,
@@ -1512,7 +1828,7 @@ def execute_bulk_import():
                     publish_to_platforms,
                     'date',
                     run_date=scheduled_dt,
-                    args=[post_id, list(set(platforms)), content, row.get('media'), credentials],
+                    args=[post_id, list(set(platforms)), content, row.get('media'), credentials, post_type, post_options],
                     id=post_id
                 )
             else:
@@ -1523,6 +1839,8 @@ def execute_bulk_import():
                     'media': row.get('media'),
                     'platforms': list(set(platforms)),
                     'account_ids': account_ids,
+                    'post_type': post_type,
+                    'post_options': post_options,
                     'status': 'publishing',
                     'created_at': datetime.utcnow().isoformat(),
                     'bulk_import_id': import_id
@@ -1531,7 +1849,7 @@ def execute_bulk_import():
                 posts_db[post_id] = post_record
                 
                 # Publish immediately
-                results = publish_to_platforms(post_id, list(set(platforms)), content, row.get('media'), credentials)
+                results = publish_to_platforms(post_id, list(set(platforms)), content, row.get('media'), credentials, post_type, post_options)
             
             created_posts.append({
                 'row': i + 1,

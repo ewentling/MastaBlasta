@@ -15,10 +15,44 @@ A multi-platform social media posting service that allows easy posting to multip
 
 ## Supported Platforms
 
-- Twitter/X (280 character limit enforced)
-- Facebook
-- Instagram (requires media)
-- LinkedIn
+### LinkedIn
+- **Personal Profiles**: Post to your personal LinkedIn profile
+- **Company Pages**: Post to LinkedIn company pages
+
+### Twitter/X
+- **Standard Posts**: Regular tweets (280 character limit)
+- **Threads**: Multi-tweet threads for longer content
+
+### Threads
+- **Single Posts**: Standard Threads posts (500 character limit)
+- **Thread-style Posts**: Multi-post threads
+
+### Bluesky
+- **Single Posts**: Standard posts (300 character limit)
+- **Thread-style Posts**: Multi-post threads
+
+### YouTube
+- **Long-form Videos**: Standard YouTube videos (up to 12 hours)
+- **YouTube Shorts**: Short vertical videos (up to 60 seconds)
+
+### Instagram
+- **Feed Posts**: Standard Instagram posts (requires media)
+- **Reels**: Short-form video content (3-90 seconds)
+- **Stories**: Ephemeral 24-hour content
+- **Carousels**: Multi-image/video posts (2-10 items)
+
+### Facebook
+- **Pages Only**: Post to Facebook Pages (not personal profiles or groups)
+- **Feed Posts**: Standard Facebook posts
+- **Reels**: Short-form video content (3-90 seconds)
+
+### Pinterest
+- **Pins**: Standard image pins
+- **Video Pins**: Video content (4 seconds to 15 minutes)
+
+### TikTok
+- **Videos**: Standard TikTok videos (3 seconds to 10 minutes)
+- **Slideshows**: Photo slideshows with music (1-35 images)
 
 ## Quick Start
 
@@ -208,10 +242,26 @@ Returns a list of all supported social media platforms.
     {
       "name": "twitter",
       "display_name": "Twitter",
-      "available": true
+      "available": true,
+      "supported_post_types": ["standard", "thread"]
     }
   ],
-  "count": 4
+  "count": 9
+}
+```
+
+### Get Platform Post Types
+```bash
+GET /api/platforms/{platform}/post-types
+```
+
+Returns the supported post types for a specific platform.
+
+**Response:**
+```json
+{
+  "platform": "instagram",
+  "supported_post_types": ["feed_post", "reel", "story", "carousel"]
 }
 ```
 
@@ -222,7 +272,13 @@ Content-Type: application/json
 
 {
   "content": "Your post content here",
-  "account_ids": ["550e8400-e29b-41d4-a716-446655440000"]
+  "account_ids": ["550e8400-e29b-41d4-a716-446655440000"],
+  "post_type": "standard",
+  "post_options": {
+    "instagram": {
+      "aspect_ratio": "1:1"
+    }
+  }
 }
 ```
 
@@ -230,6 +286,17 @@ Content-Type: application/json
 - `content` (required): The text content of the post
 - `account_ids` (required): Array of account IDs to post to
 - `media` (optional): Array of media URLs
+- `post_type` (optional): Type of post (default: "standard"). Supported types vary by platform:
+  - Twitter/X: `standard`, `thread`
+  - Instagram: `feed_post`, `reel`, `story`, `carousel`
+  - Facebook: `feed_post`, `reel`
+  - LinkedIn: `personal_profile`, `company_page`
+  - Threads: `standard`, `thread`
+  - Bluesky: `standard`, `thread`
+  - YouTube: `video`, `short`
+  - Pinterest: `pin`, `video_pin`
+  - TikTok: `video`, `slideshow`
+- `post_options` (optional): Platform-specific options (e.g., `page_id` for Facebook, `company_id` for LinkedIn)
 
 **Legacy parameters (still supported):**
 - `platforms`: Array of platform names
@@ -246,12 +313,14 @@ Content-Type: application/json
     "content": "Your post content here",
     "platforms": ["twitter"],
     "account_ids": ["550e8400-e29b-41d4-a716-446655440000"],
+    "post_type": "standard",
     "status": "published",
     "results": [
       {
         "success": true,
         "platform": "twitter",
         "post_id": "abc123",
+        "post_type": "standard",
         "message": "Post published to twitter"
       }
     ]

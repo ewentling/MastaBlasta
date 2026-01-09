@@ -3,6 +3,7 @@ export interface Platform {
   display_name: string;
   available: boolean;
   supports_oauth?: boolean;
+  supported_post_types?: string[];
 }
 
 export interface Account {
@@ -24,6 +25,8 @@ export interface Post {
   media: string[];
   platforms: string[];
   account_ids?: string[];
+  post_type?: string;
+  post_options?: Record<string, any>;
   status: 'publishing' | 'published' | 'scheduled' | 'failed';
   created_at: string;
   scheduled_for?: string;
@@ -32,6 +35,7 @@ export interface Post {
     success: boolean;
     platform: string;
     post_id?: string;
+    post_type?: string;
     message?: string;
     error?: string;
   }>;
@@ -43,6 +47,8 @@ export interface CreatePostRequest {
   account_ids?: string[];
   platforms?: string[];
   credentials?: Record<string, Record<string, string>>;
+  post_type?: string;
+  post_options?: Record<string, any>;
 }
 
 export interface SchedulePostRequest extends CreatePostRequest {
