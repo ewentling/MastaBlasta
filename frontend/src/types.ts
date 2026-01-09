@@ -2,6 +2,7 @@ export interface Platform {
   name: string;
   display_name: string;
   available: boolean;
+  supports_oauth?: boolean;
 }
 
 export interface Account {
