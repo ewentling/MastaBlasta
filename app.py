@@ -32,6 +32,50 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
+# ==================== Production Infrastructure Integration ====================
+# Load production infrastructure if available
+try:
+    from app_extensions import (
+        db_manager, oauth_manager, media_manager, analytics_collector,
+        webhook_manager, search_manager, bulk_ops_manager, retry_manager,
+        auth_required, role_required, get_current_user, DB_ENABLED
+    )
+    from integrated_routes import integrated_bp
+    PRODUCTION_MODE = True
+    logger.info("✓ Production infrastructure loaded successfully")
+except ImportError as e:
+    PRODUCTION_MODE = False
+    DB_ENABLED = False
+    logger.warning(f"⚠ Running in development mode (in-memory storage): {e}")
+
+# Register integrated routes if production mode is enabled
+if PRODUCTION_MODE:
+    app.register_blueprint(integrated_bp)
+    logger.info("✓ Integrated routes registered at /api/v2/*")
+    logger.info("  - /api/v2/auth/* - Authentication endpoints")
+    logger.info("  - /api/v2/oauth/* - Real OAuth implementations")
+    logger.info("  - /api/v2/media/* - Media upload and management")
+    logger.info("  - /api/v2/posts/* - Database-backed posts")
+    logger.info("  - /api/v2/search/* - Advanced search")
+    logger.info("  - /api/v2/bulk/* - Bulk operations")
+    logger.info("  - /api/v2/webhooks/* - Webhook system")
+    logger.info("  - /api/v2/analytics/* - Real analytics")
+else:
+    logger.info("ℹ Using in-memory storage (development mode)")
+    logger.info("  Set DATABASE_URL to enable production features")
+
+# Helper functions
+def use_database():
+    """Check if database should be used"""
+    return PRODUCTION_MODE and DB_ENABLED
+
+def get_user_from_request():
+    """Get current user from request if authenticated"""
+    if PRODUCTION_MODE:
+        return get_current_user()
+    return None
+# ==================== End Production Integration ====================
+
 # Configure scheduler
 jobstores = {
     'default': MemoryJobStore()
