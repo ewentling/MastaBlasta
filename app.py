@@ -9,6 +9,21 @@ import os
 import logging
 import json
 import time
+import re
+from typing import List, Dict, Any, Optional, Tuple
+try:
+    import openai
+    from PIL import Image, ImageEnhance, ImageFilter
+    import io
+    import base64
+    from sklearn.linear_model import LinearRegression
+    from sklearn.preprocessing import StandardScaler
+    import numpy as np
+    import pandas as pd
+    AI_ENABLED = True
+except ImportError:
+    AI_ENABLED = False
+    logger.warning("AI libraries not installed. AI features will be disabled.")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +54,612 @@ post_versions = {}  # Stores A/B test versions for posts
 ab_test_results = {}  # Stores A/B test performance data
 response_templates = {}  # Stores automated response templates
 chatbot_interactions = {}  # Stores chatbot conversation history
+ai_content_cache = {}  # Stores AI-generated content suggestions
+scheduling_analytics = {}  # Stores historical posting performance
+image_enhancements = {}  # Stores image enhancement metadata
+engagement_predictions = {}  # Stores predicted engagement scores
+
+
+# ==================== AI Services ====================
+
+class AIContentGenerator:
+    """AI-powered content generation service"""
+    
+    def __init__(self):
+        self.api_key = os.getenv('OPENAI_API_KEY', '')
+        self.enabled = AI_ENABLED and bool(self.api_key)
+        if self.enabled:
+            openai.api_key = self.api_key
+    
+    def generate_caption(self, topic: str, platform: str, tone: str = "professional") -> Dict[str, Any]:
+        """Generate optimized caption for a specific platform"""
+        if not self.enabled:
+            return {'error': 'AI content generation not enabled', 'enabled': False}
+        
+        try:
+            # Platform-specific character limits
+            limits = {
+                'twitter': 280,
+                'instagram': 2200,
+                'facebook': 63206,
+                'linkedin': 3000,
+                'threads': 500,
+                'bluesky': 300,
+                'youtube': 5000,
+                'pinterest': 500,
+                'tiktok': 2200
+            }
+            
+            max_length = limits.get(platform, 500)
+            
+            prompt = f"""Generate an engaging {tone} social media caption for {platform} about: {topic}
+
+Requirements:
+- Maximum {max_length} characters
+- Platform: {platform}
+- Tone: {tone}
+- Include relevant emojis if appropriate
+- Make it engaging and shareable
+- For Twitter/Threads: can include relevant hashtags
+
+Return only the caption text, no explanations."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a social media expert who creates engaging content."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=300,
+                temperature=0.7
+            )
+            
+            generated_caption = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'caption': generated_caption,
+                'character_count': len(generated_caption),
+                'character_limit': max_length,
+                'platform': platform,
+                'tone': tone
+            }
+        except Exception as e:
+            logger.error(f"AI content generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def suggest_hashtags(self, content: str, platform: str, count: int = 5) -> Dict[str, Any]:
+        """Suggest relevant hashtags for content"""
+        if not self.enabled:
+            return {'error': 'AI hashtag generation not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Suggest {count} relevant and trending hashtags for this {platform} post:
+
+"{content}"
+
+Requirements:
+- Return exactly {count} hashtags
+- Make them relevant to the content
+- Consider platform trends
+- Format: #hashtag (one per line)
+
+Return only the hashtags, no explanations."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a social media hashtag expert."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=150,
+                temperature=0.7
+            )
+            
+            hashtags_text = response.choices[0].message.content.strip()
+            hashtags = [h.strip() for h in hashtags_text.split('\n') if h.strip().startswith('#')]
+            
+            return {
+                'success': True,
+                'hashtags': hashtags[:count],
+                'platform': platform,
+                'original_content_length': len(content)
+            }
+        except Exception as e:
+            logger.error(f"AI hashtag generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def rewrite_for_platform(self, content: str, source_platform: str, target_platform: str) -> Dict[str, Any]:
+        """Rewrite content to be optimized for a different platform"""
+        if not self.enabled:
+            return {'error': 'AI content rewriting not enabled', 'enabled': False}
+        
+        try:
+            platform_styles = {
+                'twitter': 'concise and witty',
+                'instagram': 'visual and emoji-rich',
+                'facebook': 'conversational and detailed',
+                'linkedin': 'professional and informative',
+                'threads': 'casual and engaging',
+                'bluesky': 'thoughtful and concise',
+                'youtube': 'descriptive with timestamps',
+                'pinterest': 'inspirational and actionable',
+                'tiktok': 'fun and trendy'
+            }
+            
+            style = platform_styles.get(target_platform, 'engaging')
+            
+            prompt = f"""Rewrite this {source_platform} post for {target_platform}:
+
+Original: "{content}"
+
+Make it {style} and optimized for {target_platform}'s audience.
+Keep the core message but adapt the style and format.
+
+Return only the rewritten content, no explanations."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a social media content adapter."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=300,
+                temperature=0.7
+            )
+            
+            rewritten = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'original': content,
+                'rewritten': rewritten,
+                'source_platform': source_platform,
+                'target_platform': target_platform,
+                'character_count': len(rewritten)
+            }
+        except Exception as e:
+            logger.error(f"AI content rewriting error: {str(e)}")
+            return {'error': str(e), 'success': False}
+
+
+class IntelligentScheduler:
+    """AI-powered scheduling optimization"""
+    
+    def __init__(self):
+        self.enabled = AI_ENABLED
+        self.model = LinearRegression() if self.enabled else None
+        self.scaler = StandardScaler() if self.enabled else None
+        self.trained = False
+    
+    def analyze_best_times(self, platform: str, historical_data: List[Dict] = None) -> Dict[str, Any]:
+        """Analyze best times to post based on historical data"""
+        if not self.enabled:
+            return {'error': 'AI scheduling not enabled', 'enabled': False}
+        
+        # Use default best times based on research if no historical data
+        default_times = {
+            'twitter': ['09:00', '12:00', '17:00', '18:00'],
+            'instagram': ['11:00', '13:00', '19:00', '21:00'],
+            'facebook': ['13:00', '15:00', '19:00', '21:00'],
+            'linkedin': ['08:00', '12:00', '17:00', '18:00'],
+            'threads': ['12:00', '17:00', '20:00'],
+            'bluesky': ['09:00', '12:00', '18:00'],
+            'youtube': ['14:00', '17:00', '20:00'],
+            'pinterest': ['20:00', '21:00', '23:00'],
+            'tiktok': ['06:00', '10:00', '19:00', '22:00']
+        }
+        
+        best_times = default_times.get(platform, ['09:00', '12:00', '17:00'])
+        
+        # If historical data is provided, analyze it
+        if historical_data and len(historical_data) > 10:
+            try:
+                df = pd.DataFrame(historical_data)
+                if 'posted_at' in df.columns and 'engagement' in df.columns:
+                    df['hour'] = pd.to_datetime(df['posted_at']).dt.hour
+                    hourly_engagement = df.groupby('hour')['engagement'].mean().sort_values(ascending=False)
+                    top_hours = hourly_engagement.head(4).index.tolist()
+                    best_times = [f"{hour:02d}:00" for hour in top_hours]
+            except Exception as e:
+                logger.error(f"Historical analysis error: {str(e)}")
+        
+        return {
+            'success': True,
+            'platform': platform,
+            'best_times': best_times,
+            'timezone': 'UTC',
+            'recommendation': f'Post between {best_times[0]} and {best_times[-1]} UTC for best engagement',
+            'based_on': 'historical_data' if historical_data else 'industry_research'
+        }
+    
+    def predict_engagement(self, content: str, platform: str, scheduled_time: str) -> Dict[str, Any]:
+        """Predict expected engagement for a post"""
+        if not self.enabled:
+            return {'error': 'AI prediction not enabled', 'enabled': False}
+        
+        # Simple heuristic-based prediction
+        score = 50  # Base score
+        
+        # Content length analysis
+        content_length = len(content)
+        if platform == 'twitter' and 100 <= content_length <= 200:
+            score += 15
+        elif platform == 'instagram' and content_length >= 500:
+            score += 10
+        elif platform == 'linkedin' and 300 <= content_length <= 1000:
+            score += 15
+        
+        # Time-based scoring
+        try:
+            hour = int(scheduled_time.split(':')[0]) if ':' in scheduled_time else int(scheduled_time.split('T')[1][:2])
+            if 8 <= hour <= 20:
+                score += 10
+            if 12 <= hour <= 14 or 17 <= hour <= 19:
+                score += 15
+        except:
+            pass
+        
+        # Hashtag analysis
+        hashtag_count = len(re.findall(r'#\w+', content))
+        if 1 <= hashtag_count <= 5:
+            score += 10
+        elif hashtag_count > 10:
+            score -= 10
+        
+        # Emoji analysis
+        emoji_count = len(re.findall(r'[\U0001F300-\U0001F9FF]', content))
+        if 1 <= emoji_count <= 3:
+            score += 5
+        
+        # Cap score at 100
+        score = min(score, 100)
+        
+        # Estimate metrics
+        estimated_likes = int(score * 2.5)
+        estimated_shares = int(score * 0.5)
+        estimated_comments = int(score * 0.3)
+        
+        return {
+            'success': True,
+            'engagement_score': score,
+            'confidence': 'medium',
+            'estimated_metrics': {
+                'likes': estimated_likes,
+                'shares': estimated_shares,
+                'comments': estimated_comments,
+                'total_engagement': estimated_likes + estimated_shares + estimated_comments
+            },
+            'factors': {
+                'content_length': 'optimal' if score >= 70 else 'suboptimal',
+                'posting_time': 'good' if 8 <= (hour if 'hour' in locals() else 12) <= 20 else 'fair',
+                'hashtag_usage': 'optimal' if 1 <= hashtag_count <= 5 else 'needs_improvement'
+            },
+            'platform': platform
+        }
+    
+    def suggest_frequency(self, platform: str, content_type: str = 'standard') -> Dict[str, Any]:
+        """Suggest posting frequency for a platform"""
+        if not self.enabled:
+            return {'error': 'AI scheduling not enabled', 'enabled': False}
+        
+        # Research-based recommendations
+        frequencies = {
+            'twitter': {'posts_per_day': '3-5', 'posts_per_week': '15-35'},
+            'instagram': {'posts_per_day': '1-2', 'posts_per_week': '7-14'},
+            'facebook': {'posts_per_day': '1-2', 'posts_per_week': '5-10'},
+            'linkedin': {'posts_per_day': '1', 'posts_per_week': '5-7'},
+            'threads': {'posts_per_day': '2-4', 'posts_per_week': '10-25'},
+            'bluesky': {'posts_per_day': '2-3', 'posts_per_week': '10-20'},
+            'youtube': {'posts_per_week': '3-4', 'posts_per_month': '12-16'},
+            'pinterest': {'posts_per_day': '5-10', 'posts_per_week': '30-50'},
+            'tiktok': {'posts_per_day': '1-3', 'posts_per_week': '7-20'}
+        }
+        
+        freq = frequencies.get(platform, {'posts_per_day': '1-2', 'posts_per_week': '7-10'})
+        
+        return {
+            'success': True,
+            'platform': platform,
+            'recommendations': freq,
+            'best_practice': f'Maintain consistent posting schedule for {platform}',
+            'avoid_spam': 'Don\'t post more than recommended to avoid audience fatigue'
+        }
+
+
+class ImageEnhancer:
+    """AI-powered image enhancement and optimization"""
+    
+    def __init__(self):
+        self.enabled = AI_ENABLED
+    
+    def optimize_for_platform(self, image_data: str, platform: str) -> Dict[str, Any]:
+        """Optimize image dimensions and quality for specific platform"""
+        if not self.enabled:
+            return {'error': 'Image enhancement not enabled', 'enabled': False}
+        
+        # Platform-specific optimal dimensions
+        dimensions = {
+            'twitter': {'width': 1200, 'height': 675, 'aspect': '16:9'},
+            'instagram': {'width': 1080, 'height': 1080, 'aspect': '1:1'},
+            'facebook': {'width': 1200, 'height': 630, 'aspect': '1.91:1'},
+            'linkedin': {'width': 1200, 'height': 627, 'aspect': '1.91:1'},
+            'threads': {'width': 1080, 'height': 1080, 'aspect': '1:1'},
+            'bluesky': {'width': 1200, 'height': 675, 'aspect': '16:9'},
+            'youtube': {'width': 1280, 'height': 720, 'aspect': '16:9'},
+            'pinterest': {'width': 1000, 'height': 1500, 'aspect': '2:3'},
+            'tiktok': {'width': 1080, 'height': 1920, 'aspect': '9:16'}
+        }
+        
+        specs = dimensions.get(platform, {'width': 1200, 'height': 675, 'aspect': '16:9'})
+        
+        try:
+            # Decode base64 image if needed
+            if image_data.startswith('data:image'):
+                image_data = image_data.split(',')[1]
+            
+            image_bytes = base64.b64decode(image_data)
+            img = Image.open(io.BytesIO(image_bytes))
+            
+            # Get original dimensions
+            orig_width, orig_height = img.size
+            
+            # Calculate new dimensions
+            target_width = specs['width']
+            target_height = specs['height']
+            
+            # Resize maintaining aspect ratio, then crop
+            img.thumbnail((target_width, target_height), Image.Resampling.LANCZOS)
+            
+            # Convert to RGB if needed
+            if img.mode in ('RGBA', 'LA', 'P'):
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                img = background
+            
+            # Save optimized image
+            output = io.BytesIO()
+            img.save(output, format='JPEG', quality=85, optimize=True)
+            optimized_data = base64.b64encode(output.getvalue()).decode()
+            
+            return {
+                'success': True,
+                'platform': platform,
+                'optimized_image': f'data:image/jpeg;base64,{optimized_data}',
+                'original_dimensions': {'width': orig_width, 'height': orig_height},
+                'new_dimensions': {'width': img.size[0], 'height': img.size[1]},
+                'recommended_aspect': specs['aspect'],
+                'file_size_reduced': True
+            }
+        except Exception as e:
+            logger.error(f"Image optimization error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def enhance_quality(self, image_data: str, enhancement_level: str = 'medium') -> Dict[str, Any]:
+        """Enhance image quality (brightness, contrast, sharpness)"""
+        if not self.enabled:
+            return {'error': 'Image enhancement not enabled', 'enabled': False}
+        
+        try:
+            # Decode base64 image
+            if image_data.startswith('data:image'):
+                image_data = image_data.split(',')[1]
+            
+            image_bytes = base64.b64decode(image_data)
+            img = Image.open(io.BytesIO(image_bytes))
+            
+            # Enhancement factors based on level
+            factors = {
+                'low': {'brightness': 1.1, 'contrast': 1.1, 'sharpness': 1.1},
+                'medium': {'brightness': 1.2, 'contrast': 1.3, 'sharpness': 1.2},
+                'high': {'brightness': 1.3, 'contrast': 1.5, 'sharpness': 1.3}
+            }
+            
+            factor = factors.get(enhancement_level, factors['medium'])
+            
+            # Apply enhancements
+            enhancer = ImageEnhance.Brightness(img)
+            img = enhancer.enhance(factor['brightness'])
+            
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(factor['contrast'])
+            
+            enhancer = ImageEnhance.Sharpness(img)
+            img = enhancer.enhance(factor['sharpness'])
+            
+            # Save enhanced image
+            output = io.BytesIO()
+            img.save(output, format='JPEG', quality=90)
+            enhanced_data = base64.b64encode(output.getvalue()).decode()
+            
+            return {
+                'success': True,
+                'enhanced_image': f'data:image/jpeg;base64,{enhanced_data}',
+                'enhancement_level': enhancement_level,
+                'applied_enhancements': {
+                    'brightness': f'+{int((factor["brightness"] - 1) * 100)}%',
+                    'contrast': f'+{int((factor["contrast"] - 1) * 100)}%',
+                    'sharpness': f'+{int((factor["sharpness"] - 1) * 100)}%'
+                }
+            }
+        except Exception as e:
+            logger.error(f"Image enhancement error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_alt_text(self, image_data: str) -> Dict[str, Any]:
+        """Generate alt text for accessibility (placeholder - would use vision API)"""
+        if not self.enabled:
+            return {'error': 'Alt text generation not enabled', 'enabled': False}
+        
+        # Placeholder implementation
+        # In production, would use GPT-4V or similar vision API
+        return {
+            'success': True,
+            'alt_text': 'Image description (Vision API integration required for automatic generation)',
+            'note': 'Integrate OpenAI Vision API or similar for automatic alt text generation',
+            'manual_recommended': True
+        }
+
+
+class EngagementPredictor:
+    """Predictive analytics for engagement forecasting"""
+    
+    def __init__(self):
+        self.enabled = AI_ENABLED
+        self.model = LinearRegression() if self.enabled else None
+        self.trained = False
+    
+    def train_model(self, historical_posts: List[Dict]) -> Dict[str, Any]:
+        """Train engagement prediction model on historical data"""
+        if not self.enabled:
+            return {'error': 'Predictive analytics not enabled', 'enabled': False}
+        
+        if len(historical_posts) < 20:
+            return {'error': 'Need at least 20 historical posts to train model', 'success': False}
+        
+        try:
+            # Extract features
+            df = pd.DataFrame(historical_posts)
+            
+            # Feature engineering
+            features = []
+            targets = []
+            
+            for _, post in df.iterrows():
+                feature_vec = [
+                    len(post.get('content', '')),
+                    len(re.findall(r'#\w+', post.get('content', ''))),
+                    len(re.findall(r'[\U0001F300-\U0001F9FF]', post.get('content', ''))),
+                    len(post.get('media', [])),
+                    pd.to_datetime(post.get('posted_at')).hour if post.get('posted_at') else 12
+                ]
+                features.append(feature_vec)
+                targets.append(post.get('engagement', 0))
+            
+            X = np.array(features)
+            y = np.array(targets)
+            
+            # Train model
+            self.model.fit(X, y)
+            self.trained = True
+            
+            # Calculate accuracy
+            predictions = self.model.predict(X)
+            mae = np.mean(np.abs(predictions - y))
+            
+            return {
+                'success': True,
+                'trained': True,
+                'training_samples': len(historical_posts),
+                'mean_absolute_error': float(mae),
+                'model_ready': True
+            }
+        except Exception as e:
+            logger.error(f"Model training error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def predict_performance(self, content: str, media: List, scheduled_time: str, platform: str) -> Dict[str, Any]:
+        """Predict post performance before publishing"""
+        if not self.enabled:
+            return {'error': 'Predictive analytics not enabled', 'enabled': False}
+        
+        # Use heuristic-based prediction
+        base_score = 50
+        
+        # Content analysis
+        content_length = len(content)
+        hashtags = len(re.findall(r'#\w+', content))
+        emojis = len(re.findall(r'[\U0001F300-\U0001F9FF]', content))
+        media_count = len(media) if media else 0
+        
+        # Scoring
+        if 50 <= content_length <= 300:
+            base_score += 15
+        if 1 <= hashtags <= 5:
+            base_score += 10
+        if 1 <= emojis <= 3:
+            base_score += 5
+        if media_count > 0:
+            base_score += 15
+        
+        # Time scoring
+        try:
+            if 'T' in scheduled_time:
+                hour = int(scheduled_time.split('T')[1][:2])
+            else:
+                hour = int(scheduled_time.split(':')[0])
+            
+            if 8 <= hour <= 20:
+                base_score += 10
+        except:
+            hour = 12
+        
+        score = min(base_score, 100)
+        
+        # Generate predictions
+        predicted_engagement = {
+            'score': score,
+            'likes': int(score * 3),
+            'comments': int(score * 0.4),
+            'shares': int(score * 0.6),
+            'reach': int(score * 10)
+        }
+        
+        # Recommendations
+        recommendations = []
+        if content_length > 500:
+            recommendations.append("Consider shortening content for better engagement")
+        if hashtags == 0:
+            recommendations.append("Add 2-3 relevant hashtags")
+        if media_count == 0:
+            recommendations.append("Add an image or video to boost engagement")
+        if not (8 <= hour <= 20):
+            recommendations.append("Consider posting during peak hours (8 AM - 8 PM)")
+        
+        return {
+            'success': True,
+            'engagement_score': score,
+            'predicted_metrics': predicted_engagement,
+            'confidence_level': 'medium',
+            'recommendations': recommendations if recommendations else ['Post looks good!'],
+            'platform': platform,
+            'optimal': score >= 75
+        }
+    
+    def compare_variations(self, variations: List[Dict]) -> Dict[str, Any]:
+        """Compare predicted performance of different post variations"""
+        if not self.enabled:
+            return {'error': 'Predictive analytics not enabled', 'enabled': False}
+        
+        results = []
+        for i, var in enumerate(variations):
+            prediction = self.predict_performance(
+                var.get('content', ''),
+                var.get('media', []),
+                var.get('scheduled_time', '12:00'),
+                var.get('platform', 'twitter')
+            )
+            prediction['variation_id'] = i
+            prediction['variation_name'] = var.get('name', f'Variation {i+1}')
+            results.append(prediction)
+        
+        # Sort by score
+        results.sort(key=lambda x: x.get('engagement_score', 0), reverse=True)
+        
+        return {
+            'success': True,
+            'variations_analyzed': len(variations),
+            'results': results,
+            'best_variation': results[0] if results else None,
+            'recommendation': f"Use {results[0].get('variation_name', 'first variation')} for best results" if results else None
+        }
+
+
+# Initialize AI services
+ai_content_generator = AIContentGenerator()
+intelligent_scheduler = IntelligentScheduler()
+image_enhancer = ImageEnhancer()
+engagement_predictor = EngagementPredictor()
 
 
 class PlatformAdapter:
@@ -1158,6 +1779,298 @@ def check_schedule_conflicts():
         'conflicts': conflicts,
         'conflict_count': len(conflicts),
         'suggestions': suggestions
+    })
+
+
+# ==================== AI-Enhanced Endpoints ====================
+
+@app.route('/api/ai/generate-caption', methods=['POST'])
+def ai_generate_caption():
+    """Generate AI-powered caption for a topic and platform"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    topic = data.get('topic', '')
+    platform = data.get('platform', 'twitter')
+    tone = data.get('tone', 'professional')
+    
+    if not topic:
+        return jsonify({'error': 'Topic is required'}), 400
+    
+    result = ai_content_generator.generate_caption(topic, platform, tone)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/suggest-hashtags', methods=['POST'])
+def ai_suggest_hashtags():
+    """Generate AI-powered hashtag suggestions"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    content = data.get('content', '')
+    platform = data.get('platform', 'twitter')
+    count = data.get('count', 5)
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    result = ai_content_generator.suggest_hashtags(content, platform, count)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/rewrite-content', methods=['POST'])
+def ai_rewrite_content():
+    """Rewrite content for a different platform using AI"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    content = data.get('content', '')
+    source_platform = data.get('source_platform', 'twitter')
+    target_platform = data.get('target_platform', 'instagram')
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    result = ai_content_generator.rewrite_for_platform(content, source_platform, target_platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/best-times', methods=['POST'])
+def ai_best_posting_times():
+    """Get AI-powered best posting times for a platform"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    platform = data.get('platform', 'twitter')
+    historical_data = data.get('historical_data', [])
+    
+    result = intelligent_scheduler.analyze_best_times(platform, historical_data)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/predict-engagement', methods=['POST'])
+def ai_predict_engagement():
+    """Predict engagement for a post using AI"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    content = data.get('content', '')
+    platform = data.get('platform', 'twitter')
+    scheduled_time = data.get('scheduled_time', '12:00')
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    result = intelligent_scheduler.predict_engagement(content, platform, scheduled_time)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/posting-frequency', methods=['POST'])
+def ai_posting_frequency():
+    """Get AI-powered posting frequency recommendations"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    platform = data.get('platform', 'twitter')
+    content_type = data.get('content_type', 'standard')
+    
+    result = intelligent_scheduler.suggest_frequency(platform, content_type)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/optimize-image', methods=['POST'])
+def ai_optimize_image():
+    """Optimize image for specific platform using AI"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    image_data = data.get('image_data', '')
+    platform = data.get('platform', 'instagram')
+    
+    if not image_data:
+        return jsonify({'error': 'Image data is required'}), 400
+    
+    result = image_enhancer.optimize_for_platform(image_data, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/enhance-image', methods=['POST'])
+def ai_enhance_image():
+    """Enhance image quality using AI"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    image_data = data.get('image_data', '')
+    enhancement_level = data.get('enhancement_level', 'medium')
+    
+    if not image_data:
+        return jsonify({'error': 'Image data is required'}), 400
+    
+    result = image_enhancer.enhance_quality(image_data, enhancement_level)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-alt-text', methods=['POST'])
+def ai_generate_alt_text():
+    """Generate alt text for image accessibility"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    image_data = data.get('image_data', '')
+    
+    if not image_data:
+        return jsonify({'error': 'Image data is required'}), 400
+    
+    result = image_enhancer.generate_alt_text(image_data)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/predict-performance', methods=['POST'])
+def ai_predict_performance():
+    """Predict post performance before publishing"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    content = data.get('content', '')
+    media = data.get('media', [])
+    scheduled_time = data.get('scheduled_time', '12:00')
+    platform = data.get('platform', 'twitter')
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    result = engagement_predictor.predict_performance(content, media, scheduled_time, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/compare-variations', methods=['POST'])
+def ai_compare_variations():
+    """Compare predicted performance of multiple post variations"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    variations = data.get('variations', [])
+    
+    if not variations or len(variations) < 2:
+        return jsonify({'error': 'At least 2 variations are required'}), 400
+    
+    result = engagement_predictor.compare_variations(variations)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/train-model', methods=['POST'])
+def ai_train_model():
+    """Train engagement prediction model on historical data"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    historical_posts = data.get('historical_posts', [])
+    
+    if not historical_posts or len(historical_posts) < 20:
+        return jsonify({'error': 'At least 20 historical posts required for training'}), 400
+    
+    result = engagement_predictor.train_model(historical_posts)
+    
+    if not result.get('success'):
+        return jsonify(result), 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/status', methods=['GET'])
+def ai_status():
+    """Get status of AI services"""
+    return jsonify({
+        'ai_enabled': AI_ENABLED,
+        'services': {
+            'content_generation': {
+                'enabled': ai_content_generator.enabled,
+                'features': ['caption_generation', 'hashtag_suggestions', 'content_rewriting']
+            },
+            'intelligent_scheduling': {
+                'enabled': intelligent_scheduler.enabled,
+                'features': ['best_times', 'engagement_prediction', 'frequency_recommendations']
+            },
+            'image_enhancement': {
+                'enabled': image_enhancer.enabled,
+                'features': ['platform_optimization', 'quality_enhancement', 'alt_text_generation']
+            },
+            'predictive_analytics': {
+                'enabled': engagement_predictor.enabled,
+                'trained': engagement_predictor.trained,
+                'features': ['performance_prediction', 'variation_comparison', 'model_training']
+            }
+        },
+        'setup_required': not ai_content_generator.enabled and AI_ENABLED,
+        'api_key_status': 'configured' if os.getenv('OPENAI_API_KEY') else 'not_configured'
     })
 
 

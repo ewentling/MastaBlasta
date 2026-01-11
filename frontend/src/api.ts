@@ -132,6 +132,112 @@ export const postsApi = {
   },
 };
 
+export const aiApi = {
+  generateCaption: async (data: {
+    topic: string;
+    platform: string;
+    tone?: string;
+  }): Promise<{ success: boolean; caption: string; character_count: number; platform: string }> => {
+    const response = await api.post('/ai/generate-caption', data);
+    return response.data;
+  },
+
+  suggestHashtags: async (data: {
+    content: string;
+    platform: string;
+    count?: number;
+  }): Promise<{ success: boolean; hashtags: string[]; platform: string }> => {
+    const response = await api.post('/ai/suggest-hashtags', data);
+    return response.data;
+  },
+
+  rewriteContent: async (data: {
+    content: string;
+    source_platform: string;
+    target_platform: string;
+  }): Promise<{ success: boolean; original: string; rewritten: string }> => {
+    const response = await api.post('/ai/rewrite-content', data);
+    return response.data;
+  },
+
+  getBestTimes: async (data: {
+    platform: string;
+    historical_data?: any[];
+  }): Promise<{ success: boolean; platform: string; best_times: string[]; recommendation: string }> => {
+    const response = await api.post('/ai/best-times', data);
+    return response.data;
+  },
+
+  predictEngagement: async (data: {
+    content: string;
+    platform: string;
+    scheduled_time: string;
+  }): Promise<{ success: boolean; engagement_score: number; estimated_metrics: any }> => {
+    const response = await api.post('/ai/predict-engagement', data);
+    return response.data;
+  },
+
+  getPostingFrequency: async (data: {
+    platform: string;
+    content_type?: string;
+  }): Promise<{ success: boolean; platform: string; recommendations: any }> => {
+    const response = await api.post('/ai/posting-frequency', data);
+    return response.data;
+  },
+
+  optimizeImage: async (data: {
+    image_data: string;
+    platform: string;
+  }): Promise<{ success: boolean; optimized_image: string; original_dimensions: any; new_dimensions: any }> => {
+    const response = await api.post('/ai/optimize-image', data);
+    return response.data;
+  },
+
+  enhanceImage: async (data: {
+    image_data: string;
+    enhancement_level?: string;
+  }): Promise<{ success: boolean; enhanced_image: string; applied_enhancements: any }> => {
+    const response = await api.post('/ai/enhance-image', data);
+    return response.data;
+  },
+
+  generateAltText: async (data: {
+    image_data: string;
+  }): Promise<{ success: boolean; alt_text: string }> => {
+    const response = await api.post('/ai/generate-alt-text', data);
+    return response.data;
+  },
+
+  predictPerformance: async (data: {
+    content: string;
+    media: string[];
+    scheduled_time: string;
+    platform: string;
+  }): Promise<{ success: boolean; engagement_score: number; predicted_metrics: any; recommendations: string[] }> => {
+    const response = await api.post('/ai/predict-performance', data);
+    return response.data;
+  },
+
+  compareVariations: async (data: {
+    variations: any[];
+  }): Promise<{ success: boolean; variations_analyzed: number; results: any[]; best_variation: any }> => {
+    const response = await api.post('/ai/compare-variations', data);
+    return response.data;
+  },
+
+  trainModel: async (data: {
+    historical_posts: any[];
+  }): Promise<{ success: boolean; trained: boolean; training_samples: number }> => {
+    const response = await api.post('/ai/train-model', data);
+    return response.data;
+  },
+
+  getStatus: async (): Promise<{ ai_enabled: boolean; services: any; api_key_status: string }> => {
+    const response = await api.get('/ai/status');
+    return response.data;
+  },
+};
+
 export const healthApi = {
   check: async (): Promise<{ status: string; service: string; version: string }> => {
     const response = await api.get('/health');

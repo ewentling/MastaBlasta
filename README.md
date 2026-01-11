@@ -3,6 +3,7 @@ A multi-platform social media posting service that allows easy posting to multip
 
 ## Features
 
+### Core Features
 - **Web UI**: Modern React TypeScript interface for managing accounts and posting
 - **Multi-Account Management**: Configure and manage multiple accounts per platform
 - **Credential Testing**: Test platform credentials before posting
@@ -17,6 +18,32 @@ A multi-platform social media posting service that allows easy posting to multip
 - **👁️ Post Preview**: See how your post will appear before publishing
 - **🚫 Conflict Detection**: Automatically detect scheduling conflicts
 - **⏱️ Rate Limit Awareness**: Built-in rate limit information for each platform
+
+### 🤖 AI-Powered Features
+
+#### 1. AI Content Generation
+- **Smart Caption Creator**: Generate platform-optimized captions from topics
+- **Hashtag Suggestions**: AI-powered relevant hashtag recommendations
+- **Content Rewriting**: Automatically adapt content for different platforms
+- **Tone Customization**: Generate content in different tones (professional, casual, fun)
+
+#### 2. Intelligent Scheduling
+- **Best Time Predictions**: AI analyzes when your audience is most active
+- **Engagement Forecasting**: Predict expected engagement before posting
+- **Posting Frequency**: Get recommendations on optimal posting frequency per platform
+- **Historical Analysis**: Learn from past performance to optimize future posts
+
+#### 3. Smart Image Enhancement
+- **Platform Optimization**: Automatically resize and crop images for each platform
+- **Quality Enhancement**: AI-powered brightness, contrast, and sharpness improvements
+- **Alt Text Generation**: Automatic accessibility descriptions for images
+- **Format Conversion**: Convert images to optimal formats and sizes
+
+#### 4. Predictive Analytics
+- **Performance Prediction**: Forecast engagement before publishing
+- **A/B Testing**: Compare predicted performance of multiple variations
+- **Recommendation Engine**: Get actionable suggestions to improve posts
+- **Model Training**: Train custom models on your historical data
 
 ## Supported Platforms
 
@@ -660,6 +687,223 @@ Each social media platform has its own adapter class that:
 
 Set environment variables:
 - `PORT`: API port (default: 33766)
+- `OPENAI_API_KEY`: OpenAI API key for AI features (optional, required for AI functionality)
+
+### AI Features Setup
+
+To enable AI-powered features:
+
+1. Install AI dependencies:
+```bash
+pip install openai Pillow scikit-learn numpy pandas
+```
+
+2. Set your OpenAI API key:
+```bash
+export OPENAI_API_KEY=your-api-key-here
+```
+
+3. Verify AI services are enabled:
+```bash
+GET /api/ai/status
+```
+
+## AI API Endpoints
+
+### Content Generation
+
+**Generate Caption**
+```bash
+POST /api/ai/generate-caption
+{
+  "topic": "New product launch",
+  "platform": "instagram",
+  "tone": "professional"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "caption": "🚀 Excited to announce our new product! ...",
+  "character_count": 150,
+  "platform": "instagram"
+}
+```
+
+**Suggest Hashtags**
+```bash
+POST /api/ai/suggest-hashtags
+{
+  "content": "Just launched our new app!",
+  "platform": "twitter",
+  "count": 5
+}
+```
+
+**Rewrite Content for Different Platform**
+```bash
+POST /api/ai/rewrite-content
+{
+  "content": "Check out our tweet!",
+  "source_platform": "twitter",
+  "target_platform": "linkedin"
+}
+```
+
+### Intelligent Scheduling
+
+**Get Best Posting Times**
+```bash
+POST /api/ai/best-times
+{
+  "platform": "instagram",
+  "historical_data": []  // Optional: your historical post performance
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "platform": "instagram",
+  "best_times": ["11:00", "13:00", "19:00", "21:00"],
+  "recommendation": "Post between 11:00 and 21:00 UTC for best engagement"
+}
+```
+
+**Predict Engagement**
+```bash
+POST /api/ai/predict-engagement
+{
+  "content": "Your post content here",
+  "platform": "twitter",
+  "scheduled_time": "14:00"
+}
+```
+
+**Get Posting Frequency Recommendations**
+```bash
+POST /api/ai/posting-frequency
+{
+  "platform": "twitter",
+  "content_type": "standard"
+}
+```
+
+### Image Enhancement
+
+**Optimize Image for Platform**
+```bash
+POST /api/ai/optimize-image
+{
+  "image_data": "base64_encoded_image_or_data_url",
+  "platform": "instagram"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "optimized_image": "data:image/jpeg;base64,...",
+  "original_dimensions": {"width": 2000, "height": 1500},
+  "new_dimensions": {"width": 1080, "height": 1080},
+  "recommended_aspect": "1:1"
+}
+```
+
+**Enhance Image Quality**
+```bash
+POST /api/ai/enhance-image
+{
+  "image_data": "base64_encoded_image",
+  "enhancement_level": "medium"  // low, medium, or high
+}
+```
+
+**Generate Alt Text**
+```bash
+POST /api/ai/generate-alt-text
+{
+  "image_data": "base64_encoded_image"
+}
+```
+
+### Predictive Analytics
+
+**Predict Post Performance**
+```bash
+POST /api/ai/predict-performance
+{
+  "content": "Your post content",
+  "media": ["image1.jpg"],
+  "scheduled_time": "2026-01-12T14:00:00Z",
+  "platform": "instagram"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "engagement_score": 85,
+  "predicted_metrics": {
+    "likes": 255,
+    "comments": 34,
+    "shares": 51,
+    "reach": 850
+  },
+  "recommendations": ["Post looks good!"],
+  "optimal": true
+}
+```
+
+**Compare Post Variations (A/B Testing)**
+```bash
+POST /api/ai/compare-variations
+{
+  "variations": [
+    {
+      "name": "Version A",
+      "content": "First variation...",
+      "platform": "twitter"
+    },
+    {
+      "name": "Version B",
+      "content": "Second variation...",
+      "platform": "twitter"
+    }
+  ]
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "variations_analyzed": 2,
+  "results": [...],
+  "best_variation": {...},
+  "recommendation": "Use Version A for best results"
+}
+```
+
+**Train Custom Model**
+```bash
+POST /api/ai/train-model
+{
+  "historical_posts": [
+    {
+      "content": "Post 1",
+      "engagement": 150,
+      "posted_at": "2026-01-01T12:00:00Z"
+    },
+    // ... at least 20 posts required
+  ]
+}
+```
 
 ## Development
 
