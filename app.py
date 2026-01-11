@@ -259,9 +259,59 @@ class TwitterAdapter(PlatformAdapter):
 class FacebookAdapter(PlatformAdapter):
     """Facebook adapter supporting Page posts and Reels (Pages only, not personal profiles or groups)"""
     def __init__(self):
-        super().__init__('facebook', supported_post_types=['feed_post', 'reel'])
+        descriptions = {
+            'feed_post': 'Standard Facebook Page post (text, images, or videos)',
+            'reel': 'Facebook Reel - short-form vertical video (3-90 seconds, 9:16 aspect ratio)'
+        }
+        rate_limits = {
+            'feed_post': {'requests_per_hour': 100, 'requests_per_day': 2000},
+            'reel': {'requests_per_hour': 50, 'requests_per_day': 500}
+        }
+        super().__init__('facebook', 
+                        supported_post_types=['feed_post', 'reel'],
+                        post_type_descriptions=descriptions,
+                        rate_limits=rate_limits)
+    
+    def get_post_type_requirements(self, post_type):
+        """Get requirements for Facebook post types"""
+        if post_type == 'feed_post':
+            return {
+                'target': 'pages_only',
+                'media_optional': True,
+                'max_text_length': 63206
+            }
+        elif post_type == 'reel':
+            return {
+                'target': 'pages_only',
+                'media_required': True,
+                'media_types': ['video'],
+                'min_duration': 3,
+                'max_duration': 90,
+                'aspect_ratio': '9:16',
+                'vertical_only': True
+            }
+        return {}
+    
+    def validate_media_requirements(self, post_type, media):
+        """Validate media requirements for Facebook post types"""
+        if post_type == 'reel':
+            if not media or len(media) == 0:
+                return False, "Facebook Reels require a video"
+            # In a real implementation, would check if media is actually a video
+        return True, None
     
     def format_post(self, content, media=None, post_type='feed_post', **kwargs):
+        # Validate post type and media
+        if not self.validate_post_type(post_type):
+            raise ValueError(
+                f"Unsupported post type '{post_type}' for {self.platform_name}. "
+                f"Supported types: {', '.join(self.supported_post_types)}"
+            )
+        
+        is_valid, error_msg = self.validate_media_requirements(post_type, media)
+        if not is_valid:
+            raise ValueError(error_msg)
+        
         page_id = kwargs.get('page_id')
         
         formatted = {
@@ -280,7 +330,8 @@ class FacebookAdapter(PlatformAdapter):
             formatted['reel_specs'] = {
                 'min_duration': 3,
                 'max_duration': 90,
-                'aspect_ratio': '9:16'
+                'aspect_ratio': '9:16',
+                'vertical_only': True
             }
         
         return formatted

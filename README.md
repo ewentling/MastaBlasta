@@ -373,6 +373,55 @@ Content-Type: application/json
 }
 ```
 
+### Post to Facebook Reels
+Facebook Reels are short-form vertical videos (3-90 seconds) for Facebook Pages only. A video is required.
+
+```bash
+POST /api/post
+Content-Type: application/json
+
+{
+  "content": "Check out this amazing Facebook Reel! 🎥",
+  "account_ids": ["facebook-page-account-id"],
+  "post_type": "reel",
+  "media": ["reel_video.mp4"],
+  "post_options": {
+    "facebook": {
+      "page_id": "your-page-id"
+    }
+  }
+}
+```
+
+**Facebook Reel Requirements:**
+- **Video required**: Must include at least one video file
+- **Duration**: 3-90 seconds
+- **Aspect ratio**: 9:16 (vertical)
+- **Target**: Facebook Pages only (not personal profiles or groups)
+- **Rate limits**: 50 posts/hour, 500 posts/day
+
+**Example Response:**
+```json
+{
+  "success": true,
+  "post_id": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Post is being published",
+  "post": {
+    "post_type": "reel",
+    "platform": "facebook",
+    "results": [
+      {
+        "success": true,
+        "platform": "facebook",
+        "post_id": "fb_reel_123",
+        "post_type": "reel",
+        "message": "Post published to facebook"
+      }
+    ]
+  }
+}
+```
+
 ### Schedule a Post
 ```bash
 POST /api/schedule
