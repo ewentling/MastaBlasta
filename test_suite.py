@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app as flask_app
 from models import Base, User, Account, Post, Media, PostAnalytics
-from database import engine, SessionLocal
+from database import engine, Session
 from auth import hash_password, verify_password, create_access_token, encrypt_token, decrypt_token
 from security_enhancements import (
     PasswordPolicy, AccountSecurity, RateLimiter, WebhookSecurity,
@@ -48,7 +48,7 @@ def db_session():
     # Create tables
     Base.metadata.create_all(bind=engine)
     
-    session = SessionLocal()
+    session = Session()
     yield session
     
     # Cleanup
@@ -619,6 +619,187 @@ class TestAIFeatures:
         for platform, expected_dims in platforms_dims.items():
             result = image_enhancer.get_platform_dimensions(platform)
             assert result == expected_dims
+
+
+# ============================================================================
+# VIDEO GENERATION TESTS
+# ============================================================================
+
+class TestVideoGeneration:
+    """Test AI-powered video generation capabilities"""
+    
+    def test_video_script_generation_endpoint(self, client):
+        """Test video script generation API endpoint"""
+        response = client.post('/api/ai/generate-video-script', json={
+            'topic': 'New product launch',
+            'platform': 'instagram',
+            'duration': 30,
+            'style': 'engaging'
+        })
+        
+        assert response.status_code in [200, 503]  # 503 if AI not enabled
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'script' in data
+            assert 'scenes' in data
+            assert data['platform'] == 'instagram'
+            assert data['duration'] == 30
+    
+    def test_slideshow_creation_endpoint(self, client):
+        """Test slideshow video creation API endpoint"""
+        response = client.post('/api/ai/create-slideshow', json={
+            'images': ['image1.jpg', 'image2.jpg', 'image3.jpg'],
+            'duration_per_image': 3.0,
+            'platform': 'instagram',
+            'post_type': 'reel',
+            'transition': 'fade'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert data['image_count'] == 3
+            assert data['total_duration'] == 9.0
+            assert 'dimensions' in data
+    
+    def test_slideshow_validation(self, client):
+        """Test slideshow validation for platform requirements"""
+        response = client.post('/api/ai/create-slideshow', json={
+            'images': [],  # Empty images
+            'duration_per_image': 3.0,
+            'platform': 'instagram',
+            'post_type': 'reel'
+        })
+        
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'error' in data
+    
+    def test_text_to_video_prompt_generation(self, client):
+        """Test text-to-video prompt generation"""
+        response = client.post('/api/ai/generate-video-prompt', json={
+            'text': 'A beautiful sunset over the ocean',
+            'platform': 'tiktok',
+            'post_type': 'video',
+            'style': 'cinematic'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'video_prompt' in data
+            assert data['platform'] == 'tiktok'
+            assert 'aspect_ratio' in data
+    
+    def test_video_caption_generation(self, client):
+        """Test video caption generation"""
+        response = client.post('/api/ai/generate-video-captions', json={
+            'content': 'Behind the scenes of our product shoot',
+            'platform': 'instagram',
+            'language': 'en'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'caption' in data
+            assert 'hashtags' in data
+    
+    def test_video_optimization_specs(self, client):
+        """Test video optimization specifications"""
+        response = client.post('/api/ai/optimize-video', json={
+            'video_path': 'input.mp4',
+            'platform': 'youtube',
+            'post_type': 'short'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'specifications' in data
+            assert 'optimization_settings' in data
+            assert 'ffmpeg_command' in data
+    
+    def test_platform_video_specs_retrieval(self, client):
+        """Test platform video specifications retrieval"""
+        response = client.get('/api/ai/video-specs/instagram')
+        
+        assert response.status_code in [200, 404]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert data['platform'] == 'instagram'
+            assert 'video_types' in data
+            assert 'specifications' in data
+    
+    def test_video_platform_requirements(self):
+        """Test video platform requirements are correct"""
+        from app import ai_video_generator
+        
+        # Instagram Reel specs
+        ig_specs = ai_video_generator.platform_specs['instagram']['reel']
+        assert ig_specs['aspect_ratio'] == '9:16'
+        assert ig_specs['min_duration'] == 3
+        assert ig_specs['max_duration'] == 90
+        
+        # YouTube Short specs
+        yt_specs = ai_video_generator.platform_specs['youtube']['short']
+        assert yt_specs['aspect_ratio'] == '9:16'
+        assert yt_specs['max_duration'] == 60
+        
+        # TikTok specs
+        tt_specs = ai_video_generator.platform_specs['tiktok']['video']
+        assert tt_specs['aspect_ratio'] == '9:16'
+        assert tt_specs['max_duration'] == 600
+    
+    def test_slideshow_duration_validation(self):
+        """Test slideshow duration validation"""
+        from app import ai_video_generator
+        
+        # Test video too short for Instagram Reel (requires min 3 seconds)
+        result = ai_video_generator.create_slideshow_video(
+            images=['img1.jpg'],
+            duration_per_image=1.0,  # Only 1 second total
+            platform='instagram',
+            post_type='reel'
+        )
+        
+        # If AI is not enabled, it will return error with 'enabled' key
+        # If AI is enabled, it should return error about duration
+        if 'enabled' in result and not result['enabled']:
+            assert 'error' in result
+        else:
+            assert result.get('success') is False
+            assert 'too short' in result['error'].lower()
+    
+    def test_ai_status_includes_video_generation(self, client):
+        """Test that AI status endpoint includes video generation service"""
+        response = client.get('/api/ai/status')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert 'services' in data
+        assert 'video_generation' in data['services']
+        assert 'enabled' in data['services']['video_generation']
+        assert 'features' in data['services']['video_generation']
+        
+        features = data['services']['video_generation']['features']
+        assert 'script_generation' in features
+        assert 'slideshow_creation' in features
+        assert 'text_to_video_prompts' in features
+        assert 'platform_optimization' in features
 
 
 # ============================================================================

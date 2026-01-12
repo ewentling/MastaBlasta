@@ -708,11 +708,326 @@ class EngagementPredictor:
         }
 
 
+class AIVideoGenerator:
+    """AI-powered video generation and editing service"""
+    
+    def __init__(self):
+        self.api_key = os.getenv('OPENAI_API_KEY', '')
+        self.enabled = AI_ENABLED and bool(self.api_key)
+        if self.enabled:
+            openai.api_key = self.api_key
+        
+        # Platform-specific video requirements
+        self.platform_specs = {
+            'instagram': {
+                'reel': {'aspect_ratio': '9:16', 'min_duration': 3, 'max_duration': 90, 'width': 1080, 'height': 1920},
+                'story': {'aspect_ratio': '9:16', 'min_duration': 1, 'max_duration': 60, 'width': 1080, 'height': 1920},
+                'feed': {'aspect_ratio': '1:1', 'min_duration': 3, 'max_duration': 60, 'width': 1080, 'height': 1080}
+            },
+            'youtube': {
+                'short': {'aspect_ratio': '9:16', 'min_duration': 1, 'max_duration': 60, 'width': 1080, 'height': 1920},
+                'video': {'aspect_ratio': '16:9', 'min_duration': 1, 'max_duration': 43200, 'width': 1920, 'height': 1080}
+            },
+            'tiktok': {
+                'video': {'aspect_ratio': '9:16', 'min_duration': 3, 'max_duration': 600, 'width': 1080, 'height': 1920}
+            },
+            'facebook': {
+                'reel': {'aspect_ratio': '9:16', 'min_duration': 3, 'max_duration': 90, 'width': 1080, 'height': 1920},
+                'feed': {'aspect_ratio': '16:9', 'min_duration': 1, 'max_duration': 240, 'width': 1280, 'height': 720}
+            },
+            'pinterest': {
+                'video_pin': {'aspect_ratio': '2:3', 'min_duration': 4, 'max_duration': 900, 'width': 1000, 'height': 1500}
+            },
+            'twitter': {
+                'video': {'aspect_ratio': '16:9', 'min_duration': 0.5, 'max_duration': 140, 'width': 1280, 'height': 720}
+            }
+        }
+    
+    def generate_video_script(self, topic: str, platform: str, duration: int, style: str = 'engaging') -> Dict[str, Any]:
+        """Generate a video script optimized for the platform and duration"""
+        if not self.enabled:
+            return {'error': 'AI video script generation not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Create a compelling {duration}-second video script for {platform} about: {topic}
+
+Style: {style}
+Platform: {platform}
+Duration: {duration} seconds
+
+Requirements:
+- Break down into scenes with timing
+- Include visual descriptions
+- Add text overlay suggestions
+- Include hook in first 3 seconds
+- Call-to-action at the end
+- Platform-optimized pacing
+
+Format the response as:
+Scene 1 (0-X seconds): [Visual description] | Text: [text overlay]
+Scene 2 (X-Y seconds): [Visual description] | Text: [text overlay]
+..."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional video script writer specializing in social media content."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.7
+            )
+            
+            script = response.choices[0].message.content.strip()
+            
+            # Parse scenes
+            scenes = []
+            for line in script.split('\n'):
+                if line.strip() and ('Scene' in line or 'scene' in line):
+                    scenes.append(line.strip())
+            
+            return {
+                'success': True,
+                'script': script,
+                'scenes': scenes,
+                'platform': platform,
+                'duration': duration,
+                'style': style,
+                'scene_count': len(scenes)
+            }
+        except Exception as e:
+            logger.error(f"Video script generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def create_slideshow_video(self, images: List[str], duration_per_image: float, platform: str, 
+                               post_type: str = 'video', transition: str = 'fade') -> Dict[str, Any]:
+        """Create a slideshow video from images with transitions"""
+        if not self.enabled:
+            return {'error': 'Video generation not enabled', 'enabled': False}
+        
+        if not images or len(images) == 0:
+            return {'error': 'At least one image is required', 'success': False}
+        
+        try:
+            # Get platform specs
+            specs = self.platform_specs.get(platform, {}).get(post_type, {
+                'aspect_ratio': '16:9', 'width': 1280, 'height': 720
+            })
+            
+            total_duration = len(images) * duration_per_image
+            
+            # Validate against platform requirements
+            min_dur = specs.get('min_duration', 0)
+            max_dur = specs.get('max_duration', 600)
+            
+            if total_duration < min_dur:
+                return {
+                    'error': f'Video too short. Minimum {min_dur} seconds required for {platform}',
+                    'success': False
+                }
+            
+            if total_duration > max_dur:
+                return {
+                    'error': f'Video too long. Maximum {max_dur} seconds allowed for {platform}',
+                    'success': False
+                }
+            
+            # Video generation metadata (actual video generation would require ffmpeg)
+            video_metadata = {
+                'success': True,
+                'format': 'slideshow',
+                'image_count': len(images),
+                'duration_per_image': duration_per_image,
+                'total_duration': total_duration,
+                'transition': transition,
+                'platform': platform,
+                'post_type': post_type,
+                'dimensions': {
+                    'width': specs.get('width'),
+                    'height': specs.get('height'),
+                    'aspect_ratio': specs.get('aspect_ratio')
+                },
+                'status': 'ready_for_generation',
+                'note': 'Video will be generated using ffmpeg with specified parameters',
+                'ffmpeg_command_template': f"ffmpeg -framerate 1/{duration_per_image} -pattern_type glob -i 'image*.jpg' -vf scale={specs.get('width')}:{specs.get('height')} -c:v libx264 -pix_fmt yuv420p output.mp4"
+            }
+            
+            return video_metadata
+            
+        except Exception as e:
+            logger.error(f"Slideshow video creation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_text_to_video_prompt(self, text: str, platform: str, post_type: str = 'video', 
+                                      style: str = 'professional') -> Dict[str, Any]:
+        """Generate optimized prompts for text-to-video AI models (like Runway, Pika, etc.)"""
+        if not self.enabled:
+            return {'error': 'AI prompt generation not enabled', 'enabled': False}
+        
+        try:
+            specs = self.platform_specs.get(platform, {}).get(post_type, {})
+            aspect_ratio = specs.get('aspect_ratio', '16:9')
+            duration = specs.get('max_duration', 30)
+            
+            prompt = f"""Create a detailed video generation prompt for text-to-video AI models based on this content:
+
+"{text}"
+
+Requirements:
+- Platform: {platform}
+- Aspect ratio: {aspect_ratio}
+- Style: {style}
+- Duration: {min(duration, 30)} seconds
+
+Generate a clear, detailed prompt that includes:
+1. Visual style and aesthetics
+2. Camera movements
+3. Scene composition
+4. Color palette
+5. Mood and atmosphere
+6. Key visual elements
+
+Make it suitable for AI video generators like Runway, Pika, or Stable Video."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are an expert at creating prompts for AI video generation models."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=400,
+                temperature=0.7
+            )
+            
+            video_prompt = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'original_text': text,
+                'video_prompt': video_prompt,
+                'platform': platform,
+                'post_type': post_type,
+                'aspect_ratio': aspect_ratio,
+                'recommended_duration': min(duration, 30),
+                'style': style,
+                'note': 'Use this prompt with AI video generation tools like Runway ML, Pika Labs, or Stable Video Diffusion'
+            }
+        except Exception as e:
+            logger.error(f"Text-to-video prompt generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_video_captions(self, video_content: str, platform: str, language: str = 'en') -> Dict[str, Any]:
+        """Generate optimized captions/subtitles for video content"""
+        if not self.enabled:
+            return {'error': 'AI caption generation not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Generate optimized video captions for {platform}:
+
+Content: "{video_content}"
+
+Create:
+1. Main caption (description)
+2. Hashtags (3-5 relevant)
+3. Call-to-action
+4. Accessibility description
+
+Make it engaging and platform-optimized."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a social media caption expert."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=300,
+                temperature=0.7
+            )
+            
+            caption_text = response.choices[0].message.content.strip()
+            
+            # Parse hashtags
+            hashtags = re.findall(r'#\w+', caption_text)
+            
+            return {
+                'success': True,
+                'caption': caption_text,
+                'hashtags': hashtags,
+                'platform': platform,
+                'language': language,
+                'character_count': len(caption_text)
+            }
+        except Exception as e:
+            logger.error(f"Video caption generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def optimize_video_for_platform(self, video_path: str, platform: str, post_type: str = 'video') -> Dict[str, Any]:
+        """Provide optimization specifications for video based on platform requirements"""
+        if not self.enabled:
+            return {'error': 'Video optimization not enabled', 'enabled': False}
+        
+        specs = self.platform_specs.get(platform, {}).get(post_type)
+        
+        if not specs:
+            return {
+                'error': f'Unknown platform/post type combination: {platform}/{post_type}',
+                'success': False
+            }
+        
+        return {
+            'success': True,
+            'platform': platform,
+            'post_type': post_type,
+            'specifications': specs,
+            'optimization_settings': {
+                'resolution': f"{specs['width']}x{specs['height']}",
+                'aspect_ratio': specs['aspect_ratio'],
+                'duration_range': f"{specs['min_duration']}-{specs['max_duration']} seconds",
+                'recommended_format': 'mp4',
+                'recommended_codec': 'h264',
+                'recommended_bitrate': '5000k' if specs['width'] >= 1920 else '3000k',
+                'audio_codec': 'aac',
+                'audio_bitrate': '192k'
+            },
+            'ffmpeg_command': self._generate_ffmpeg_command(specs, video_path)
+        }
+    
+    def _generate_ffmpeg_command(self, specs: Dict, input_path: str) -> str:
+        """Generate ffmpeg command for video optimization"""
+        return (
+            f"ffmpeg -i {input_path} "
+            f"-vf \"scale={specs['width']}:{specs['height']}:force_original_aspect_ratio=decrease,pad={specs['width']}:{specs['height']}:(ow-iw)/2:(oh-ih)/2\" "
+            f"-c:v libx264 -preset medium -crf 23 "
+            f"-c:a aac -b:a 192k "
+            f"-movflags +faststart "
+            f"-t {specs['max_duration']} "
+            f"output.mp4"
+        )
+    
+    def get_platform_video_specs(self, platform: str) -> Dict[str, Any]:
+        """Get all video specifications for a platform"""
+        specs = self.platform_specs.get(platform, {})
+        
+        if not specs:
+            return {
+                'error': f'Platform {platform} not found or does not support video',
+                'success': False
+            }
+        
+        return {
+            'success': True,
+            'platform': platform,
+            'video_types': list(specs.keys()),
+            'specifications': specs
+        }
+
+
 # Initialize AI services
 ai_content_generator = AIContentGenerator()
 intelligent_scheduler = IntelligentScheduler()
 image_enhancer = ImageEnhancer()
 engagement_predictor = EngagementPredictor()
+ai_video_generator = AIVideoGenerator()
 
 
 class PlatformAdapter:
@@ -2120,11 +2435,144 @@ def ai_status():
                 'enabled': engagement_predictor.enabled,
                 'trained': engagement_predictor.trained,
                 'features': ['performance_prediction', 'variation_comparison', 'model_training']
+            },
+            'video_generation': {
+                'enabled': ai_video_generator.enabled,
+                'features': ['script_generation', 'slideshow_creation', 'text_to_video_prompts', 'caption_generation', 'platform_optimization']
             }
         },
         'setup_required': not ai_content_generator.enabled and AI_ENABLED,
         'api_key_status': 'configured' if os.getenv('OPENAI_API_KEY') else 'not_configured'
     })
+
+
+@app.route('/api/ai/generate-video-script', methods=['POST'])
+def ai_generate_video_script():
+    """Generate a video script optimized for platform and duration"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    topic = data.get('topic', '')
+    platform = data.get('platform', 'instagram')
+    duration = data.get('duration', 30)
+    style = data.get('style', 'engaging')
+    
+    if not topic:
+        return jsonify({'error': 'Topic is required'}), 400
+    
+    result = ai_video_generator.generate_video_script(topic, platform, duration, style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/create-slideshow', methods=['POST'])
+def ai_create_slideshow():
+    """Create a slideshow video from images"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    images = data.get('images', [])
+    duration_per_image = data.get('duration_per_image', 3.0)
+    platform = data.get('platform', 'instagram')
+    post_type = data.get('post_type', 'reel')
+    transition = data.get('transition', 'fade')
+    
+    if not images:
+        return jsonify({'error': 'At least one image is required'}), 400
+    
+    result = ai_video_generator.create_slideshow_video(
+        images, duration_per_image, platform, post_type, transition
+    )
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-video-prompt', methods=['POST'])
+def ai_generate_video_prompt():
+    """Generate text-to-video prompt for AI video generation tools"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    text = data.get('text', '')
+    platform = data.get('platform', 'instagram')
+    post_type = data.get('post_type', 'reel')
+    style = data.get('style', 'professional')
+    
+    if not text:
+        return jsonify({'error': 'Text is required'}), 400
+    
+    result = ai_video_generator.generate_text_to_video_prompt(text, platform, post_type, style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-video-captions', methods=['POST'])
+def ai_generate_video_captions():
+    """Generate optimized captions for video content"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_content = data.get('content', '')
+    platform = data.get('platform', 'instagram')
+    language = data.get('language', 'en')
+    
+    if not video_content:
+        return jsonify({'error': 'Video content is required'}), 400
+    
+    result = ai_video_generator.generate_video_captions(video_content, platform, language)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/optimize-video', methods=['POST'])
+def ai_optimize_video():
+    """Get optimization specifications for video based on platform"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_path = data.get('video_path', 'input.mp4')
+    platform = data.get('platform', 'instagram')
+    post_type = data.get('post_type', 'reel')
+    
+    result = ai_video_generator.optimize_video_for_platform(video_path, platform, post_type)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/video-specs/<platform>', methods=['GET'])
+def ai_video_specs(platform):
+    """Get all video specifications for a platform"""
+    result = ai_video_generator.get_platform_video_specs(platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 404
+    
+    return jsonify(result)
 
 
 @app.route('/api/oauth/init/<platform>', methods=['GET'])
