@@ -339,7 +339,7 @@ export const mediaApi = {
     const formData = new FormData();
     formData.append('file', file);
     
-    const response = await axios.post('/api/v2/media/upload', formData, {
+    const response = await api.post('/v2/media/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },

@@ -5,6 +5,7 @@ import { Send, Check, X, Sparkles, Hash, Clock, Upload, Trash2, Image as ImageIc
 import { useNavigate } from 'react-router-dom';
 import { useAI } from '../contexts/AIContext';
 import { PlatformPreviews } from '../components/PlatformPreviews';
+import type { CreatePostRequest, SchedulePostRequest } from '../types';
 
 export default function PostPage() {
   const navigate = useNavigate();
@@ -32,7 +33,12 @@ export default function PostPage() {
   });
 
   const postMutation = useMutation({
-    mutationFn: isScheduled ? postsApi.schedule : postsApi.create,
+    mutationFn: async (data: any) => {
+      if (isScheduled) {
+        return postsApi.schedule(data);
+      }
+      return postsApi.create(data);
+    },
     onSuccess: () => {
       const message = isScheduled ? 'Post scheduled successfully!' : 'Post published successfully!';
       setResult({ success: true, message });
@@ -79,10 +85,14 @@ export default function PostPage() {
     
     // Include uploaded media URLs
     const mediaUrls = uploadedMedia.map(m => m.url);
-    const postData: any = { content, account_ids: selectedAccounts, media: mediaUrls };
+    const postData: CreatePostRequest | SchedulePostRequest = {
+      content,
+      account_ids: selectedAccounts,
+      media: mediaUrls
+    };
     
     if (isScheduled) {
-      postData.scheduled_time = new Date(scheduledTime).toISOString();
+      (postData as SchedulePostRequest).scheduled_time = new Date(scheduledTime).toISOString();
     }
     
     postMutation.mutate(postData);
@@ -136,6 +146,11 @@ export default function PostPage() {
   };
 
   const handleRemoveMedia = (index: number) => {
+    // Revoke object URL to prevent memory leaks
+    if (mediaFiles[index]) {
+      const objectUrl = URL.createObjectURL(mediaFiles[index]);
+      URL.revokeObjectURL(objectUrl);
+    }
     setMediaFiles(prev => prev.filter((_, i) => i !== index));
     setUploadedMedia(prev => prev.filter((_, i) => i !== index));
   };
@@ -480,7 +495,11 @@ export default function PostPage() {
                 const dataTransfer = new DataTransfer();
                 files.forEach(file => dataTransfer.items.add(file));
                 input.files = dataTransfer.files;
-                handleFileSelect({ target: input } as any);
+                const changeEvent: React.ChangeEvent<HTMLInputElement> = {
+                  target: input,
+                  currentTarget: input,
+                } as React.ChangeEvent<HTMLInputElement>;
+                handleFileSelect(changeEvent);
               }
             }}
             >
