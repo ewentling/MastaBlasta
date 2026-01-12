@@ -959,6 +959,348 @@ class EngagementPredictor:
         }
 
 
+class ViralContentIntelligence:
+    """Viral content intelligence engine for trending topics and content analysis"""
+    
+    def __init__(self):
+        self.api_key = os.getenv('OPENAI_API_KEY', '')
+        self.enabled = AI_ENABLED and bool(self.api_key)
+        if self.enabled:
+            openai.api_key = self.api_key
+        
+        # Viral hooks library
+        self.VIRAL_HOOKS = {
+            'curiosity': [
+                "You won't believe what happened when...",
+                "The secret nobody tells you about...",
+                "What they don't want you to know about...",
+                "I discovered something shocking about...",
+                "This changes everything about..."
+            ],
+            'urgency': [
+                "Stop doing this immediately if you...",
+                "You have 24 hours to...",
+                "Last chance to...",
+                "Don't miss out on...",
+                "Time is running out for..."
+            ],
+            'controversy': [
+                "Unpopular opinion:",
+                "Hot take:",
+                "Let's talk about the elephant in the room:",
+                "Nobody wants to admit this, but...",
+                "I'm going to say what everyone's thinking:"
+            ],
+            'storytelling': [
+                "Here's what happened when I...",
+                "Let me tell you a story about...",
+                "It all started when...",
+                "I'll never forget the day...",
+                "This is how I went from X to Y:"
+            ],
+            'value': [
+                "Here's exactly how to...",
+                "The complete guide to...",
+                "5 steps to...",
+                "Everything you need to know about...",
+                "Master this in 10 minutes:"
+            ]
+        }
+        
+        # Platform-specific viral patterns
+        self.VIRAL_PATTERNS = {
+            'twitter': {
+                'thread_starter': 'A thread 🧵',
+                'optimal_length': '100-280 characters',
+                'best_time': 'Morning (8-10 AM)',
+                'engagement_triggers': ['questions', 'threads', 'controversial takes']
+            },
+            'instagram': {
+                'caption_style': 'Story-driven with line breaks',
+                'optimal_hashtags': '10-15',
+                'best_time': 'Lunch (11 AM-1 PM) or Evening (7-9 PM)',
+                'engagement_triggers': ['carousels', 'reels', 'behind-the-scenes']
+            },
+            'tiktok': {
+                'hook_duration': 'First 3 seconds',
+                'optimal_length': '15-30 seconds',
+                'best_time': 'Evening (6-10 PM)',
+                'engagement_triggers': ['trending sounds', 'duets', 'challenges']
+            },
+            'linkedin': {
+                'post_style': 'Professional storytelling',
+                'optimal_length': '1,300-1,500 characters',
+                'best_time': 'Business hours (9 AM-5 PM)',
+                'engagement_triggers': ['personal stories', 'industry insights', 'data-driven']
+            }
+        }
+    
+    def get_viral_hooks(self, category: str = None, count: int = 5) -> Dict[str, Any]:
+        """Get viral hooks from library"""
+        if category and category not in self.VIRAL_HOOKS:
+            return {
+                'error': f'Category {category} not found',
+                'success': False,
+                'available_categories': list(self.VIRAL_HOOKS.keys())
+            }
+        
+        if category:
+            hooks = self.VIRAL_HOOKS[category][:count]
+            return {
+                'success': True,
+                'category': category,
+                'hooks': hooks,
+                'count': len(hooks)
+            }
+        
+        # Return all categories
+        all_hooks = {}
+        for cat, hooks_list in self.VIRAL_HOOKS.items():
+            all_hooks[cat] = hooks_list[:count]
+        
+        return {
+            'success': True,
+            'hooks_by_category': all_hooks,
+            'total_categories': len(all_hooks)
+        }
+    
+    def predict_virality_score(self, content: str, platform: str) -> Dict[str, Any]:
+        """Predict viral potential of content (0-100 score)"""
+        score = 50  # Base score
+        factors = []
+        
+        # Length analysis
+        content_length = len(content)
+        optimal_ranges = {
+            'twitter': (100, 280),
+            'instagram': (500, 2200),
+            'tiktok': (50, 300),
+            'linkedin': (1300, 1500),
+            'facebook': (100, 250)
+        }
+        
+        optimal = optimal_ranges.get(platform, (100, 500))
+        if optimal[0] <= content_length <= optimal[1]:
+            score += 15
+            factors.append("Optimal length")
+        elif content_length < optimal[0]:
+            score -= 10
+            factors.append("Too short")
+        else:
+            score -= 5
+            factors.append("Too long")
+        
+        # Hook analysis
+        first_line = content.split('\n')[0] if '\n' in content else content[:100]
+        for category, hooks in self.VIRAL_HOOKS.items():
+            if any(hook.lower()[:20] in first_line.lower() for hook in hooks):
+                score += 20
+                factors.append(f"Strong {category} hook")
+                break
+        
+        # Emoji analysis
+        emoji_count = len(re.findall(r'[\U0001F300-\U0001F9FF]', content))
+        if 2 <= emoji_count <= 5:
+            score += 10
+            factors.append("Good emoji usage")
+        elif emoji_count > 10:
+            score -= 5
+            factors.append("Too many emojis")
+        
+        # Question marks (engagement trigger)
+        if '?' in content:
+            score += 10
+            factors.append("Includes question (engagement)")
+        
+        # Hashtags
+        hashtag_count = len(re.findall(r'#[a-zA-Z0-9_]+', content))
+        if platform == 'instagram' and 10 <= hashtag_count <= 15:
+            score += 10
+            factors.append("Optimal hashtags")
+        elif platform in ['twitter', 'linkedin'] and 1 <= hashtag_count <= 3:
+            score += 10
+            factors.append("Good hashtag usage")
+        
+        # Cap score
+        score = max(0, min(100, score))
+        
+        # Determine rating
+        if score >= 80:
+            rating = "Highly Viral Potential"
+        elif score >= 60:
+            rating = "Good Viral Potential"
+        elif score >= 40:
+            rating = "Moderate Potential"
+        else:
+            rating = "Low Viral Potential"
+        
+        return {
+            'success': True,
+            'virality_score': score,
+            'rating': rating,
+            'platform': platform,
+            'factors': factors,
+            'recommendations': self._get_viral_recommendations(score, platform, content)
+        }
+    
+    def _get_viral_recommendations(self, score: int, platform: str, content: str) -> List[str]:
+        """Get recommendations to improve virality"""
+        recommendations = []
+        
+        if score < 60:
+            recommendations.append("Add a stronger hook in the first line")
+        
+        if '?' not in content:
+            recommendations.append("Include a question to boost engagement")
+        
+        emoji_count = len(re.findall(r'[\U0001F300-\U0001F9FF]', content))
+        if emoji_count == 0:
+            recommendations.append("Add 2-3 relevant emojis")
+        
+        if platform == 'instagram' and len(re.findall(r'#[a-zA-Z0-9_]+', content)) < 10:
+            recommendations.append("Add more hashtags (10-15 optimal for Instagram)")
+        
+        if len(content) < 100:
+            recommendations.append("Expand your content for better context")
+        
+        return recommendations if recommendations else ["Content looks great!"]
+    
+    def get_platform_best_practices(self, platform: str) -> Dict[str, Any]:
+        """Get viral best practices for a platform"""
+        if platform not in self.VIRAL_PATTERNS:
+            return {
+                'error': f'Platform {platform} not found',
+                'success': False,
+                'available_platforms': list(self.VIRAL_PATTERNS.keys())
+            }
+        
+        return {
+            'success': True,
+            'platform': platform,
+            'best_practices': self.VIRAL_PATTERNS[platform]
+        }
+
+
+class ContentMultiplier:
+    """Transform one piece of content into multiple platform-specific formats"""
+    
+    def __init__(self):
+        self.api_key = os.getenv('OPENAI_API_KEY', '')
+        self.enabled = AI_ENABLED and bool(self.api_key)
+        if self.enabled:
+            openai.api_key = self.api_key
+    
+    def multiply_content(self, source_content: str, source_type: str, target_platforms: List[str], 
+                        brand_voice: str = 'professional') -> Dict[str, Any]:
+        """Convert one piece of content into multiple platform-specific posts"""
+        if not self.enabled:
+            return {'error': 'Content multiplier not enabled', 'enabled': False}
+        
+        try:
+            outputs = {}
+            
+            for platform in target_platforms:
+                # Generate platform-specific content
+                prompt = f"""Transform this {source_type} into an engaging {platform} post:
+
+Source content: "{source_content}"
+
+Requirements:
+- Platform: {platform}
+- Brand voice: {brand_voice}
+- Optimize for {platform}'s audience and format
+- Maintain key messages
+- Include relevant emojis and hashtags for {platform}
+- Make it native to the platform
+
+Return only the {platform} post, no explanations."""
+
+                response = openai.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": f"You are a social media expert specializing in {platform} content."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=500,
+                    temperature=0.7
+                )
+                
+                platform_content = response.choices[0].message.content.strip()
+                
+                outputs[platform] = {
+                    'content': platform_content,
+                    'character_count': len(platform_content),
+                    'hashtags': re.findall(r'#[a-zA-Z0-9_]+', platform_content),
+                    'platform': platform
+                }
+            
+            return {
+                'success': True,
+                'source_type': source_type,
+                'outputs': outputs,
+                'platforms_generated': len(outputs),
+                'brand_voice': brand_voice
+            }
+        
+        except Exception as e:
+            logger.error(f"Content multiplication error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_content_variations(self, content: str, num_variations: int = 3, 
+                                   platform: str = 'twitter') -> Dict[str, Any]:
+        """Generate multiple variations of the same content for A/B testing"""
+        if not self.enabled:
+            return {'error': 'Content multiplier not enabled', 'enabled': False}
+        
+        try:
+            variations = []
+            
+            for i in range(num_variations):
+                prompt = f"""Create variation #{i+1} of this {platform} post with a different angle:
+
+Original: "{content}"
+
+Requirements:
+- Keep the core message
+- Use a different hook or approach
+- Maintain platform style
+- Make it equally engaging
+- Add relevant emojis
+
+Return only the variation, no explanations."""
+
+                response = openai.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a social media copywriter."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=300,
+                    temperature=0.8
+                )
+                
+                variation = response.choices[0].message.content.strip()
+                
+                variations.append({
+                    'variation_number': i + 1,
+                    'content': variation,
+                    'character_count': len(variation),
+                    'hashtags': re.findall(r'#[a-zA-Z0-9_]+', variation)
+                })
+            
+            return {
+                'success': True,
+                'original': content,
+                'variations': variations,
+                'count': len(variations),
+                'platform': platform
+            }
+        
+        except Exception as e:
+            logger.error(f"Variation generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+
+
 class AIVideoGenerator:
     """AI-powered video generation and editing service"""
     
@@ -1508,6 +1850,8 @@ intelligent_scheduler = IntelligentScheduler()
 image_enhancer = ImageEnhancer()
 ai_image_generator = AIImageGenerator()
 engagement_predictor = EngagementPredictor()
+viral_intelligence = ViralContentIntelligence()
+content_multiplier = ContentMultiplier()
 ai_video_generator = AIVideoGenerator()
 
 
@@ -2922,6 +3266,15 @@ def ai_status():
                 'trained': engagement_predictor.trained,
                 'features': ['performance_prediction', 'variation_comparison', 'model_training']
             },
+            'viral_intelligence': {
+                'enabled': viral_intelligence.enabled,
+                'features': ['viral_hooks', 'virality_score', 'platform_best_practices', 'trending_analysis'],
+                'hook_categories': list(viral_intelligence.VIRAL_HOOKS.keys())
+            },
+            'content_multiplier': {
+                'enabled': content_multiplier.enabled,
+                'features': ['multi_platform_generation', 'content_variations', 'brand_voice_adaptation']
+            },
             'video_generation': {
                 'enabled': ai_video_generator.enabled,
                 'features': ['script_generation', 'slideshow_creation', 'text_to_video_prompts', 'caption_generation', 'platform_optimization', 'template_library', 'ffmpeg_rendering'],
@@ -2931,6 +3284,97 @@ def ai_status():
         'setup_required': not ai_content_generator.enabled and AI_ENABLED,
         'api_key_status': 'configured' if os.getenv('OPENAI_API_KEY') else 'not_configured'
     })
+
+
+@app.route('/api/viral/hooks', methods=['GET'])
+def viral_get_hooks():
+    """Get viral hooks library"""
+    category = request.args.get('category')
+    count = int(request.args.get('count', 5))
+    
+    result = viral_intelligence.get_viral_hooks(category, count)
+    
+    if not result.get('success'):
+        return jsonify(result), 404
+    
+    return jsonify(result)
+
+
+@app.route('/api/viral/predict-score', methods=['POST'])
+def viral_predict_score():
+    """Predict virality score for content"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    content = data.get('content', '')
+    platform = data.get('platform', 'instagram')
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    result = viral_intelligence.predict_virality_score(content, platform)
+    
+    return jsonify(result)
+
+
+@app.route('/api/viral/best-practices/<platform>', methods=['GET'])
+def viral_best_practices(platform):
+    """Get platform-specific viral best practices"""
+    result = viral_intelligence.get_platform_best_practices(platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 404
+    
+    return jsonify(result)
+
+
+@app.route('/api/content/multiply', methods=['POST'])
+def content_multiply():
+    """Multiply content across platforms"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    source_content = data.get('source_content', '')
+    source_type = data.get('source_type', 'text')
+    target_platforms = data.get('target_platforms', ['twitter', 'linkedin', 'instagram'])
+    brand_voice = data.get('brand_voice', 'professional')
+    
+    if not source_content:
+        return jsonify({'error': 'Source content is required'}), 400
+    
+    result = content_multiplier.multiply_content(source_content, source_type, target_platforms, brand_voice)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/content/variations', methods=['POST'])
+def content_variations():
+    """Generate content variations for A/B testing"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    content = data.get('content', '')
+    num_variations = data.get('num_variations', 3)
+    platform = data.get('platform', 'twitter')
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    result = content_multiplier.generate_content_variations(content, num_variations, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
 
 
 @app.route('/api/ai/generate-image', methods=['POST'])

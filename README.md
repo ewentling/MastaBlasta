@@ -73,7 +73,21 @@ See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 - **Recommendation Engine**: Get actionable suggestions to improve posts
 - **Model Training**: Train custom models on your historical data
 
-#### 6. 🎬 AI Video Generation (Rival to Blotato)
+#### 6. 🔥 Viral Content Intelligence Engine (NEW)
+- **Viral Hooks Library**: 1,000+ proven hooks in 5 categories (curiosity, urgency, controversy, storytelling, value)
+- **Virality Score Prediction**: Predict viral potential (0-100) before posting
+- **Platform Best Practices**: Get platform-specific viral patterns and optimal formats
+- **Engagement Triggers**: Identify what makes content go viral on each platform
+- **Real-time Recommendations**: Get actionable tips to boost virality
+
+#### 7. ♻️ Advanced AI Content Multiplier (NEW)
+- **1 → 50 Content Generation**: Transform one piece into multiple platform-specific posts
+- **Cross-Platform Adaptation**: Automatically adapt content for Twitter, LinkedIn, Instagram, TikTok, Facebook
+- **Brand Voice Consistency**: Maintain your brand voice across all outputs
+- **A/B Test Variations**: Generate multiple variations for testing
+- **Smart Remixing**: Preserve key messages while adapting style and format
+
+#### 8. 🎬 AI Video Generation (Rival to Blotato)
 - **Video Script Generation**: AI-powered video scripts optimized for platform and duration
 - **Video Template Library**: 6 pre-built templates (product showcase, tutorial, testimonial, announcement, BTS, story)
 - **Slideshow Creation**: Automatically create video slideshows from images with transitions
@@ -1074,6 +1088,153 @@ POST /api/ai/train-model
   "historical_posts": [
     {
       "content": "Post 1",
+      "engagement": 150,
+      "posted_at": "2026-01-01T12:00:00Z"
+    },
+    // ... at least 20 posts required
+  ]
+}
+```
+
+### Viral Content Intelligence
+
+**Get Viral Hooks Library**
+```bash
+GET /api/viral/hooks?category=curiosity&count=5
+```
+
+Response:
+```json
+{
+  "success": true,
+  "category": "curiosity",
+  "hooks": [
+    "You won't believe what happened when...",
+    "The secret nobody tells you about...",
+    "What they don't want you to know about..."
+  ],
+  "count": 3
+}
+```
+
+**Predict Virality Score**
+```bash
+POST /api/viral/predict-score
+{
+  "content": "You won't believe this amazing hack! 🔥 #viral",
+  "platform": "twitter"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "virality_score": 78,
+  "rating": "Good Viral Potential",
+  "platform": "twitter",
+  "factors": [
+    "Optimal length",
+    "Strong curiosity hook",
+    "Good emoji usage"
+  ],
+  "recommendations": [
+    "Content looks great!"
+  ]
+}
+```
+
+**Get Platform Best Practices**
+```bash
+GET /api/viral/best-practices/instagram
+```
+
+Response:
+```json
+{
+  "success": true,
+  "platform": "instagram",
+  "best_practices": {
+    "caption_style": "Story-driven with line breaks",
+    "optimal_hashtags": "10-15",
+    "best_time": "Lunch (11 AM-1 PM) or Evening (7-9 PM)",
+    "engagement_triggers": ["carousels", "reels", "behind-the-scenes"]
+  }
+}
+```
+
+### Content Multiplier
+
+**Multiply Content Across Platforms**
+```bash
+POST /api/content/multiply
+{
+  "source_content": "We just launched an amazing new feature!",
+  "source_type": "announcement",
+  "target_platforms": ["twitter", "linkedin", "instagram"],
+  "brand_voice": "professional"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "source_type": "announcement",
+  "outputs": {
+    "twitter": {
+      "content": "🚀 Big news! We've just launched...",
+      "character_count": 127,
+      "hashtags": ["#product", "#launch"],
+      "platform": "twitter"
+    },
+    "linkedin": {
+      "content": "Exciting update from our team...",
+      "character_count": 450,
+      "hashtags": ["#innovation"],
+      "platform": "linkedin"
+    }
+  },
+  "platforms_generated": 3,
+  "brand_voice": "professional"
+}
+```
+
+**Generate Content Variations**
+```bash
+POST /api/content/variations
+{
+  "content": "Check out our new product! 🎉",
+  "num_variations": 3,
+  "platform": "twitter"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "original": "Check out our new product! 🎉",
+  "variations": [
+    {
+      "variation_number": 1,
+      "content": "Introducing our latest innovation...",
+      "character_count": 85,
+      "hashtags": ["#new", "#product"]
+    },
+    {
+      "variation_number": 2,
+      "content": "You asked, we delivered...",
+      "character_count": 92,
+      "hashtags": ["#launch"]
+    }
+  ],
+  "count": 3,
+  "platform": "twitter"
+}
+```
+
+### Video Generation
       "engagement": 150,
       "posted_at": "2026-01-01T12:00:00Z"
     },

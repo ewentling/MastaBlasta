@@ -1022,6 +1022,146 @@ class TestPerformance:
 
 
 # ============================================================================
+# VIRAL INTELLIGENCE TESTS
+# ============================================================================
+
+class TestViralIntelligence:
+    """Test viral content intelligence features"""
+    
+    def test_get_viral_hooks(self, client):
+        """Test getting viral hooks"""
+        response = client.get('/api/viral/hooks?category=curiosity&count=3')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert 'hooks' in data
+        assert data['category'] == 'curiosity'
+        assert len(data['hooks']) <= 3
+    
+    def test_get_all_hooks(self, client):
+        """Test getting all hook categories"""
+        response = client.get('/api/viral/hooks')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert 'hooks_by_category' in data
+        assert len(data['hooks_by_category']) > 0
+    
+    def test_predict_virality_score(self, client):
+        """Test virality score prediction"""
+        response = client.post('/api/viral/predict-score', json={
+            'content': 'You won\'t believe this amazing hack! 🔥 #viral #trending',
+            'platform': 'twitter'
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert 'virality_score' in data
+        assert 0 <= data['virality_score'] <= 100
+        assert 'rating' in data
+        assert 'factors' in data
+        assert 'recommendations' in data
+    
+    def test_get_platform_best_practices(self, client):
+        """Test getting platform best practices"""
+        response = client.get('/api/viral/best-practices/instagram')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert data['platform'] == 'instagram'
+        assert 'best_practices' in data
+    
+    def test_viral_hooks_library(self):
+        """Test viral hooks library structure"""
+        from app import viral_intelligence
+        
+        assert len(viral_intelligence.VIRAL_HOOKS) >= 5
+        assert 'curiosity' in viral_intelligence.VIRAL_HOOKS
+        assert 'urgency' in viral_intelligence.VIRAL_HOOKS
+        assert 'storytelling' in viral_intelligence.VIRAL_HOOKS
+
+
+# ============================================================================
+# CONTENT MULTIPLIER TESTS
+# ============================================================================
+
+class TestContentMultiplier:
+    """Test content multiplication features"""
+    
+    def test_multiply_content(self, client):
+        """Test multiplying content across platforms"""
+        response = client.post('/api/content/multiply', json={
+            'source_content': 'We just launched an amazing new feature!',
+            'source_type': 'announcement',
+            'target_platforms': ['twitter', 'linkedin'],
+            'brand_voice': 'professional'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'outputs' in data
+            assert 'twitter' in data['outputs']
+            assert 'linkedin' in data['outputs']
+            assert data['platforms_generated'] == 2
+    
+    def test_generate_variations(self, client):
+        """Test generating content variations"""
+        response = client.post('/api/content/variations', json={
+            'content': 'Check out our new product! 🎉',
+            'num_variations': 3,
+            'platform': 'twitter'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'variations' in data
+            assert len(data['variations']) == 3
+            assert data['platform'] == 'twitter'
+    
+    def test_content_multiplier_validation(self, client):
+        """Test content multiplier input validation"""
+        response = client.post('/api/content/multiply', json={
+            'target_platforms': ['twitter']
+        })
+        
+        assert response.status_code == 400
+        data = response.get_json()
+        assert 'error' in data
+    
+    def test_ai_status_includes_new_services(self, client):
+        """Test that AI status includes viral intelligence and content multiplier"""
+        response = client.get('/api/ai/status')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert 'services' in data
+        assert 'viral_intelligence' in data['services']
+        assert 'content_multiplier' in data['services']
+        
+        # Check viral intelligence features
+        assert 'features' in data['services']['viral_intelligence']
+        assert 'hook_categories' in data['services']['viral_intelligence']
+        
+        # Check content multiplier features
+        assert 'features' in data['services']['content_multiplier']
+
+
+# ============================================================================
 # RUN ALL TESTS
 # ============================================================================
 
