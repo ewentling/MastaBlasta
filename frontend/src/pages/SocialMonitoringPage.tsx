@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tantml:invoke name="@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { socialMonitorsApi } from '../api';
 import { Plus, Trash2, Eye, RefreshCw, TrendingUp, MessageCircle, ThumbsUp, Share2, MessageSquare, BarChart3, Power, PowerOff } from 'lucide-react';
 import axios from 'axios';
@@ -334,38 +334,41 @@ export default function SocialMonitoringPage() {
                           {monitor.active ? <PowerOff size={16} /> : <Power size={16} />}
                           {monitor.active ? 'Deactivate' : 'Activate'}
                         </button>
-                  <button
-                    className="btn btn-secondary btn-small"
-                    onClick={() => setViewingMonitor(monitor.id)}
-                  >
-                    <Eye size={16} />
-                    View Results
-                  </button>
-                  <button
-                    className="btn btn-secondary btn-small"
-                    onClick={() => refreshMutation.mutate(monitor.id)}
-                    disabled={refreshMutation.isPending}
-                  >
-                    <RefreshCw size={16} />
-                    Refresh
-                  </button>
-                  <button
-                    className="btn btn-danger btn-small"
-                    onClick={() => {
-                      if (confirm(`Delete monitor "${monitor.name}"?`)) {
-                        deleteMutation.mutate(monitor.id);
-                      }
-                    }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                        <button
+                          className="btn btn-secondary btn-small"
+                          onClick={() => setViewingMonitor(monitor.id)}
+                        >
+                          <Eye size={16} />
+                          View Results
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-small"
+                          onClick={() => refreshMutation.mutate(monitor.id)}
+                          disabled={refreshMutation.isPending}
+                        >
+                          <RefreshCw size={16} />
+                          Refresh
+                        </button>
+                        <button
+                          className="btn btn-danger btn-small"
+                          onClick={() => {
+                            if (confirm(`Delete monitor "${monitor.name}"?`)) {
+                              deleteMutation.mutate(monitor.id);
+                            }
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            </>
+          )}
           </div>
         )}
-      </div>
-      )}
 
       {/* Templates Tab */}
       {activeTab === 'templates' && (

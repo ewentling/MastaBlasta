@@ -122,7 +122,7 @@ export const themes: Record<ThemeName, Theme> = {
       btnPrimaryBg: 'linear-gradient(135deg, #f4845f 0%, #f25c54 100%)',
       btnPrimaryHover: 'linear-gradient(135deg, #f69a7c 0%, #f57370 100%)',
       btnSecondaryBg: '#4a4e69',
-      btnSecondaryHover: #5a5f7d',
+      btnSecondaryHover: '#5a5f7d',
       borderLight: '#4a4e69',
       borderMedium: '#5a5f7d',
       cardBg: '#3d405b',

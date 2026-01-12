@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tantml:react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountsApi, postsApi } from '../api';
 import { Calendar, Trash2, Check, X, Edit2, Save } from 'lucide-react';
 

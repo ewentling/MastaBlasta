@@ -235,8 +235,10 @@ gunicorn -w 4 -b 0.0.0.0:33766 --env-file .env app:app
 # Build image
 docker build -t mastablasta:latest .
 
-# Run container
+# Run container with auto-restart and recovery
 docker run -d \
+  --restart unless-stopped \
+  --name mastablasta-api \
   -p 33766:33766 \
   -e DATABASE_URL="postgresql://host.docker.internal/mastablasta" \
   -e JWT_SECRET_KEY="your_secret_key" \
@@ -245,6 +247,13 @@ docker run -d \
   -v $(pwd)/media:/app/media \
   mastablasta:latest
 ```
+
+**Auto-Restart Configuration**:
+- The `--restart unless-stopped` policy ensures the container:
+  - ✅ Starts automatically on system boot
+  - ✅ Restarts automatically on crashes or failures
+  - ✅ Stays stopped only when manually stopped
+- This provides high availability for production deployments
 
 ## API Endpoints
 
