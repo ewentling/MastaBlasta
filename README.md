@@ -65,6 +65,14 @@ See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 - **Recommendation Engine**: Get actionable suggestions to improve posts
 - **Model Training**: Train custom models on your historical data
 
+#### 5. 🎬 AI Video Generation (Rival to Blotato)
+- **Video Script Generation**: AI-powered video scripts optimized for platform and duration
+- **Slideshow Creation**: Automatically create video slideshows from images with transitions
+- **Text-to-Video Prompts**: Generate optimized prompts for AI video generation tools (Runway, Pika, Stable Video)
+- **Video Caption Generation**: Create engaging captions and hashtags for video content
+- **Platform Optimization**: Automatic video specs and ffmpeg commands for each platform
+- **Multi-Platform Support**: Optimized for Instagram Reels, YouTube Shorts, TikTok, Facebook Reels, and more
+
 ## Supported Platforms
 
 ### LinkedIn
@@ -938,6 +946,174 @@ POST /api/ai/train-model
   ]
 }
 ```
+
+### Video Generation
+
+MastaBlasta now includes powerful AI-driven video generation capabilities that rival leading tools like Blotato.
+
+**Generate Video Script**
+```bash
+POST /api/ai/generate-video-script
+{
+  "topic": "New product launch",
+  "platform": "instagram",
+  "duration": 30,
+  "style": "engaging"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "script": "Scene 1 (0-3 seconds): [Hook with product reveal]...",
+  "scenes": ["Scene 1...", "Scene 2..."],
+  "platform": "instagram",
+  "duration": 30,
+  "style": "engaging",
+  "scene_count": 4
+}
+```
+
+**Create Slideshow Video**
+```bash
+POST /api/ai/create-slideshow
+{
+  "images": ["image1.jpg", "image2.jpg", "image3.jpg"],
+  "duration_per_image": 3.0,
+  "platform": "instagram",
+  "post_type": "reel",
+  "transition": "fade"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "format": "slideshow",
+  "image_count": 3,
+  "total_duration": 9.0,
+  "dimensions": {
+    "width": 1080,
+    "height": 1920,
+    "aspect_ratio": "9:16"
+  },
+  "ffmpeg_command_template": "ffmpeg -framerate 1/3 ..."
+}
+```
+
+**Generate Text-to-Video Prompt**
+```bash
+POST /api/ai/generate-video-prompt
+{
+  "text": "A beautiful sunset over the ocean",
+  "platform": "tiktok",
+  "post_type": "video",
+  "style": "cinematic"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "video_prompt": "Create a cinematic video featuring a stunning sunset...",
+  "platform": "tiktok",
+  "aspect_ratio": "9:16",
+  "recommended_duration": 30,
+  "note": "Use this prompt with AI video generation tools like Runway ML, Pika Labs, or Stable Video Diffusion"
+}
+```
+
+**Generate Video Captions**
+```bash
+POST /api/ai/generate-video-captions
+{
+  "content": "Behind the scenes of our product shoot",
+  "platform": "instagram",
+  "language": "en"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "caption": "🎬 Behind the scenes magic! Check out how we created this amazing content... #BTS #ProductShoot #ContentCreation",
+  "hashtags": ["#BTS", "#ProductShoot", "#ContentCreation"],
+  "platform": "instagram",
+  "character_count": 95
+}
+```
+
+**Optimize Video for Platform**
+```bash
+POST /api/ai/optimize-video
+{
+  "video_path": "input.mp4",
+  "platform": "youtube",
+  "post_type": "short"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "platform": "youtube",
+  "post_type": "short",
+  "specifications": {
+    "aspect_ratio": "9:16",
+    "min_duration": 1,
+    "max_duration": 60,
+    "width": 1080,
+    "height": 1920
+  },
+  "optimization_settings": {
+    "resolution": "1080x1920",
+    "recommended_format": "mp4",
+    "recommended_codec": "h264",
+    "recommended_bitrate": "3000k",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k"
+  },
+  "ffmpeg_command": "ffmpeg -i input.mp4 -vf scale=1080:1920..."
+}
+```
+
+**Get Platform Video Specifications**
+```bash
+GET /api/ai/video-specs/instagram
+```
+
+Response:
+```json
+{
+  "success": true,
+  "platform": "instagram",
+  "video_types": ["reel", "story", "feed"],
+  "specifications": {
+    "reel": {
+      "aspect_ratio": "9:16",
+      "min_duration": 3,
+      "max_duration": 90,
+      "width": 1080,
+      "height": 1920
+    },
+    "story": {...},
+    "feed": {...}
+  }
+}
+```
+
+#### Supported Platforms for Video Generation
+- **Instagram**: Reels (9:16, 3-90s), Stories (9:16, 1-60s), Feed (1:1, 3-60s)
+- **YouTube**: Shorts (9:16, 1-60s), Videos (16:9, up to 12 hours)
+- **TikTok**: Videos (9:16, 3-600s)
+- **Facebook**: Reels (9:16, 3-90s), Feed (16:9, 1-240s)
+- **Pinterest**: Video Pins (2:3, 4-900s)
+- **Twitter**: Videos (16:9, 0.5-140s)
 
 ## Development
 
