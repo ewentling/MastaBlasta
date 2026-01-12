@@ -83,9 +83,6 @@ export default function ContentCalendarPage() {
       setEvents([]);
     }
   };
-      console.error('Error loading scheduled posts:', error);
-    }
-  };
 
   const handleSelectSlot = useCallback((slotInfo: any) => {
     setNewEventDate(slotInfo.start);
