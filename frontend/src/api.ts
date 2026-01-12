@@ -334,3 +334,27 @@ export const socialMonitorsApi = {
   },
 };
 
+export const mediaApi = {
+  upload: async (file: File): Promise<{ success: boolean; media_id: string; url: string; filename: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await axios.post('/api/v2/media/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  getAll: async (): Promise<{ media: any[]; limit: number; offset: number }> => {
+    const response = await api.get('/v2/media');
+    return response.data;
+  },
+
+  delete: async (mediaId: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete(`/v2/media/${mediaId}`);
+    return response.data;
+  },
+};
+
