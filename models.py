@@ -64,7 +64,7 @@ class Account(Base):
     refresh_token = Column(Text)  # Encrypted
     token_expires_at = Column(DateTime)
     is_active = Column(Boolean, default=True, nullable=False)
-    metadata = Column(JSON)  # Platform-specific data
+    platform_metadata = Column(JSON)  # Platform-specific data
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -128,7 +128,7 @@ class Media(Base):
     width = Column(Integer)
     height = Column(Integer)
     duration = Column(Float)  # for videos, in seconds
-    metadata = Column(JSON)
+    file_metadata = Column(JSON)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     
     # Relationships
@@ -274,7 +274,7 @@ class URLShortener(Base):
     user_id = Column(String(36), ForeignKey('users.id'))
     post_id = Column(String(36), ForeignKey('posts.id'))
     clicks = Column(Integer, default=0)
-    metadata = Column(JSON)  # UTM parameters, etc.
+    url_metadata = Column(JSON)  # UTM parameters, etc.
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     expires_at = Column(DateTime)
     

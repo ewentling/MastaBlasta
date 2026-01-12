@@ -54,9 +54,10 @@ export default function ABTestingPage() {
   const loadPosts = async () => {
     try {
       const response = await axios.get('/api/posts');
-      setPosts(response.data);
-      if (response.data.length > 0 && !selectedPost) {
-        setSelectedPost(response.data[0].id);
+      const postsData = response.data.posts || response.data;
+      setPosts(postsData);
+      if (postsData.length > 0 && !selectedPost) {
+        setSelectedPost(postsData[0].id);
       }
     } catch (error) {
       console.error('Error loading posts:', error);

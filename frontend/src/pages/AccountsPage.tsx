@@ -528,7 +528,8 @@ function OAuthModal({
         }
       }, 1000);
     } catch (err: any) {
-      setError(err.message || 'Failed to initialize OAuth');
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to initialize OAuth';
+      setError(errorMessage);
       setIsConnecting(false);
     }
   };
