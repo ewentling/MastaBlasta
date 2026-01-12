@@ -156,6 +156,8 @@ function CreateMonitorModal({
   const [keywordInput, setKeywordInput] = useState('');
   const [keywords, setKeywords] = useState<string[]>([]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [enableAutoReply, setEnableAutoReply] = useState(false);
+  const [replyMessage, setReplyMessage] = useState('');
 
   const platforms = ['twitter', 'facebook', 'instagram', 'linkedin'];
 
@@ -184,6 +186,8 @@ function CreateMonitorModal({
       name,
       keywords,
       platforms: selectedPlatforms,
+      auto_reply_enabled: enableAutoReply,
+      auto_reply_message: enableAutoReply ? replyMessage : undefined,
     });
   };
 
@@ -268,6 +272,33 @@ function CreateMonitorModal({
                   </label>
                 ))}
               </div>
+            </div>
+
+            <div className="form-group">
+              <label className="checkbox-label" style={{ marginBottom: '1rem' }}>
+                <input
+                  type="checkbox"
+                  checked={enableAutoReply}
+                  onChange={(e) => setEnableAutoReply(e.target.checked)}
+                />
+                <span>Enable Auto-Reply</span>
+              </label>
+              {enableAutoReply && (
+                <div>
+                  <label className="form-label">Reply Message *</label>
+                  <textarea
+                    className="form-textarea"
+                    value={replyMessage}
+                    onChange={(e) => setReplyMessage(e.target.value)}
+                    placeholder="Enter your automatic reply message..."
+                    required={enableAutoReply}
+                    style={{ minHeight: '100px' }}
+                  />
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--color-textSecondary)' }}>
+                    This message will be automatically sent as a reply to comments matching your keywords.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div className="modal-footer">
