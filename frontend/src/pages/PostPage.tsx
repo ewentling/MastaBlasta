@@ -1,16 +1,23 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { accountsApi, postsApi } from '../api';
-import { Send, Check, X, Sparkles, Hash, Clock } from 'lucide-react';
+import { accountsApi, postsApi, mediaApi } from '../api';
+import { Send, Check, X, Sparkles, Hash, Clock, Upload, Trash2, Image as ImageIcon, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAI } from '../contexts/AIContext';
 import { PlatformPreviews } from '../components/PlatformPreviews';
+import type { CreatePostRequest, SchedulePostRequest } from '../types';
 
 export default function PostPage() {
   const navigate = useNavigate();
   const { llmConfig, optimizeContent, suggestHashtags, suggestPostingTime } = useAI();
   const [content, setContent] = useState('');
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [uploadedMedia, setUploadedMedia] = useState<{ id: string; url: string; filename: string }[]>([]);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledTime, setScheduledTime] = useState('');
+  const [isDraft, setIsDraft] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<{
     optimized?: string;
@@ -26,20 +33,56 @@ export default function PostPage() {
     queryFn: () => accountsApi.getAll(),
   });
 
+  // Auto-save draft
+  useState(() => {
+    const interval = setInterval(() => {
+      if (content.trim() && !postMutation.isPending) {
+        const draft = {
+          content,
+          account_ids: selectedAccounts,
+          media: uploadedMedia.map(m => m.url),
+          is_draft: true,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('post_draft', JSON.stringify(draft));
+      }
+    }, 30000); // Auto-save every 30 seconds
+    
+    return () => clearInterval(interval);
+  });
+
   const postMutation = useMutation({
-    mutationFn: postsApi.create,
+    mutationFn: async (data: any) => {
+      if (isDraft) {
+        // Save as draft
+        const draft = { ...data, is_draft: true, id: Date.now().toString() };
+        const drafts = JSON.parse(localStorage.getItem('drafts') || '[]');
+        drafts.push(draft);
+        localStorage.setItem('drafts', JSON.stringify(drafts));
+        return Promise.resolve(draft);
+      }
+      if (isScheduled) {
+        return postsApi.schedule(data);
+      }
+      return postsApi.create(data);
+    },
     onSuccess: () => {
-      setResult({ success: true, message: 'Post published successfully!' });
+      const message = isScheduled ? 'Post scheduled successfully!' : 'Post published successfully!';
+      setResult({ success: true, message });
       setTimeout(() => {
         setContent('');
         setSelectedAccounts([]);
+        setMediaFiles([]);
+        setUploadedMedia([]);
+        setIsScheduled(false);
+        setScheduledTime('');
         setResult(null);
       }, 3000);
     },
     onError: (error: any) => {
       setResult({ 
         success: false, 
-        message: error.response?.data?.error || 'Failed to publish post' 
+        message: error.response?.data?.error || `Failed to ${isScheduled ? 'schedule' : 'publish'} post` 
       });
       setTimeout(() => setResult(null), 5000);
     },
@@ -54,7 +97,89 @@ export default function PostPage() {
       setTimeout(() => setResult(null), 3000);
       return;
     }
-    postMutation.mutate({ content, account_ids: selectedAccounts });
+
+    if (isScheduled && !scheduledTime) {
+      setResult({ success: false, message: 'Please select a date and time for scheduling' });
+      setTimeout(() => setResult(null), 3000);
+      return;
+    }
+
+    if (isScheduled && new Date(scheduledTime) <= new Date()) {
+      setResult({ success: false, message: 'Scheduled time must be in the future' });
+      setTimeout(() => setResult(null), 3000);
+      return;
+    }
+    
+    // Include uploaded media URLs
+    const mediaUrls = uploadedMedia.map(m => m.url);
+    const postData: CreatePostRequest | SchedulePostRequest = {
+      content,
+      account_ids: selectedAccounts,
+      media: mediaUrls
+    };
+    
+    if (isScheduled) {
+      (postData as SchedulePostRequest).scheduled_time = new Date(scheduledTime).toISOString();
+    }
+    
+    postMutation.mutate(postData);
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Validate file types
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/quicktime'];
+    const invalidFiles = files.filter(f => !validTypes.includes(f.type));
+    
+    if (invalidFiles.length > 0) {
+      setResult({ success: false, message: 'Only images (JPEG, PNG, GIF, WebP) and videos (MP4, MOV) are allowed' });
+      setTimeout(() => setResult(null), 5000);
+      return;
+    }
+
+    // Check file sizes (max 50MB per file)
+    const maxSize = 50 * 1024 * 1024;
+    const oversizedFiles = files.filter(f => f.size > maxSize);
+    
+    if (oversizedFiles.length > 0) {
+      setResult({ success: false, message: 'Files must be smaller than 50MB' });
+      setTimeout(() => setResult(null), 5000);
+      return;
+    }
+
+    setMediaFiles(prev => [...prev, ...files]);
+
+    // Upload files immediately
+    setUploadingMedia(true);
+    try {
+      for (const file of files) {
+        const uploadResult = await mediaApi.upload(file);
+        setUploadedMedia(prev => [...prev, {
+          id: uploadResult.media_id,
+          url: uploadResult.url,
+          filename: uploadResult.filename
+        }]);
+      }
+      setResult({ success: true, message: `${files.length} file(s) uploaded successfully` });
+      setTimeout(() => setResult(null), 3000);
+    } catch (error: any) {
+      setResult({ success: false, message: error.response?.data?.error || 'Failed to upload media' });
+      setTimeout(() => setResult(null), 5000);
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  const handleRemoveMedia = (index: number) => {
+    // Revoke object URL to prevent memory leaks
+    if (mediaFiles[index]) {
+      const objectUrl = URL.createObjectURL(mediaFiles[index]);
+      URL.revokeObjectURL(objectUrl);
+    }
+    setMediaFiles(prev => prev.filter((_, i) => i !== index));
+    setUploadedMedia(prev => prev.filter((_, i) => i !== index));
   };
 
   const toggleAccount = (accountId: string) => {
@@ -371,16 +496,169 @@ export default function PostPage() {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Media URLs (Optional)</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="https://example.com/image.jpg"
-              disabled
-            />
-            <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#718096' }}>
-              Media upload coming soon
+            <label className="form-label">Media (Optional)</label>
+            <div style={{ 
+              border: '2px dashed var(--color-borderLight)', 
+              borderRadius: '8px', 
+              padding: '1.5rem',
+              textAlign: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onClick={() => document.getElementById('media-upload')?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.currentTarget.style.borderColor = 'var(--color-accentPrimary)';
+            }}
+            onDragLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-borderLight)';
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              e.currentTarget.style.borderColor = 'var(--color-borderLight)';
+              const files = Array.from(e.dataTransfer.files);
+              if (files.length > 0) {
+                const input = document.getElementById('media-upload') as HTMLInputElement;
+                const dataTransfer = new DataTransfer();
+                files.forEach(file => dataTransfer.items.add(file));
+                input.files = dataTransfer.files;
+                const changeEvent: React.ChangeEvent<HTMLInputElement> = {
+                  target: input,
+                  currentTarget: input,
+                } as React.ChangeEvent<HTMLInputElement>;
+                handleFileSelect(changeEvent);
+              }
+            }}
+            >
+              <input
+                id="media-upload"
+                type="file"
+                multiple
+                accept="image/*,video/*"
+                onChange={handleFileSelect}
+                style={{ display: 'none' }}
+                disabled={uploadingMedia}
+              />
+              <Upload size={32} style={{ color: 'var(--color-accentPrimary)', marginBottom: '0.5rem' }} />
+              <div style={{ color: 'var(--color-textPrimary)', fontWeight: '600', marginBottom: '0.5rem' }}>
+                {uploadingMedia ? 'Uploading...' : 'Click to upload or drag and drop'}
+              </div>
+              <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
+                Images (JPEG, PNG, GIF, WebP) or Videos (MP4, MOV) • Max 50MB per file
+              </div>
             </div>
+
+            {mediaFiles.length > 0 && (
+              <div style={{ 
+                marginTop: '1rem', 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+                gap: '1rem'
+              }}>
+                {mediaFiles.map((file, index) => (
+                  <div 
+                    key={index}
+                    style={{
+                      position: 'relative',
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      border: '1px solid var(--color-borderLight)',
+                      aspectRatio: '1',
+                    }}
+                  >
+                    {file.type.startsWith('image/') ? (
+                      <img 
+                        src={URL.createObjectURL(file)} 
+                        alt={file.name}
+                        style={{ 
+                          width: '100%', 
+                          height: '100%', 
+                          objectFit: 'cover' 
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: 'var(--color-bgSecondary)',
+                      }}>
+                        <ImageIcon size={32} style={{ color: 'var(--color-textSecondary)' }} />
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMedia(index)}
+                      style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        background: 'rgba(0, 0, 0, 0.7)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '4px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Trash2 size={16} style={{ color: 'white' }} />
+                    </button>
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      background: 'rgba(0, 0, 0, 0.7)',
+                      padding: '4px',
+                      fontSize: '0.75rem',
+                      color: 'white',
+                      textOverflow: 'ellipsis',
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      {file.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label className="checkbox-label" style={{ marginBottom: '1rem' }}>
+              <input
+                type="checkbox"
+                checked={isScheduled}
+                onChange={(e) => setIsScheduled(e.target.checked)}
+              />
+              <span>Schedule for later</span>
+            </label>
+
+            {isScheduled && (
+              <div>
+                <label className="form-label">Schedule Date & Time</label>
+                <input
+                  type="datetime-local"
+                  className="form-input"
+                  value={scheduledTime}
+                  onChange={(e) => setScheduledTime(e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                  required={isScheduled}
+                  style={{ maxWidth: '300px' }}
+                />
+                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--color-textSecondary)' }}>
+                  {scheduledTime && (
+                    <>
+                      Will be published on {new Date(scheduledTime).toLocaleString()}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -470,8 +748,10 @@ export default function PostPage() {
             className="btn btn-primary"
             disabled={postMutation.isPending || accounts.length === 0}
           >
-            <Send size={18} />
-            {postMutation.isPending ? 'Publishing...' : 'Publish Now'}
+            {isScheduled ? <Calendar size={18} /> : <Send size={18} />}
+            {postMutation.isPending 
+              ? (isScheduled ? 'Scheduling...' : 'Publishing...') 
+              : (isScheduled ? 'Schedule Post' : 'Publish Now')}
           </button>
         </div>
       </form>

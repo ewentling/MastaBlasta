@@ -54,9 +54,10 @@ export default function ABTestingPage() {
   const loadPosts = async () => {
     try {
       const response = await axios.get('/api/posts');
-      setPosts(response.data);
-      if (response.data.length > 0 && !selectedPost) {
-        setSelectedPost(response.data[0].id);
+      const postsData = response.data.posts || response.data;
+      setPosts(postsData);
+      if (postsData.length > 0 && !selectedPost) {
+        setSelectedPost(postsData[0].id);
       }
     } catch (error) {
       console.error('Error loading posts:', error);
@@ -212,7 +213,7 @@ export default function ABTestingPage() {
                     top: '10px',
                     right: '10px',
                     background: 'linear-gradient(135deg, #ffd700, #ffed4e)',
-                    color: '#000',
+                    color: '#1a1a1a',
                     padding: '4px 12px',
                     borderRadius: '20px',
                     fontSize: '12px',

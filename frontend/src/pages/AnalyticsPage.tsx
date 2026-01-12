@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart2, TrendingUp, Users, Eye, Heart, MessageCircle, Share2 } from 'lucide-react';
+import { BarChart2, TrendingUp, Users, Eye, Heart, MessageCircle, Share2, Smile, Frown, Meh, Download } from 'lucide-react';
 import * as api from '../api';
 
 export default function AnalyticsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState(30);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Fetch dashboard analytics
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
@@ -20,11 +21,66 @@ export default function AnalyticsPage() {
     enabled: !!selectedPostId
   });
 
+  const exportToCSV = () => {
+    if (!dashboardData) return;
+    
+    setIsExporting(true);
+    
+    try {
+      // Create CSV content
+      const headers = ['Post ID', 'Platform', 'Message', 'Likes', 'Comments', 'Shares', 'Impressions', 'Engagement Rate', 'Sentiment'];
+      const rows = (dashboardData.posts || []).map((post: any) => [
+        post.id,
+        post.platform,
+        `"${(post.message || '').replace(/"/g, '""')}"`, // Escape quotes
+        post.likes || 0,
+        post.comments || 0,
+        post.shares || 0,
+        post.impressions || 0,
+        post.engagement_rate ? `${post.engagement_rate.toFixed(2)}%` : '0%',
+        post.sentiment ? `${post.sentiment.positive}% positive, ${post.sentiment.neutral}% neutral, ${post.sentiment.negative}% negative` : 'N/A'
+      ]);
+      
+      const csvContent = [
+        headers.join(','),
+        ...rows.map((row: any[]) => row.join(','))
+      ].join('\n');
+      
+      // Create download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `analytics_${selectedPeriod}days_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Failed to export analytics. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div>
       <div className="page-header">
-        <h2>Post Performance Analytics</h2>
-        <p>Track engagement metrics across all platforms</p>
+        <div>
+          <h2>Post Performance Analytics</h2>
+          <p>Track engagement metrics across all platforms</p>
+        </div>
+        <button
+          className="btn btn-secondary"
+          onClick={exportToCSV}
+          disabled={isExporting || !dashboardData?.posts?.length}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+        >
+          <Download size={18} />
+          {isExporting ? 'Exporting...' : 'Export CSV'}
+        </button>
       </div>
 
       {/* Period Selector */}
@@ -128,6 +184,50 @@ export default function AnalyticsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Overall Sentiment */}
+            {dashboardData.summary.sentiment && (
+              <div className="card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+                  <div style={{ 
+                    padding: '0.75rem', 
+                    borderRadius: '8px', 
+                    backgroundColor: '#10b981', 
+                    color: 'white' 
+                  }}>
+                    <MessageCircle size={24} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)', marginBottom: '0.5rem' }}>
+                      Comment Sentiment
+                    </div>
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Smile size={16} style={{ color: '#10b981' }} />
+                        <span style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>
+                          {dashboardData.summary.sentiment.positive}%
+                        </span>
+                        <span style={{ color: 'var(--color-textSecondary)' }}>Positive</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Meh size={16} style={{ color: '#94a3b8' }} />
+                        <span style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>
+                          {dashboardData.summary.sentiment.neutral}%
+                        </span>
+                        <span style={{ color: 'var(--color-textSecondary)' }}>Neutral</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Frown size={16} style={{ color: '#ef4444' }} />
+                        <span style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>
+                          {dashboardData.summary.sentiment.negative}%
+                        </span>
+                        <span style={{ color: 'var(--color-textSecondary)' }}>Negative</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Platform Breakdown */}
@@ -378,6 +478,27 @@ export default function AnalyticsPage() {
                             {data.comments.toLocaleString()}
                           </div>
                         </div>
+                        {data.sentiment && (
+                          <div>
+                            <div style={{ color: 'var(--color-textSecondary)', marginBottom: '0.25rem' }}>
+                              Comment Sentiment
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.875rem' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#10b981' }}>
+                                <Smile size={14} />
+                                {data.sentiment.positive}%
+                              </span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#94a3b8' }}>
+                                <Meh size={14} />
+                                {data.sentiment.neutral}%
+                              </span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#ef4444' }}>
+                                <Frown size={14} />
+                                {data.sentiment.negative}%
+                              </span>
+                            </div>
+                          </div>
+                        )}
                         <div>
                           <div style={{ color: 'var(--color-textSecondary)' }}>
                             <Share2 size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />

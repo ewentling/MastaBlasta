@@ -112,8 +112,8 @@ function Navigation() {
           </li>
           <li>
             <Link to="/chatbot" className={isActive('/chatbot')}>
-              <MessageSquare size={20} />
-              <span>Chatbot</span>
+              <Sparkles size={20} />
+              <span>AI Assistant</span>
             </Link>
           </li>
         </ul>

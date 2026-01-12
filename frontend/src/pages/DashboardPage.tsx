@@ -1,8 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { postsApi, accountsApi } from '../api';
-import { BarChart3, Users, Send, Calendar } from 'lucide-react';
+import { BarChart3, Users, Send, Calendar, Plus, Sparkles, TrendingUp, Zap } from 'lucide-react';
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
+  
   const { data: postsData } = useQuery({
     queryKey: ['posts'],
     queryFn: () => postsApi.getAll(),
@@ -22,11 +25,70 @@ export default function DashboardPage() {
 
   const recentPosts = posts.slice(0, 5);
 
+  const quickActions = [
+    { icon: Plus, label: 'Create Post', path: '/create-post', color: '#667eea' },
+    { icon: Calendar, label: 'Schedule Post', path: '/create-post', color: '#48bb78' },
+    { icon: Users, label: 'Add Account', path: '/accounts', color: '#ed8936' },
+    { icon: Sparkles, label: 'AI Assistant', path: '/chatbot', color: '#9f7aea' },
+    { icon: TrendingUp, label: 'View Analytics', path: '/analytics', color: '#4299e1' },
+  ];
+
   return (
     <div>
       <div className="page-header">
         <h2>Dashboard</h2>
         <p>Overview of your social media posting activity</p>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="card" style={{ marginBottom: '2rem' }}>
+        <div className="card-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Zap size={20} style={{ color: 'var(--color-accentPrimary)' }} />
+            <h3>Quick Actions</h3>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+          {quickActions.map((action) => (
+            <button
+              key={action.label}
+              className="btn btn-secondary"
+              onClick={() => navigate(action.path)}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '1rem',
+                height: 'auto',
+                backgroundColor: 'var(--color-bgSecondary)',
+                border: '2px solid var(--color-borderLight)',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = action.color;
+                e.currentTarget.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-borderLight)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              <div style={{ 
+                background: `linear-gradient(135deg, ${action.color} 0%, ${action.color}cc 100%)`,
+                padding: '0.75rem',
+                borderRadius: '8px',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}>
+                <action.icon size={24} />
+              </div>
+              <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>{action.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-2">

@@ -73,11 +73,16 @@ export default function ContentCalendarPage() {
         end: new Date(new Date(post.scheduled_time).getTime() + 60 * 60 * 1000), // 1 hour duration
         content: post.content,
         platforms: post.platforms,
-        status: post.status,
+        status: post.status || 'scheduled',
         account_ids: post.account_ids,
       }));
       setEvents(calendarEvents);
     } catch (error) {
+      console.error('Error loading scheduled posts:', error);
+      // Fallback to empty array if API fails
+      setEvents([]);
+    }
+  };
       console.error('Error loading scheduled posts:', error);
     }
   };

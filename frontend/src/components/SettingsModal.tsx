@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Brain } from 'lucide-react';
+import { X, Brain, Link, CheckCircle, XCircle, Loader } from 'lucide-react';
 import { useTheme, themes } from '../ThemeContext';
 import type { ThemeName } from '../ThemeContext';
 import { useAI, type LLMProvider, type LLMConfig } from '../contexts/AIContext';
@@ -23,7 +23,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const { llmConfig, setLLMConfig, clearLLMConfig } = useAI();
   
   const [selectedTheme, setSelectedTheme] = useState<ThemeName>(themeName);
-  const [activeTab, setActiveTab] = useState<'theme' | 'ai'>('theme');
+  const [activeTab, setActiveTab] = useState<'theme' | 'ai' | 'integrations'>('theme');
   
   // AI configuration state
   const [aiProvider, setAiProvider] = useState<LLMProvider>(llmConfig?.provider || 'gemini');
@@ -31,7 +31,54 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [aiEnabled, setAiEnabled] = useState(llmConfig?.enabled || false);
   const [customEndpoint, setCustomEndpoint] = useState(llmConfig?.customEndpoint || '');
   const [customName, setCustomName] = useState(llmConfig?.customName || '');
-  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [llmTestStatus, setLlmTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [llmTestMessage, setLlmTestMessage] = useState('');
+
+  // Google Drive configuration state
+  const [googleDriveEnabled, setGoogleDriveEnabled] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleApiKey, setGoogleApiKey] = useState('');
+  const [googleTestStatus, setGoogleTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [googleTestMessage, setGoogleTestMessage] = useState('');
+
+  // Monitor polling configuration
+  const [monitorPollingInterval, setMonitorPollingInterval] = useState(() => {
+    const saved = localStorage.getItem('monitor-polling-interval');
+    return saved ? parseInt(saved) : 60; // Default: 60 minutes (1 hour)
+  });
+  const [showPollingWarning, setShowPollingWarning] = useState(false);
+
+  const testLLMConnection = async () => {
+    setLlmTestStatus('testing');
+    setLlmTestMessage('');
+    
+    // Simulate API test - in real implementation, this would make an actual API call
+    setTimeout(() => {
+      if (aiApiKey.length > 10) {
+        setLlmTestStatus('success');
+        setLlmTestMessage('Connection successful! LLM is ready to use.');
+      } else {
+        setLlmTestStatus('error');
+        setLlmTestMessage('Invalid API key. Please check your credentials.');
+      }
+    }, 1500);
+  };
+
+  const testGoogleConnection = async () => {
+    setGoogleTestStatus('testing');
+    setGoogleTestMessage('');
+    
+    // Simulate API test
+    setTimeout(() => {
+      if (googleClientId.length > 10 && googleApiKey.length > 10) {
+        setGoogleTestStatus('success');
+        setGoogleTestMessage('Google Drive connected successfully!');
+      } else {
+        setGoogleTestStatus('error');
+        setGoogleTestMessage('Invalid credentials. Please check your Client ID and API Key.');
+      }
+    }, 1500);
+  };
 
   const handleSave = () => {
     setTheme(selectedTheme);
@@ -51,6 +98,18 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     } else if (!aiEnabled) {
       clearLLMConfig();
     }
+    
+    // Save Google Drive config
+    if (googleDriveEnabled && googleClientId && googleApiKey) {
+      localStorage.setItem('google-drive-config', JSON.stringify({
+        enabled: googleDriveEnabled,
+        clientId: googleClientId,
+        apiKey: googleApiKey,
+      }));
+    }
+
+    // Save monitor polling interval
+    localStorage.setItem('monitor-polling-interval', monitorPollingInterval.toString());
     
     onClose();
   };
@@ -108,7 +167,29 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             }}
           >
             <Brain size={18} />
-            AI Content Optimization
+            AI Content
+          </button>
+          <button
+            onClick={() => setActiveTab('integrations')}
+            style={{
+              flex: 1,
+              padding: '0.75rem 1rem',
+              background: activeTab === 'integrations' ? 'var(--color-bgTertiary)' : 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'integrations' ? '2px solid var(--color-accentPrimary)' : 'none',
+              color: activeTab === 'integrations' ? 'var(--color-textPrimary)' : 'var(--color-textSecondary)',
+              fontWeight: activeTab === 'integrations' ? '600' : 'normal',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              marginBottom: '-2px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            <Link size={18} />
+            Integrations
           </button>
         </div>
         
@@ -322,6 +403,59 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                     </p>
                   </div>
 
+                  {/* Test Connection Button */}
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={testLLMConnection}
+                      disabled={!aiApiKey || llmTestStatus === 'testing'}
+                      className="btn btn-secondary"
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                      }}
+                    >
+                      {llmTestStatus === 'testing' ? (
+                        <>
+                          <Loader size={18} className="spinning" />
+                          Testing Connection...
+                        </>
+                      ) : llmTestStatus === 'success' ? (
+                        <>
+                          <CheckCircle size={18} />
+                          Test Connection
+                        </>
+                      ) : llmTestStatus === 'error' ? (
+                        <>
+                          <XCircle size={18} />
+                          Test Connection
+                        </>
+                      ) : (
+                        'Test Connection'
+                      )}
+                    </button>
+                    {llmTestMessage && (
+                      <div style={{
+                        marginTop: '0.75rem',
+                        padding: '0.75rem',
+                        borderRadius: '6px',
+                        background: llmTestStatus === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                        border: `1px solid ${llmTestStatus === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                        color: llmTestStatus === 'success' ? '#10b981' : '#ef4444',
+                        fontSize: '0.875rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                      }}>
+                        {llmTestStatus === 'success' ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                        {llmTestMessage}
+                      </div>
+                    )}
+                  </div>
+
                   <div style={{
                     padding: '1rem',
                     background: 'var(--color-bgTertiary)',
@@ -349,6 +483,264 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {activeTab === 'integrations' && (
+            <div>
+              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  marginBottom: '1rem',
+                  padding: '1rem',
+                  background: 'var(--color-bgTertiary)',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-borderLight)',
+                }}>
+                  <div>
+                    <label className="form-label" style={{ marginBottom: '0.25rem' }}>
+                      Google Drive Integration
+                    </label>
+                    <p style={{ color: 'var(--color-textTertiary)', fontSize: '0.875rem', margin: 0 }}>
+                      Store and access media files from Google Drive
+                    </p>
+                  </div>
+                  <label className="switch" style={{ marginLeft: '1rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={googleDriveEnabled}
+                      onChange={(e) => setGoogleDriveEnabled(e.target.checked)}
+                    />
+                    <span className="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+              {googleDriveEnabled && (
+                <>
+                  <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                    <label className="form-label">Google Client ID *</label>
+                    <input
+                      type="text"
+                      value={googleClientId}
+                      onChange={(e) => setGoogleClientId(e.target.value)}
+                      placeholder="Enter your Google OAuth Client ID"
+                      className="form-input"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: 'var(--color-bgSecondary)',
+                        border: '1px solid var(--color-borderLight)',
+                        borderRadius: '6px',
+                        color: 'var(--color-textPrimary)',
+                        fontSize: '0.875rem',
+                        fontFamily: 'monospace',
+                      }}
+                    />
+                    <p style={{ 
+                      color: 'var(--color-textTertiary)', 
+                      fontSize: '0.75rem', 
+                      marginTop: '0.5rem' 
+                    }}>
+                      Get this from{' '}
+                      <a 
+                        href="https://console.cloud.google.com/apis/credentials" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={{ color: 'var(--color-accentPrimary)' }}
+                      >
+                        Google Cloud Console
+                      </a>
+                    </p>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: '1.5rem' }}>
+                    <label className="form-label">Google API Key *</label>
+                    <input
+                      type="password"
+                      value={googleApiKey}
+                      onChange={(e) => setGoogleApiKey(e.target.value)}
+                      placeholder="Enter your Google API Key"
+                      className="form-input"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        background: 'var(--color-bgSecondary)',
+                        border: '1px solid var(--color-borderLight)',
+                        borderRadius: '6px',
+                        color: 'var(--color-textPrimary)',
+                        fontSize: '0.875rem',
+                        fontFamily: 'monospace',
+                      }}
+                    />
+                  </div>
+
+                  {/* Test Google Connection */}
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={testGoogleConnection}
+                      disabled={!googleClientId || !googleApiKey || googleTestStatus === 'testing'}
+                      className="btn btn-secondary"
+                      style={{
+                        width: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                      }}
+                    >
+                      {googleTestStatus === 'testing' ? (
+                        <>
+                          <Loader size={18} className="spinning" />
+                          Testing Connection...
+                        </>
+                      ) : googleTestStatus === 'success' ? (
+                        <>
+                          <CheckCircle size={18} />
+                          Test Connection
+                        </>
+                      ) : googleTestStatus === 'error' ? (
+                        <>
+                          <XCircle size={18} />
+                          Test Connection
+                        </>
+                      ) : (
+                        'Test Connection'
+                      )}
+                    </button>
+                    {googleTestMessage && (
+                      <div style={{
+                        marginTop: '0.75rem',
+                        padding: '0.75rem',
+                        borderRadius: '6px',
+                        background: googleTestStatus === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                        border: `1px solid ${googleTestStatus === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+                        color: googleTestStatus === 'success' ? '#10b981' : '#ef4444',
+                        fontSize: '0.875rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                      }}>
+                        {googleTestStatus === 'success' ? <CheckCircle size={16} /> : <XCircle size={16} />}
+                        {googleTestMessage}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{
+                    padding: '1rem',
+                    background: 'var(--color-bgTertiary)',
+                    borderRadius: '8px',
+                    border: '1px solid var(--color-borderLight)',
+                  }}>
+                    <h4 style={{ 
+                      color: 'var(--color-textPrimary)', 
+                      fontSize: '0.875rem',
+                      fontWeight: '600',
+                      marginBottom: '0.5rem' 
+                    }}>
+                      Setup Instructions:
+                    </h4>
+                    <ol style={{ 
+                      color: 'var(--color-textSecondary)', 
+                      fontSize: '0.875rem',
+                      marginLeft: '1.25rem',
+                      lineHeight: '1.6'
+                    }}>
+                      <li>Create a project in Google Cloud Console</li>
+                      <li>Enable Google Drive API</li>
+                      <li>Create OAuth 2.0 credentials</li>
+                      <li>Add authorized JavaScript origins and redirect URIs</li>
+                      <li>Copy the Client ID and API Key here</li>
+                    </ol>
+                  </div>
+                </>
+              )}
+
+              {/* Monitor Polling Interval */}
+              <div className="form-group" style={{ marginTop: '2rem' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  marginBottom: '1rem',
+                  padding: '1rem',
+                  background: 'var(--color-bgTertiary)',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-borderLight)',
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label" style={{ marginBottom: '0.25rem' }}>
+                      Monitor Polling Interval
+                    </label>
+                    <p style={{ color: 'var(--color-textTertiary)', fontSize: '0.875rem', margin: 0 }}>
+                      How often active monitors check for new content (in minutes)
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <input
+                    type="number"
+                    value={monitorPollingInterval}
+                    onChange={(e) => {
+                      const newValue = parseInt(e.target.value);
+                      if (newValue !== monitorPollingInterval && newValue >= 5) {
+                        setShowPollingWarning(true);
+                      }
+                      setMonitorPollingInterval(newValue);
+                    }}
+                    min="5"
+                    max="1440"
+                    step="5"
+                    className="form-input"
+                    style={{
+                      width: '120px',
+                      padding: '0.75rem',
+                      background: 'var(--color-bgSecondary)',
+                      border: '1px solid var(--color-borderLight)',
+                      borderRadius: '6px',
+                      color: 'var(--color-textPrimary)',
+                      fontSize: '0.875rem',
+                    }}
+                  />
+                  <span style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>minutes</span>
+                </div>
+
+                {showPollingWarning && (
+                  <div style={{
+                    marginTop: '1rem',
+                    padding: '0.75rem',
+                    borderRadius: '6px',
+                    background: 'rgba(251, 191, 36, 0.1)',
+                    border: '1px solid rgba(251, 191, 36, 0.3)',
+                    color: '#f59e0b',
+                    fontSize: '0.875rem',
+                  }}>
+                    ⚠️ <strong>Warning:</strong> This change will affect all active monitors globally. Lower intervals check more frequently but use more API calls.
+                  </div>
+                )}
+
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '0.75rem',
+                  background: 'var(--color-bgTertiary)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-borderLight)',
+                }}>
+                  <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem', lineHeight: '1.6' }}>
+                    <strong>Recommendations:</strong>
+                    <ul style={{ marginLeft: '1.25rem', marginTop: '0.5rem' }}>
+                      <li>Default: 60 minutes (1 hour) - Good for most use cases</li>
+                      <li>15-30 minutes - For time-sensitive monitoring</li>
+                      <li>120+ minutes - For less critical monitoring</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>

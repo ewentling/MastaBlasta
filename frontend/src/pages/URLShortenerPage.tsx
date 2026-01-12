@@ -116,9 +116,22 @@ export default function URLShortenerPage() {
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--color-textTertiary)' }}>
-                    {url.clicks} clicks
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--color-borderLight)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <BarChart2 size={16} style={{ color: 'var(--color-accentPrimary)' }} />
+                      <span style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--color-textPrimary)' }}>
+                        {url.clicks || 0}
+                      </span>
+                      <span style={{ fontSize: '0.875rem', color: 'var(--color-textTertiary)' }}>
+                        clicks
+                      </span>
+                    </div>
+                    {url.last_clicked && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-textTertiary)' }}>
+                        Last clicked: {new Date(url.last_clicked).toLocaleDateString()}
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
@@ -126,7 +139,7 @@ export default function URLShortenerPage() {
                       onClick={() => setStatsModal(url.short_code)}
                     >
                       <BarChart2 size={16} />
-                      Stats
+                      Detailed Stats
                     </button>
                     <button
                       className="btn btn-danger btn-small"

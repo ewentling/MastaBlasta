@@ -6,7 +6,6 @@ import type { Account, CreateAccountRequest, Platform } from '../types';
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
-  const [showModal, setShowModal] = useState(false);
   const [showOAuthModal, setShowOAuthModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [testingAccount, setTestingAccount] = useState<string | null>(null);
@@ -79,16 +78,17 @@ export default function AccountsPage() {
       <div className="card">
         <div className="card-header">
           <h3>Connected Accounts</h3>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn btn-primary" onClick={() => setShowOAuthModal(true)}>
-              <Zap size={18} />
-              Quick Connect
-            </button>
-            <button className="btn btn-secondary" onClick={() => setShowModal(true)}>
-              <Plus size={18} />
-              Manual Setup
-            </button>
-          </div>
+          <button className="btn btn-primary" onClick={() => setShowOAuthModal(true)}>
+            <Zap size={18} />
+            Quick Connect
+          </button>
+        </div>
+
+        <div className="alert alert-info" style={{ margin: '1rem' }}>
+          <span style={{ fontSize: '0.875rem' }}>
+            💡 <strong>OAuth Setup:</strong> To use Quick Connect, you need to configure OAuth credentials in environment variables.
+            See PLATFORM_SETUP.md for detailed instructions on setting up OAuth for each platform.
+          </span>
         </div>
 
         {isLoading ? (
@@ -166,14 +166,6 @@ export default function AccountsPage() {
         )}
       </div>
 
-      {showModal && (
-        <AccountModal
-          platforms={platforms}
-          onClose={() => setShowModal(false)}
-          onSave={(data) => createMutation.mutate(data)}
-        />
-      )}
-
       {showOAuthModal && (
         <OAuthModal
           platforms={platforms}
@@ -194,134 +186,6 @@ export default function AccountsPage() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-function AccountModal({
-  platforms,
-  onClose,
-  onSave,
-}: {
-  platforms: any[];
-  onClose: () => void;
-  onSave: (data: CreateAccountRequest) => void;
-}) {
-  const [platform, setPlatform] = useState('');
-  const [name, setName] = useState('');
-  const [username, setUsername] = useState('');
-  const [credentials, setCredentials] = useState<Record<string, string>>({});
-
-  const credentialFields: Record<string, string[]> = {
-    twitter: ['api_key', 'api_secret', 'access_token', 'access_token_secret'],
-    facebook: ['access_token', 'page_id'],
-    instagram: ['access_token', 'account_id'],
-    linkedin: ['access_token', 'organization_id'],
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave({ platform, name, username, credentials });
-  };
-
-  const fields = platform ? credentialFields[platform] || [] : [];
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Add New Account</h3>
-          <button className="close-button" onClick={onClose}>×</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            <div className="form-group">
-              <label className="form-label">Platform *</label>
-              <select
-                className="form-select"
-                value={platform}
-                onChange={(e) => {
-                  setPlatform(e.target.value);
-                  setCredentials({});
-                }}
-                required
-              >
-                <option value="">Select a platform</option>
-                {platforms.map(p => (
-                  <option key={p.name} value={p.name}>{p.display_name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Account Name *</label>
-              <input
-                type="text"
-                className="form-input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g., My Business Account"
-                required
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Username</label>
-              <input
-                type="text"
-                className="form-input"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Optional"
-              />
-            </div>
-
-            {fields.length > 0 && (
-              <>
-                <div style={{ 
-                  borderTop: '1px solid var(--color-borderLight)', 
-                  paddingTop: '1rem', 
-                  marginTop: '1rem',
-                  marginBottom: '1rem'
-                }}>
-                  <div style={{ fontWeight: '600', marginBottom: '1rem', color: 'var(--color-textPrimary)' }}>
-                    API Credentials
-                  </div>
-                </div>
-                {fields.map(field => (
-                  <div key={field} className="form-group">
-                    <label className="form-label">
-                      {field.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                    </label>
-                    <input
-                      type="password"
-                      className="form-input"
-                      value={credentials[field] || ''}
-                      onChange={(e) => setCredentials({ ...credentials, [field]: e.target.value })}
-                      placeholder="Enter credential"
-                    />
-                  </div>
-                ))}
-              </>
-            )}
-
-            <div className="alert alert-info">
-              <span style={{ fontSize: '0.875rem' }}>
-                💡 Credentials are stored securely and never logged. You can test them after saving.
-              </span>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary">
-              <Plus size={18} />
-              Add Account
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }
@@ -425,11 +289,22 @@ function OAuthModal({
 
     try {
       // Initialize OAuth flow
-      const { oauth_url } = await oauthApi.initFlow(selectedPlatform);
+      const response = await oauthApi.initFlow(selectedPlatform);
+      
+      // Check if response exists and OAuth is properly configured
+      if (!response || !response.oauth_url) {
+        const envVars = response?.required_env_vars || [];
+        throw new Error(
+          response?.message || 
+          `OAuth not configured for ${selectedPlatform}. ` +
+          `Please set these environment variables: ${envVars.join(', ')}. ` +
+          `See PLATFORM_SETUP.md for detailed instructions.`
+        );
+      }
 
       // Open OAuth popup
       const popup = window.open(
-        oauth_url,
+        response.oauth_url,
         'oauth_popup',
         'width=600,height=700,scrollbars=yes'
       );
@@ -452,6 +327,14 @@ function OAuthModal({
           window.removeEventListener('message', handleMessage);
           
           try {
+            // Check if demo mode was used
+            if (event.data.data?.demo_mode) {
+              setError(
+                `Connected in demo mode. For real OAuth, configure credentials. ` +
+                `The account may not work for actual posting without proper credentials.`
+              );
+            }
+            
             // Complete the OAuth connection
             await oauthApi.connect({
               platform: selectedPlatform,
@@ -462,12 +345,14 @@ function OAuthModal({
             setIsConnecting(false);
             onSuccess();
           } catch (err: any) {
-            setError(err.response?.data?.error || 'Failed to connect account');
+            const errorMessage = err.response?.data?.error || err.message || 'Failed to connect account';
+            setError(errorMessage);
             setIsConnecting(false);
           }
         } else if (event.data.type === 'oauth_error') {
           window.removeEventListener('message', handleMessage);
-          setError(event.data.error || 'Authorization failed');
+          const errorMessage = event.data.error || 'Authorization failed';
+          setError(errorMessage);
           setIsConnecting(false);
         }
       };
@@ -483,7 +368,8 @@ function OAuthModal({
         }
       }, 1000);
     } catch (err: any) {
-      setError(err.message || 'Failed to initialize OAuth');
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to initialize OAuth';
+      setError(errorMessage);
       setIsConnecting(false);
     }
   };
