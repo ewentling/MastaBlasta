@@ -118,15 +118,29 @@ The application will be available at `http://localhost:33766`
 
 **Access the Web UI**: Open your browser and navigate to `http://localhost:33766`
 
+**Auto-Restart Configuration**: The Docker container is configured with `restart: unless-stopped`, which means:
+- ✅ Automatically starts when Docker daemon starts (on system boot)
+- ✅ Automatically restarts if the application crashes
+- ✅ Only stops when manually stopped with `docker-compose stop` or `docker-compose down`
+
 ### Using Docker
 
 ```bash
 # Build the image
 docker build -t mastablasta .
 
-# Run the container
-docker run -p 33766:33766 mastablasta
+# Run the container with auto-restart
+docker run -d \
+  --restart unless-stopped \
+  -p 33766:33766 \
+  --name mastablasta \
+  mastablasta
 ```
+
+**Auto-Restart Configuration**: The `--restart unless-stopped` flag ensures:
+- ✅ Container automatically starts on system boot
+- ✅ Container restarts automatically on failure
+- ✅ Container stays stopped only when manually stopped with `docker stop mastablasta`
 
 ### Local Development
 
