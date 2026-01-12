@@ -15,6 +15,7 @@ export default function BulkImportPage() {
   const [validationResult, setValidationResult] = useState<any>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [scheduleAll, setScheduleAll] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ step: string; current: number; total: number; success: number; error: number } | null>(null);
   const queryClient = useQueryClient();
 
   // Fetch import history
@@ -37,19 +38,31 @@ export default function BulkImportPage() {
   });
 
   const executeMutation = useMutation({
-    mutationFn: (data: { rows: CSVRow[], schedule_all: boolean }) =>
-      fetch('/api/bulk-import/execute', {
+    mutationFn: async (data: { rows: CSVRow[], schedule_all: boolean }) => {
+      const total = data.rows.length;
+      setImportProgress({ step: 'Validating', current: 0, total, success: 0, error: 0 });
+      
+      // Simulate progress steps
+      setTimeout(() => setImportProgress({ step: 'Uploading', current: Math.floor(total * 0.3), total, success: Math.floor(total * 0.3), error: 0 }), 500);
+      setTimeout(() => setImportProgress({ step: 'Scheduling', current: Math.floor(total * 0.6), total, success: Math.floor(total * 0.6), error: 0 }), 1000);
+      setTimeout(() => setImportProgress({ step: 'Completing', current: Math.floor(total * 0.9), total, success: Math.floor(total * 0.9), error: 0 }), 1500);
+      
+      return fetch('/api/bulk-import/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
-      }).then(res => res.json()),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bulk-imports'] });
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-      setCSVData([]);
-      setValidationResult(null);
-      setShowPreview(false);
-      alert('Bulk import completed successfully!');
+      }).then(res => res.json());
+    },
+    onSuccess: (data) => {
+      setImportProgress({ step: 'Complete', current: csvData.length, total: csvData.length, success: data.success || csvData.length, error: data.errors || 0 });
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['bulk-imports'] });
+        queryClient.invalidateQueries({ queryKey: ['posts'] });
+        setCSVData([]);
+        setValidationResult(null);
+        setShowPreview(false);
+        setImportProgress(null);
+      }, 3000);
     }
   });
 
@@ -231,6 +244,38 @@ export default function BulkImportPage() {
             </div>
           )}
         </div>
+
+        {/* Progress Bar */}
+        {importProgress && (
+          <div style={{ marginTop: '1.5rem', padding: '1.5rem', backgroundColor: 'var(--color-bgTertiary)', borderRadius: '8px', border: '1px solid var(--color-borderLight)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+              <div style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>
+                {importProgress.step}...
+              </div>
+              <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)' }}>
+                {importProgress.current} / {importProgress.total}
+              </div>
+            </div>
+            <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--color-bgSecondary)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ 
+                width: `${(importProgress.current / importProgress.total) * 100}%`, 
+                height: '100%', 
+                backgroundColor: importProgress.step === 'Complete' ? '#10b981' : 'var(--color-accentPrimary)',
+                transition: 'width 0.3s ease'
+              }} />
+            </div>
+            <div style={{ display: 'flex', gap: '1.5rem', marginTop: '0.75rem', fontSize: '0.875rem' }}>
+              <div style={{ color: '#10b981' }}>
+                ✓ Success: {importProgress.success}
+              </div>
+              {importProgress.error > 0 && (
+                <div style={{ color: '#ef4444' }}>
+                  ✗ Errors: {importProgress.error}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CSV Format Guide */}
