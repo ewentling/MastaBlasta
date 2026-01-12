@@ -2124,41 +2124,67 @@ def oauth_init(platform):
     if platform not in PLATFORM_ADAPTERS:
         return jsonify({'error': f'Invalid platform: {platform}'}), 400
     
-    # In a real implementation, this would:
-    # 1. Generate a state token for CSRF protection
-    # 2. Build the OAuth authorization URL with client_id, redirect_uri, scope
-    # 3. Return the URL to redirect the user to
-    # 4. Use environment variables for client IDs and redirect URIs
+    # Try to use real OAuth implementation from oauth.py
+    try:
+        from oauth import (
+            TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth,
+            TWITTER_CLIENT_ID, META_APP_ID, LINKEDIN_CLIENT_ID, GOOGLE_CLIENT_ID
+        )
+        
+        state_token = str(uuid.uuid4())
+        oauth_states[state_token] = {
+            'platform': platform,
+            'created_at': datetime.utcnow().isoformat()
+        }
+        
+        # Map platform names to OAuth classes and check if credentials are configured
+        oauth_config = {
+            'twitter': (TwitterOAuth, TWITTER_CLIENT_ID),
+            'facebook': (MetaOAuth, META_APP_ID),
+            'instagram': (MetaOAuth, META_APP_ID),
+            'linkedin': (LinkedInOAuth, LINKEDIN_CLIENT_ID),
+            'youtube': (GoogleOAuth, GOOGLE_CLIENT_ID),
+        }
+        
+        if platform in oauth_config:
+            oauth_class, client_id = oauth_config[platform]
+            
+            if client_id:
+                # Real OAuth is configured
+                if platform == 'twitter':
+                    auth_data = oauth_class.get_authorization_url(state_token)
+                    oauth_url = auth_data['authorization_url']
+                    oauth_states[state_token]['code_verifier'] = auth_data['code_verifier']
+                elif platform in ['facebook', 'instagram']:
+                    oauth_url = oauth_class.get_authorization_url(state_token)
+                elif platform == 'linkedin':
+                    oauth_url = oauth_class.get_authorization_url(state_token)
+                elif platform == 'youtube':
+                    oauth_url = oauth_class.get_authorization_url(state_token)
+                
+                return jsonify({
+                    'oauth_url': oauth_url,
+                    'state': state_token,
+                    'platform': platform,
+                    'mode': 'real'
+                })
+    except Exception as e:
+        logger.warning(f"Real OAuth not available for {platform}: {e}")
     
-    # For demo purposes, we'll simulate the OAuth flow
-    state_token = str(uuid.uuid4())
-    
-    # Store state token temporarily (in production, use a database or cache with expiration)
-    # TODO: Implement token expiration and cleanup mechanism
-    oauth_states[state_token] = {
-        'platform': platform,
-        'created_at': datetime.utcnow().isoformat()
-    }
-    
-    # Simulated OAuth URLs for each platform
-    # TODO: Move to environment variables for different deployment environments
-    oauth_urls = {
-        'twitter': f'https://twitter.com/i/oauth2/authorize?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/twitter&state={state_token}',
-        'facebook': f'https://www.facebook.com/v18.0/dialog/oauth?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/facebook&state={state_token}',
-        'instagram': f'https://api.instagram.com/oauth/authorize?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/instagram&state={state_token}',
-        'linkedin': f'https://www.linkedin.com/oauth/v2/authorization?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/linkedin&state={state_token}',
-        'threads': f'https://threads.net/oauth/authorize?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/threads&state={state_token}',
-        'bluesky': f'https://bsky.app/oauth/authorize?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/bluesky&state={state_token}',
-        'youtube': f'https://accounts.google.com/o/oauth2/v2/auth?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/youtube&state={state_token}&scope=https://www.googleapis.com/auth/youtube.upload',
-        'pinterest': f'https://www.pinterest.com/oauth/?client_id=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/pinterest&state={state_token}',
-        'tiktok': f'https://www.tiktok.com/auth/authorize?client_key=DEMO&redirect_uri=http://localhost:33766/api/oauth/callback/tiktok&state={state_token}',
-    }
-    
+    # Fallback to demo mode with helpful error message
     return jsonify({
-        'oauth_url': oauth_urls.get(platform, ''),
-        'state': state_token,
-        'platform': platform
-    })
+        'error': 'OAuth not configured',
+        'message': f'Please configure OAuth credentials for {platform}. See PLATFORM_SETUP.md for instructions.',
+        'platform': platform,
+        'mode': 'demo',
+        'required_env_vars': {
+            'twitter': ['TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'],
+            'facebook': ['META_APP_ID', 'META_APP_SECRET'],
+            'instagram': ['META_APP_ID', 'META_APP_SECRET'],
+            'linkedin': ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'],
+            'youtube': ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']
+        }.get(platform, [])
+    }), 400
 
 
 @app.route('/api/oauth/callback/<platform>', methods=['GET'])
@@ -2173,6 +2199,7 @@ def oauth_callback(platform):
     
     if not code:
         error = request.args.get('error', 'Authorization failed')
+        error_description = request.args.get('error_description', '')
         return f"""
         <html>
             <body>
@@ -2180,33 +2207,96 @@ def oauth_callback(platform):
                     window.opener.postMessage({{
                         type: 'oauth_error',
                         platform: '{platform}',
-                        error: '{error}'
+                        error: '{error}: {error_description}'
                     }}, '*');
                     window.close();
                 </script>
-                <p>Authorization failed. This window should close automatically.</p>
+                <p>Authorization failed: {error}. This window should close automatically.</p>
             </body>
         </html>
         """
     
-    # In a real implementation, this would:
-    # 1. Verify the state token
-    # 2. Exchange the code for an access token
-    # 3. Fetch user profile information
-    # 4. Store the credentials securely
+    # Try to use real OAuth token exchange
+    account_data = None
+    try:
+        from oauth import TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth
+        
+        # Verify state token
+        state_data = oauth_states.get(state)
+        if not state_data or state_data['platform'] != platform:
+            raise ValueError('Invalid state token')
+        
+        # Exchange code for token based on platform
+        if platform == 'twitter':
+            code_verifier = state_data.get('code_verifier')
+            if code_verifier:
+                token_data = TwitterOAuth.exchange_code_for_token(code, code_verifier)
+                if token_data:
+                    account_data = {
+                        'code': code,
+                        'state': state,
+                        'platform': platform,
+                        'username': 'twitter_user',
+                        'access_token': token_data['access_token'],
+                        'refresh_token': token_data.get('refresh_token'),
+                        'token_type': 'Bearer'
+                    }
+        elif platform in ['facebook', 'instagram']:
+            token_data = MetaOAuth.exchange_code_for_token(code)
+            if token_data:
+                account_data = {
+                    'code': code,
+                    'state': state,
+                    'platform': platform,
+                    'username': f'{platform}_user',
+                    'access_token': token_data['access_token'],
+                    'token_type': 'Bearer'
+                }
+        elif platform == 'linkedin':
+            token_data = LinkedInOAuth.exchange_code_for_token(code)
+            if token_data:
+                account_data = {
+                    'code': code,
+                    'state': state,
+                    'platform': platform,
+                    'username': 'linkedin_user',
+                    'access_token': token_data['access_token'],
+                    'token_type': 'Bearer'
+                }
+        elif platform == 'youtube':
+            token_data = GoogleOAuth.exchange_code_for_token(code)
+            if token_data:
+                account_data = {
+                    'code': code,
+                    'state': state,
+                    'platform': platform,
+                    'username': 'youtube_user',
+                    'access_token': token_data['access_token'],
+                    'refresh_token': token_data.get('refresh_token'),
+                    'token_type': 'Bearer'
+                }
+        
+        # Clean up state token
+        if state in oauth_states:
+            del oauth_states[state]
+            
+    except Exception as e:
+        logger.error(f"OAuth token exchange failed for {platform}: {e}")
     
-    # For demo purposes, simulate successful OAuth
-    account_data = {
-        'code': code,
-        'state': state,
-        'platform': platform,
-        'username': f'demo_user_{platform}',
-        'access_token': f'demo_token_{uuid.uuid4()}',
-        'token_type': 'Bearer'
-    }
+    # Fallback to demo mode if real OAuth failed
+    if not account_data:
+        logger.warning(f"Using demo OAuth for {platform}")
+        account_data = {
+            'code': code,
+            'state': state,
+            'platform': platform,
+            'username': f'demo_user_{platform}',
+            'access_token': f'demo_token_{uuid.uuid4()}',
+            'token_type': 'Bearer',
+            'demo_mode': True
+        }
     
     # Return HTML that posts message to opener window and closes popup
-    # TODO: In production, specify exact frontend origin instead of '*' for security
     return f"""
     <html>
         <head><title>Authorization Successful</title></head>

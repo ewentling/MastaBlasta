@@ -91,6 +91,13 @@ export default function AccountsPage() {
           </div>
         </div>
 
+        <div className="alert alert-info" style={{ margin: '1rem' }}>
+          <span style={{ fontSize: '0.875rem' }}>
+            💡 <strong>OAuth Setup:</strong> To use Quick Connect, you need to configure OAuth credentials in environment variables.
+            For manual setup, you can add accounts with API keys. See the documentation for platform-specific setup instructions.
+          </span>
+        </div>
+
         {isLoading ? (
           <div className="loading">Loading accounts...</div>
         ) : accounts.length === 0 ? (
@@ -284,8 +291,25 @@ function AccountModal({
                   marginTop: '1rem',
                   marginBottom: '1rem'
                 }}>
-                  <div style={{ fontWeight: '600', marginBottom: '1rem', color: 'var(--color-textPrimary)' }}>
+                  <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-textPrimary)' }}>
                     API Credentials
+                  </div>
+                  <div className="alert alert-info" style={{ fontSize: '0.75rem', padding: '0.5rem' }}>
+                    {platform === 'twitter' && (
+                      <span>Get these from <a href="https://developer.twitter.com/en/portal/dashboard" target="_blank" rel="noopener noreferrer">Twitter Developer Portal</a> → Your App → Keys and tokens</span>
+                    )}
+                    {platform === 'facebook' && (
+                      <span>Get these from <a href="https://developers.facebook.com/" target="_blank" rel="noopener noreferrer">Facebook Developers</a> → Your App → Settings → Basic. You'll also need a Page Access Token.</span>
+                    )}
+                    {platform === 'instagram' && (
+                      <span>Get these from <a href="https://developers.facebook.com/" target="_blank" rel="noopener noreferrer">Facebook Developers</a> (Instagram uses Meta's platform). You need a Business/Creator account linked to a Facebook Page.</span>
+                    )}
+                    {platform === 'linkedin' && (
+                      <span>Get these from <a href="https://www.linkedin.com/developers/" target="_blank" rel="noopener noreferrer">LinkedIn Developers</a> → Your App → Auth tab</span>
+                    )}
+                    {!['twitter', 'facebook', 'instagram', 'linkedin'].includes(platform) && (
+                      <span>See PLATFORM_SETUP.md for detailed setup instructions for {platform}.</span>
+                    )}
                   </div>
                 </div>
                 {fields.map(field => (
@@ -425,11 +449,22 @@ function OAuthModal({
 
     try {
       // Initialize OAuth flow
-      const { oauth_url } = await oauthApi.initFlow(selectedPlatform);
+      const response = await oauthApi.initFlow(selectedPlatform);
+      
+      // Check if OAuth is properly configured
+      if (!response.oauth_url) {
+        const envVars = response.required_env_vars || [];
+        throw new Error(
+          response.message || 
+          `OAuth not configured for ${selectedPlatform}. ` +
+          `Please set these environment variables: ${envVars.join(', ')}. ` +
+          `See PLATFORM_SETUP.md for detailed instructions.`
+        );
+      }
 
       // Open OAuth popup
       const popup = window.open(
-        oauth_url,
+        response.oauth_url,
         'oauth_popup',
         'width=600,height=700,scrollbars=yes'
       );
@@ -452,6 +487,14 @@ function OAuthModal({
           window.removeEventListener('message', handleMessage);
           
           try {
+            // Check if demo mode was used
+            if (event.data.data?.demo_mode) {
+              setError(
+                `Connected in demo mode. For real OAuth, configure credentials. ` +
+                `The account may not work for actual posting without proper credentials.`
+              );
+            }
+            
             // Complete the OAuth connection
             await oauthApi.connect({
               platform: selectedPlatform,
@@ -462,12 +505,14 @@ function OAuthModal({
             setIsConnecting(false);
             onSuccess();
           } catch (err: any) {
-            setError(err.response?.data?.error || 'Failed to connect account');
+            const errorMessage = err.response?.data?.error || err.message || 'Failed to connect account';
+            setError(errorMessage);
             setIsConnecting(false);
           }
         } else if (event.data.type === 'oauth_error') {
           window.removeEventListener('message', handleMessage);
-          setError(event.data.error || 'Authorization failed');
+          const errorMessage = event.data.error || 'Authorization failed';
+          setError(errorMessage);
           setIsConnecting(false);
         }
       };
