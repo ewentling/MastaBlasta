@@ -118,7 +118,7 @@ The application will be available at `http://localhost:33766`
 
 **Access the Web UI**: Open your browser and navigate to `http://localhost:33766`
 
-**Auto-Restart Configuration**: The Docker container is configured with `restart: unless-stopped`, which means:
+**Auto-Restart Configuration**: The Docker Compose configuration includes `restart: unless-stopped`, which means:
 - ✅ Automatically starts when Docker daemon starts (on system boot)
 - ✅ Automatically restarts if the application crashes
 - ✅ Only stops when manually stopped with `docker-compose stop` or `docker-compose down`
