@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart2, TrendingUp, Users, Eye, Heart, MessageCircle, Share2 } from 'lucide-react';
+import { BarChart2, TrendingUp, Users, Eye, Heart, MessageCircle, Share2, Smile, Frown, Meh } from 'lucide-react';
 import * as api from '../api';
 
 export default function AnalyticsPage() {
@@ -128,6 +128,50 @@ export default function AnalyticsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Overall Sentiment */}
+            {dashboardData.summary.sentiment && (
+              <div className="card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+                  <div style={{ 
+                    padding: '0.75rem', 
+                    borderRadius: '8px', 
+                    backgroundColor: '#10b981', 
+                    color: 'white' 
+                  }}>
+                    <MessageCircle size={24} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)', marginBottom: '0.5rem' }}>
+                      Comment Sentiment
+                    </div>
+                    <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Smile size={16} style={{ color: '#10b981' }} />
+                        <span style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>
+                          {dashboardData.summary.sentiment.positive}%
+                        </span>
+                        <span style={{ color: 'var(--color-textSecondary)' }}>Positive</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Meh size={16} style={{ color: '#94a3b8' }} />
+                        <span style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>
+                          {dashboardData.summary.sentiment.neutral}%
+                        </span>
+                        <span style={{ color: 'var(--color-textSecondary)' }}>Neutral</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Frown size={16} style={{ color: '#ef4444' }} />
+                        <span style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>
+                          {dashboardData.summary.sentiment.negative}%
+                        </span>
+                        <span style={{ color: 'var(--color-textSecondary)' }}>Negative</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Platform Breakdown */}
@@ -378,6 +422,27 @@ export default function AnalyticsPage() {
                             {data.comments.toLocaleString()}
                           </div>
                         </div>
+                        {data.sentiment && (
+                          <div>
+                            <div style={{ color: 'var(--color-textSecondary)', marginBottom: '0.25rem' }}>
+                              Comment Sentiment
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.875rem' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#10b981' }}>
+                                <Smile size={14} />
+                                {data.sentiment.positive}%
+                              </span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#94a3b8' }}>
+                                <Meh size={14} />
+                                {data.sentiment.neutral}%
+                              </span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: '#ef4444' }}>
+                                <Frown size={14} />
+                                {data.sentiment.negative}%
+                              </span>
+                            </div>
+                          </div>
+                        )}
                         <div>
                           <div style={{ color: 'var(--color-textSecondary)' }}>
                             <Share2 size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
