@@ -17,6 +17,7 @@ export default function PostPage() {
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledTime, setScheduledTime] = useState('');
+  const [isDraft, setIsDraft] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [aiSuggestions, setAiSuggestions] = useState<{
     optimized?: string;
@@ -32,8 +33,34 @@ export default function PostPage() {
     queryFn: () => accountsApi.getAll(),
   });
 
+  // Auto-save draft
+  useState(() => {
+    const interval = setInterval(() => {
+      if (content.trim() && !postMutation.isPending) {
+        const draft = {
+          content,
+          account_ids: selectedAccounts,
+          media: uploadedMedia.map(m => m.url),
+          is_draft: true,
+          timestamp: Date.now()
+        };
+        localStorage.setItem('post_draft', JSON.stringify(draft));
+      }
+    }, 30000); // Auto-save every 30 seconds
+    
+    return () => clearInterval(interval);
+  });
+
   const postMutation = useMutation({
     mutationFn: async (data: any) => {
+      if (isDraft) {
+        // Save as draft
+        const draft = { ...data, is_draft: true, id: Date.now().toString() };
+        const drafts = JSON.parse(localStorage.getItem('drafts') || '[]');
+        drafts.push(draft);
+        localStorage.setItem('drafts', JSON.stringify(drafts));
+        return Promise.resolve(draft);
+      }
       if (isScheduled) {
         return postsApi.schedule(data);
       }
