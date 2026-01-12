@@ -41,6 +41,13 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [googleTestStatus, setGoogleTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [googleTestMessage, setGoogleTestMessage] = useState('');
 
+  // Monitor polling configuration
+  const [monitorPollingInterval, setMonitorPollingInterval] = useState(() => {
+    const saved = localStorage.getItem('monitor-polling-interval');
+    return saved ? parseInt(saved) : 60; // Default: 60 minutes (1 hour)
+  });
+  const [showPollingWarning, setShowPollingWarning] = useState(false);
+
   const testLLMConnection = async () => {
     setLlmTestStatus('testing');
     setLlmTestMessage('');
@@ -100,6 +107,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         apiKey: googleApiKey,
       }));
     }
+
+    // Save monitor polling interval
+    localStorage.setItem('monitor-polling-interval', monitorPollingInterval.toString());
     
     onClose();
   };
@@ -649,6 +659,88 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
                   </div>
                 </>
               )}
+
+              {/* Monitor Polling Interval */}
+              <div className="form-group" style={{ marginTop: '2rem' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  marginBottom: '1rem',
+                  padding: '1rem',
+                  background: 'var(--color-bgTertiary)',
+                  borderRadius: '8px',
+                  border: '1px solid var(--color-borderLight)',
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <label className="form-label" style={{ marginBottom: '0.25rem' }}>
+                      Monitor Polling Interval
+                    </label>
+                    <p style={{ color: 'var(--color-textTertiary)', fontSize: '0.875rem', margin: 0 }}>
+                      How often active monitors check for new content (in minutes)
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                  <input
+                    type="number"
+                    value={monitorPollingInterval}
+                    onChange={(e) => {
+                      const newValue = parseInt(e.target.value);
+                      if (newValue !== monitorPollingInterval && newValue >= 5) {
+                        setShowPollingWarning(true);
+                      }
+                      setMonitorPollingInterval(newValue);
+                    }}
+                    min="5"
+                    max="1440"
+                    step="5"
+                    className="form-input"
+                    style={{
+                      width: '120px',
+                      padding: '0.75rem',
+                      background: 'var(--color-bgSecondary)',
+                      border: '1px solid var(--color-borderLight)',
+                      borderRadius: '6px',
+                      color: 'var(--color-textPrimary)',
+                      fontSize: '0.875rem',
+                    }}
+                  />
+                  <span style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>minutes</span>
+                </div>
+
+                {showPollingWarning && (
+                  <div style={{
+                    marginTop: '1rem',
+                    padding: '0.75rem',
+                    borderRadius: '6px',
+                    background: 'rgba(251, 191, 36, 0.1)',
+                    border: '1px solid rgba(251, 191, 36, 0.3)',
+                    color: '#f59e0b',
+                    fontSize: '0.875rem',
+                  }}>
+                    ⚠️ <strong>Warning:</strong> This change will affect all active monitors globally. Lower intervals check more frequently but use more API calls.
+                  </div>
+                )}
+
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '0.75rem',
+                  background: 'var(--color-bgTertiary)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-borderLight)',
+                }}>
+                  <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem', lineHeight: '1.6' }}>
+                    <strong>Recommendations:</strong>
+                    <ul style={{ marginLeft: '1.25rem', marginTop: '0.5rem' }}>
+                      <li>Default: 60 minutes (1 hour) - Good for most use cases</li>
+                      <li>15-30 minutes - For time-sensitive monitoring</li>
+                      <li>120+ minutes - For less critical monitoring</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
