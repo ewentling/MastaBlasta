@@ -213,7 +213,7 @@ export default function ABTestingPage() {
                     top: '10px',
                     right: '10px',
                     background: 'linear-gradient(135deg, #ffd700, #ffed4e)',
-                    color: '#000',
+                    color: '#1a1a1a',
                     padding: '4px 12px',
                     borderRadius: '20px',
                     fontSize: '12px',
