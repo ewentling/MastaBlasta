@@ -803,6 +803,196 @@ class TestVideoGeneration:
 
 
 # ============================================================================
+# IMAGE GENERATION TESTS
+# ============================================================================
+
+class TestImageGeneration:
+    """Test AI-powered image generation capabilities"""
+    
+    def test_image_generation_endpoint(self, client):
+        """Test AI image generation endpoint"""
+        response = client.post('/api/ai/generate-image', json={
+            'prompt': 'A beautiful sunset over mountains',
+            'style': 'photorealistic',
+            'platform': 'instagram'
+        })
+        
+        assert response.status_code in [200, 503]  # 503 if AI not enabled
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'image_url' in data or 'image_data' in data
+            assert data['style'] == 'photorealistic'
+    
+    def test_post_image_generation(self, client):
+        """Test social media post image generation"""
+        response = client.post('/api/ai/generate-post-image', json={
+            'content': 'Exciting new product launch announcement!',
+            'platform': 'instagram',
+            'style': 'modern',
+            'include_text_space': True
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert data.get('post_optimized') is True
+            assert 'platform' in data
+    
+    def test_video_thumbnail_generation(self, client):
+        """Test video thumbnail generation"""
+        response = client.post('/api/ai/generate-video-thumbnail', json={
+            'topic': 'How to cook pasta',
+            'video_type': 'tutorial',
+            'platform': 'youtube',
+            'style': 'cinematic'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'thumbnail_type' in data
+            assert data.get('thumbnail_type') == 'tutorial'
+    
+    def test_video_images_generation(self, client):
+        """Test generating images for video from script"""
+        response = client.post('/api/ai/generate-video-images', json={
+            'script': 'Scene 1: Product intro\nScene 2: Key features\nScene 3: Call to action',
+            'num_images': 3,
+            'style': 'cinematic',
+            'platform': 'instagram'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'images' in data
+            assert data.get('video_ready') is True
+    
+    def test_image_variations(self, client):
+        """Test creating image variations"""
+        # Create a simple test image
+        import base64
+        from PIL import Image
+        import io
+        
+        # Create a small test image
+        img = Image.new('RGB', (100, 100), color='red')
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        img_data = base64.b64encode(buffer.getvalue()).decode()
+        
+        response = client.post('/api/ai/create-image-variations', json={
+            'image_data': f'data:image/png;base64,{img_data}',
+            'num_variations': 2
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'variations' in data
+    
+    def test_image_styles_available(self):
+        """Test that image styles are defined"""
+        from app import ai_image_generator
+        
+        assert len(ai_image_generator.IMAGE_STYLES) > 0
+        assert 'photorealistic' in ai_image_generator.IMAGE_STYLES
+        assert 'cinematic' in ai_image_generator.IMAGE_STYLES
+        assert 'modern' in ai_image_generator.IMAGE_STYLES
+    
+    def test_thumbnail_templates_available(self):
+        """Test that thumbnail templates are defined"""
+        from app import ai_image_generator
+        
+        assert len(ai_image_generator.THUMBNAIL_TEMPLATES) > 0
+        assert 'product_showcase' in ai_image_generator.THUMBNAIL_TEMPLATES
+        assert 'tutorial' in ai_image_generator.THUMBNAIL_TEMPLATES
+    
+    def test_ai_status_includes_image_generation(self, client):
+        """Test that AI status includes image generation service"""
+        response = client.get('/api/ai/status')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert 'services' in data
+        assert 'image_generation' in data['services']
+        assert 'enabled' in data['services']['image_generation']
+        assert 'features' in data['services']['image_generation']
+        assert 'styles' in data['services']['image_generation']
+        
+        features = data['services']['image_generation']['features']
+        assert 'post_images' in features
+        assert 'video_thumbnails' in features
+        assert 'video_content_images' in features
+
+
+# ============================================================================
+# VIDEO TEMPLATE TESTS
+# ============================================================================
+
+class TestVideoTemplates:
+    """Test video template functionality"""
+    
+    def test_get_video_templates(self, client):
+        """Test getting all video templates"""
+        response = client.get('/api/ai/video-templates')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert 'templates' in data
+        assert data['count'] > 0
+    
+    def test_get_specific_template(self, client):
+        """Test getting a specific template"""
+        response = client.get('/api/ai/video-templates/product_showcase')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert 'template' in data
+        assert data['template']['name'] == 'Product Showcase'
+    
+    def test_generate_from_template(self, client):
+        """Test generating script from template"""
+        response = client.post('/api/ai/generate-from-template', json={
+            'template_id': 'tutorial',
+            'topic': 'How to use our software',
+            'platform': 'youtube'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'script' in data
+            assert data['template_id'] == 'tutorial'
+    
+    def test_template_library_size(self):
+        """Test that template library has multiple templates"""
+        from app import ai_video_generator
+        
+        assert len(ai_video_generator.VIDEO_TEMPLATES) >= 6
+        assert 'product_showcase' in ai_video_generator.VIDEO_TEMPLATES
+        assert 'tutorial' in ai_video_generator.VIDEO_TEMPLATES
+        assert 'testimonial' in ai_video_generator.VIDEO_TEMPLATES
+
+
+# ============================================================================
 # PERFORMANCE TESTS
 # ============================================================================
 

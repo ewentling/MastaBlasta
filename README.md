@@ -59,15 +59,25 @@ See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 - **Alt Text Generation**: Automatic accessibility descriptions for images
 - **Format Conversion**: Convert images to optimal formats and sizes
 
-#### 4. Predictive Analytics
+#### 4. 🎨 AI Image Generation (DALL-E 3 Powered)
+- **Post Image Generation**: Create custom images for social media posts with DALL-E 3
+- **Video Thumbnails**: Generate eye-catching thumbnails optimized for each platform
+- **Video Content Images**: Automatically generate images for video scenes from scripts
+- **Image Variations**: Create multiple variations of existing images
+- **Multiple Styles**: 9 artistic styles (photorealistic, illustration, minimalist, abstract, cinematic, vintage, modern, cartoon, corporate)
+- **Platform-Specific Sizing**: Automatic size optimization for each social platform
+
+#### 5. Predictive Analytics
 - **Performance Prediction**: Forecast engagement before publishing
 - **A/B Testing**: Compare predicted performance of multiple variations
 - **Recommendation Engine**: Get actionable suggestions to improve posts
 - **Model Training**: Train custom models on your historical data
 
-#### 5. 🎬 AI Video Generation (Rival to Blotato)
+#### 6. 🎬 AI Video Generation (Rival to Blotato)
 - **Video Script Generation**: AI-powered video scripts optimized for platform and duration
+- **Video Template Library**: 6 pre-built templates (product showcase, tutorial, testimonial, announcement, BTS, story)
 - **Slideshow Creation**: Automatically create video slideshows from images with transitions
+- **FFmpeg Rendering**: Actual video file generation with server-side rendering
 - **Text-to-Video Prompts**: Generate optimized prompts for AI video generation tools (Runway, Pika, Stable Video)
 - **Video Caption Generation**: Create engaging captions and hashtags for video content
 - **Platform Optimization**: Automatic video specs and ffmpeg commands for each platform
@@ -873,6 +883,131 @@ POST /api/ai/generate-alt-text
 }
 ```
 
+### AI Image Generation
+
+**Generate Custom Image**
+```bash
+POST /api/ai/generate-image
+{
+  "prompt": "A beautiful sunset over mountains",
+  "style": "photorealistic",  // photorealistic, illustration, minimalist, abstract, cinematic, vintage, modern, cartoon, corporate
+  "size": "1024x1024",  // 1024x1024, 1792x1024, 1024x1792
+  "platform": "instagram"  // Optional: auto-adjusts size
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "image_url": "https://...",
+  "image_data": "data:image/png;base64,...",
+  "size": "1024x1024",
+  "style": "photorealistic",
+  "platform": "instagram",
+  "original_prompt": "A beautiful sunset over mountains",
+  "revised_prompt": "A stunning photorealistic scene..."
+}
+```
+
+**Generate Post Image**
+```bash
+POST /api/ai/generate-post-image
+{
+  "content": "Exciting new product launch announcement!",
+  "platform": "instagram",
+  "style": "modern",
+  "include_text_space": true
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "image_url": "https://...",
+  "image_data": "data:image/png;base64,...",
+  "post_optimized": true,
+  "text_overlay_ready": true,
+  "platform": "instagram"
+}
+```
+
+**Generate Video Thumbnail**
+```bash
+POST /api/ai/generate-video-thumbnail
+{
+  "topic": "How to cook pasta",
+  "video_type": "tutorial",  // product_showcase, tutorial, testimonial, announcement, behind_the_scenes, story
+  "platform": "youtube",
+  "style": "cinematic"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "image_url": "https://...",
+  "image_data": "data:image/png;base64,...",
+  "thumbnail_type": "tutorial",
+  "optimized_for": "youtube video thumbnail",
+  "size": "1792x1024"
+}
+```
+
+**Generate Images for Video**
+```bash
+POST /api/ai/generate-video-images
+{
+  "script": "Scene 1: Product intro\nScene 2: Key features\nScene 3: Call to action",
+  "num_images": 3,
+  "style": "cinematic",
+  "platform": "instagram"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "images": [
+    {
+      "scene_number": 1,
+      "scene_description": "Scene 1: Product intro",
+      "image_url": "https://...",
+      "image_data": "data:image/png;base64,...",
+      "prompt": "Scene 1: Product intro. Consistent style, high quality."
+    }
+  ],
+  "count": 3,
+  "video_ready": true
+}
+```
+
+**Create Image Variations**
+```bash
+POST /api/ai/create-image-variations
+{
+  "image_data": "data:image/png;base64,...",
+  "num_variations": 3
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "variations": [
+    {
+      "image_url": "https://...",
+      "image_data": "data:image/png;base64,..."
+    }
+  ],
+  "count": 3
+}
+```
+
 ### Predictive Analytics
 
 **Predict Post Performance**
@@ -951,6 +1086,54 @@ POST /api/ai/train-model
 
 MastaBlasta now includes powerful AI-driven video generation capabilities that rival leading tools like Blotato.
 
+**Get Video Templates**
+```bash
+GET /api/ai/video-templates
+```
+
+Response:
+```json
+{
+  "success": true,
+  "templates": {
+    "product_showcase": {
+      "name": "Product Showcase",
+      "description": "Professional product demonstration",
+      "scenes": 4,
+      "duration": 30,
+      "style": "professional"
+    },
+    "tutorial": {...},
+    "testimonial": {...}
+  },
+  "count": 6
+}
+```
+
+**Generate Script from Template**
+```bash
+POST /api/ai/generate-from-template
+{
+  "template_id": "tutorial",
+  "topic": "How to use our software",
+  "platform": "youtube"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "template_id": "tutorial",
+  "template_name": "Tutorial",
+  "script": "Scene 1: Introduction...",
+  "platform": "youtube",
+  "duration": 45,
+  "style": "educational",
+  "scenes": 5
+}
+```
+
 **Generate Video Script**
 ```bash
 POST /api/ai/generate-video-script
@@ -975,7 +1158,7 @@ Response:
 }
 ```
 
-**Create Slideshow Video**
+**Create Slideshow Video (FFmpeg Command Generation)**
 ```bash
 POST /api/ai/create-slideshow
 {
@@ -1000,6 +1183,32 @@ Response:
     "aspect_ratio": "9:16"
   },
   "ffmpeg_command_template": "ffmpeg -framerate 1/3 ..."
+}
+```
+
+**Render Slideshow Video (Actual Video File)**
+```bash
+POST /api/ai/render-slideshow
+{
+  "images": ["/path/to/image1.jpg", "/path/to/image2.jpg"],
+  "duration_per_image": 3.0,
+  "platform": "instagram",
+  "post_type": "reel",
+  "transition": "fade",
+  "output_path": "/tmp/my_video.mp4"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "output_path": "/tmp/my_video.mp4",
+  "file_size": 2048576,
+  "dimensions": {"width": 1080, "height": 1920},
+  "duration": 9.0,
+  "format": "mp4",
+  "codec": "h264"
 }
 ```
 

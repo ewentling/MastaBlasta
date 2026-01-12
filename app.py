@@ -554,6 +554,257 @@ class ImageEnhancer:
         }
 
 
+class AIImageGenerator:
+    """AI-powered image generation for posts, video thumbnails, and video content"""
+    
+    def __init__(self):
+        self.api_key = os.getenv('OPENAI_API_KEY', '')
+        self.enabled = AI_ENABLED and bool(self.api_key)
+        if self.enabled:
+            openai.api_key = self.api_key
+        
+        # Image generation presets
+        self.IMAGE_STYLES = {
+            'photorealistic': 'Photorealistic, high quality, professional photography',
+            'illustration': 'Digital illustration, vibrant colors, artistic style',
+            'minimalist': 'Minimalist design, clean lines, simple composition',
+            'abstract': 'Abstract art, creative, modern design',
+            'cinematic': 'Cinematic style, dramatic lighting, movie poster aesthetic',
+            'vintage': 'Vintage style, retro aesthetic, nostalgic feel',
+            'modern': 'Modern design, contemporary aesthetic, sleek and professional',
+            'cartoon': 'Cartoon style, playful, colorful and fun',
+            'corporate': 'Professional corporate style, business appropriate, clean design'
+        }
+        
+        # Thumbnail templates for different video types
+        self.THUMBNAIL_TEMPLATES = {
+            'product_showcase': 'Eye-catching product photo with dramatic lighting',
+            'tutorial': 'Clear step-by-step visual with numbered elements',
+            'testimonial': 'Friendly portrait with quote overlay space',
+            'announcement': 'Bold text-ready background with exciting colors',
+            'behind_the_scenes': 'Candid workplace or process scene',
+            'story': 'Cinematic scene with narrative visual elements'
+        }
+    
+    def generate_image(self, prompt: str, style: str = 'photorealistic', 
+                      size: str = '1024x1024', platform: str = None) -> Dict[str, Any]:
+        """Generate an AI image using DALL-E"""
+        if not self.enabled:
+            return {'error': 'AI image generation not enabled', 'enabled': False}
+        
+        try:
+            # Add style to prompt
+            style_desc = self.IMAGE_STYLES.get(style, self.IMAGE_STYLES['photorealistic'])
+            enhanced_prompt = f"{prompt}. Style: {style_desc}"
+            
+            # Platform-specific size adjustments
+            if platform:
+                if platform in ['instagram', 'facebook', 'threads']:
+                    size = '1024x1024'  # Square
+                elif platform in ['twitter', 'linkedin']:
+                    size = '1792x1024'  # Landscape
+                elif platform in ['tiktok', 'pinterest']:
+                    size = '1024x1792'  # Portrait
+            
+            # Generate image with DALL-E
+            response = openai.images.generate(
+                model="dall-e-3",
+                prompt=enhanced_prompt,
+                size=size,
+                quality="standard",
+                n=1
+            )
+            
+            image_url = response.data[0].url
+            revised_prompt = response.data[0].revised_prompt
+            
+            # Download image and convert to base64
+            import requests
+            img_response = requests.get(image_url, timeout=30)
+            img_data = base64.b64encode(img_response.content).decode()
+            
+            return {
+                'success': True,
+                'image_url': image_url,
+                'image_data': f'data:image/png;base64,{img_data}',
+                'size': size,
+                'style': style,
+                'platform': platform,
+                'original_prompt': prompt,
+                'revised_prompt': revised_prompt
+            }
+        except Exception as e:
+            logger.error(f"Image generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_video_thumbnail(self, video_topic: str, video_type: str = 'product_showcase',
+                                 platform: str = 'youtube', style: str = 'cinematic') -> Dict[str, Any]:
+        """Generate a thumbnail image for video content"""
+        if not self.enabled:
+            return {'error': 'AI thumbnail generation not enabled', 'enabled': False}
+        
+        # Get template description
+        template_desc = self.THUMBNAIL_TEMPLATES.get(video_type, 'Engaging video thumbnail')
+        
+        # Build thumbnail prompt
+        prompt = f"Create a compelling video thumbnail for: {video_topic}. {template_desc}. Include bold text overlay space. High contrast, eye-catching, professional quality."
+        
+        # Determine size based on platform
+        size_map = {
+            'youtube': '1792x1024',  # 16:9
+            'instagram': '1024x1024',  # 1:1
+            'tiktok': '1024x1792',  # 9:16
+            'facebook': '1792x1024',  # 16:9
+            'twitter': '1792x1024'  # 16:9
+        }
+        size = size_map.get(platform, '1792x1024')
+        
+        result = self.generate_image(prompt, style, size, platform)
+        
+        if result.get('success'):
+            result['thumbnail_type'] = video_type
+            result['optimized_for'] = f'{platform} video thumbnail'
+        
+        return result
+    
+    def generate_images_for_video(self, video_script: str, num_images: int = 4,
+                                  style: str = 'cinematic', platform: str = 'instagram') -> Dict[str, Any]:
+        """Generate multiple images for video creation based on script"""
+        if not self.enabled:
+            return {'error': 'AI image generation not enabled', 'enabled': False}
+        
+        try:
+            # Parse scenes from script or split into segments
+            scenes = []
+            script_lines = video_script.split('\n')
+            
+            for line in script_lines:
+                if line.strip() and any(word in line.lower() for word in ['scene', 'shot', 'visual', ':']):
+                    scenes.append(line.strip())
+            
+            # If no clear scenes, split script into segments
+            if not scenes:
+                words = video_script.split()
+                chunk_size = max(len(words) // num_images, 10)
+                for i in range(0, len(words), chunk_size):
+                    chunk = ' '.join(words[i:i+chunk_size])
+                    if chunk:
+                        scenes.append(chunk)
+            
+            # Limit to requested number
+            scenes = scenes[:num_images]
+            
+            # Generate image for each scene
+            generated_images = []
+            for i, scene in enumerate(scenes, 1):
+                # Extract visual description
+                visual_prompt = scene
+                if ':' in scene:
+                    visual_prompt = scene.split(':', 1)[1].strip()
+                
+                prompt = f"Scene {i}: {visual_prompt}. Consistent style, high quality."
+                
+                result = self.generate_image(
+                    prompt,
+                    style=style,
+                    size='1024x1024' if platform == 'instagram' else '1024x1792',
+                    platform=platform
+                )
+                
+                if result.get('success'):
+                    generated_images.append({
+                        'scene_number': i,
+                        'scene_description': scene,
+                        'image_url': result['image_url'],
+                        'image_data': result['image_data'],
+                        'prompt': result['original_prompt']
+                    })
+                else:
+                    logger.warning(f"Failed to generate image for scene {i}: {result.get('error')}")
+            
+            return {
+                'success': True,
+                'images': generated_images,
+                'count': len(generated_images),
+                'style': style,
+                'platform': platform,
+                'video_ready': True
+            }
+        except Exception as e:
+            logger.error(f"Video image generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_post_image(self, post_content: str, platform: str = 'instagram',
+                           style: str = 'modern', include_text_space: bool = True) -> Dict[str, Any]:
+        """Generate an image optimized for social media post"""
+        if not self.enabled:
+            return {'error': 'AI image generation not enabled', 'enabled': False}
+        
+        # Build prompt based on post content
+        text_space_note = "with space for text overlay" if include_text_space else ""
+        prompt = f"Create a social media image for this post: '{post_content}'. Platform: {platform}. Professional, engaging, {text_space_note}"
+        
+        result = self.generate_image(prompt, style, platform=platform)
+        
+        if result.get('success'):
+            result['post_optimized'] = True
+            result['text_overlay_ready'] = include_text_space
+        
+        return result
+    
+    def create_image_variations(self, image_data: str, num_variations: int = 3) -> Dict[str, Any]:
+        """Create variations of an existing image"""
+        if not self.enabled:
+            return {'error': 'AI image generation not enabled', 'enabled': False}
+        
+        try:
+            # Decode base64 image
+            if image_data.startswith('data:image'):
+                image_data = image_data.split(',')[1]
+            
+            image_bytes = base64.b64decode(image_data)
+            
+            # Save to temporary file
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+                tmp_file.write(image_bytes)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Create variations using DALL-E
+                with open(tmp_path, 'rb') as image_file:
+                    response = openai.images.create_variation(
+                        image=image_file,
+                        n=min(num_variations, 3),  # DALL-E limit
+                        size="1024x1024"
+                    )
+                
+                variations = []
+                for img in response.data:
+                    # Download variation
+                    import requests
+                    img_response = requests.get(img.url, timeout=30)
+                    var_data = base64.b64encode(img_response.content).decode()
+                    
+                    variations.append({
+                        'image_url': img.url,
+                        'image_data': f'data:image/png;base64,{var_data}'
+                    })
+                
+                return {
+                    'success': True,
+                    'variations': variations,
+                    'count': len(variations)
+                }
+            finally:
+                # Clean up temp file
+                os.unlink(tmp_path)
+        
+        except Exception as e:
+            logger.error(f"Image variation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+
+
 class EngagementPredictor:
     """Predictive analytics for engagement forecasting"""
     
@@ -717,6 +968,64 @@ class AIVideoGenerator:
     STANDARD_BITRATE = '3000k'
     AUDIO_CODEC = 'aac'
     AUDIO_BITRATE = '192k'
+    
+    # Video template library
+    VIDEO_TEMPLATES = {
+        'product_showcase': {
+            'name': 'Product Showcase',
+            'description': 'Professional product demonstration',
+            'scenes': 4,
+            'duration': 30,
+            'style': 'professional',
+            'transitions': ['fade', 'slide'],
+            'script_template': 'Scene 1: Product intro\nScene 2: Key features\nScene 3: Benefits\nScene 4: Call to action'
+        },
+        'behind_the_scenes': {
+            'name': 'Behind the Scenes',
+            'description': 'Show your process and team',
+            'scenes': 3,
+            'duration': 20,
+            'style': 'casual',
+            'transitions': ['fade', 'crossfade'],
+            'script_template': 'Scene 1: Setting the stage\nScene 2: The process\nScene 3: Final result'
+        },
+        'tutorial': {
+            'name': 'Tutorial',
+            'description': 'Step-by-step instructional video',
+            'scenes': 5,
+            'duration': 45,
+            'style': 'educational',
+            'transitions': ['slide', 'wipe'],
+            'script_template': 'Scene 1: Introduction\nScene 2: Step 1\nScene 3: Step 2\nScene 4: Step 3\nScene 5: Summary'
+        },
+        'testimonial': {
+            'name': 'Testimonial',
+            'description': 'Customer success story',
+            'scenes': 3,
+            'duration': 25,
+            'style': 'emotional',
+            'transitions': ['fade', 'dissolve'],
+            'script_template': 'Scene 1: The problem\nScene 2: The solution\nScene 3: The results'
+        },
+        'announcement': {
+            'name': 'Announcement',
+            'description': 'Quick exciting news or update',
+            'scenes': 2,
+            'duration': 15,
+            'style': 'energetic',
+            'transitions': ['zoom', 'fade'],
+            'script_template': 'Scene 1: The big reveal\nScene 2: What it means'
+        },
+        'story': {
+            'name': 'Story',
+            'description': 'Narrative-driven content',
+            'scenes': 4,
+            'duration': 40,
+            'style': 'cinematic',
+            'transitions': ['fade', 'crossfade', 'slide'],
+            'script_template': 'Scene 1: Setup\nScene 2: Conflict\nScene 3: Resolution\nScene 4: Conclusion'
+        }
+    }
     
     def __init__(self):
         self.api_key = os.getenv('OPENAI_API_KEY', '')
@@ -1011,6 +1320,170 @@ Make it engaging and platform-optimized."""
             f"output.mp4"
         )
     
+    def get_video_templates(self) -> Dict[str, Any]:
+        """Get all available video templates"""
+        return {
+            'success': True,
+            'templates': self.VIDEO_TEMPLATES,
+            'count': len(self.VIDEO_TEMPLATES)
+        }
+    
+    def get_template(self, template_id: str) -> Dict[str, Any]:
+        """Get a specific video template"""
+        template = self.VIDEO_TEMPLATES.get(template_id)
+        
+        if not template:
+            return {
+                'error': f'Template {template_id} not found',
+                'success': False,
+                'available_templates': list(self.VIDEO_TEMPLATES.keys())
+            }
+        
+        return {
+            'success': True,
+            'template_id': template_id,
+            'template': template
+        }
+    
+    def generate_from_template(self, template_id: str, topic: str, platform: str) -> Dict[str, Any]:
+        """Generate video script using a template"""
+        if not self.enabled:
+            return {'error': 'AI video generation not enabled', 'enabled': False}
+        
+        template = self.VIDEO_TEMPLATES.get(template_id)
+        if not template:
+            return {
+                'error': f'Template {template_id} not found',
+                'success': False,
+                'available_templates': list(self.VIDEO_TEMPLATES.keys())
+            }
+        
+        try:
+            prompt = f"""Create a {template['duration']}-second {template['style']} video script for {platform} about: {topic}
+
+Use this template structure:
+{template['script_template']}
+
+Requirements:
+- {template['scenes']} scenes total
+- Duration: {template['duration']} seconds
+- Style: {template['style']}
+- Transitions: {', '.join(template['transitions'])}
+- Include timing for each scene
+- Add visual descriptions
+- Platform: {platform}
+
+Return a detailed scene-by-scene breakdown."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": f"You are a professional video script writer specializing in {template['style']} content."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.7
+            )
+            
+            script = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'template_id': template_id,
+                'template_name': template['name'],
+                'script': script,
+                'platform': platform,
+                'duration': template['duration'],
+                'style': template['style'],
+                'scenes': template['scenes'],
+                'transitions': template['transitions']
+            }
+        except Exception as e:
+            logger.error(f"Template-based script generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def render_slideshow_with_ffmpeg(self, images: List[str], duration_per_image: float, 
+                                    output_path: str, specs: Dict, transition: str = 'fade') -> Dict[str, Any]:
+        """Actually render video using FFmpeg (requires ffmpeg installed)"""
+        if not images:
+            return {'error': 'At least one image is required', 'success': False}
+        
+        try:
+            import subprocess
+            import tempfile
+            
+            # Create temporary directory for processing
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Create input file list for FFmpeg
+                input_list_path = os.path.join(temp_dir, 'inputs.txt')
+                with open(input_list_path, 'w') as f:
+                    for img in images:
+                        f.write(f"file '{img}'\n")
+                        f.write(f"duration {duration_per_image}\n")
+                    # Add last image one more time for proper ending
+                    if images:
+                        f.write(f"file '{images[-1]}'\n")
+                
+                # Build FFmpeg command
+                width = specs['width']
+                height = specs['height']
+                
+                cmd = [
+                    'ffmpeg',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', input_list_path,
+                    '-vf', f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2",
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',
+                    '-y',  # Overwrite output
+                    output_path
+                ]
+                
+                # Execute FFmpeg
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout
+                )
+                
+                if result.returncode == 0:
+                    # Get video file size
+                    file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+                    
+                    return {
+                        'success': True,
+                        'output_path': output_path,
+                        'file_size': file_size,
+                        'dimensions': {'width': width, 'height': height},
+                        'duration': len(images) * duration_per_image,
+                        'image_count': len(images),
+                        'format': 'mp4',
+                        'codec': 'h264'
+                    }
+                else:
+                    return {
+                        'error': 'FFmpeg rendering failed',
+                        'success': False,
+                        'stderr': result.stderr[:500]  # First 500 chars of error
+                    }
+        
+        except subprocess.TimeoutExpired:
+            return {'error': 'Video rendering timeout (exceeded 5 minutes)', 'success': False}
+        except FileNotFoundError:
+            return {
+                'error': 'FFmpeg not installed. Install with: apt-get install ffmpeg',
+                'success': False,
+                'fallback': 'Use create_slideshow_video for command generation'
+            }
+        except Exception as e:
+            logger.error(f"Video rendering error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
     def get_platform_video_specs(self, platform: str) -> Dict[str, Any]:
         """Get all video specifications for a platform"""
         specs = self.platform_specs.get(platform, {})
@@ -1033,6 +1506,7 @@ Make it engaging and platform-optimized."""
 ai_content_generator = AIContentGenerator()
 intelligent_scheduler = IntelligentScheduler()
 image_enhancer = ImageEnhancer()
+ai_image_generator = AIImageGenerator()
 engagement_predictor = EngagementPredictor()
 ai_video_generator = AIVideoGenerator()
 
@@ -2438,6 +2912,11 @@ def ai_status():
                 'enabled': image_enhancer.enabled,
                 'features': ['platform_optimization', 'quality_enhancement', 'alt_text_generation']
             },
+            'image_generation': {
+                'enabled': ai_image_generator.enabled,
+                'features': ['post_images', 'video_thumbnails', 'video_content_images', 'image_variations'],
+                'styles': list(ai_image_generator.IMAGE_STYLES.keys())
+            },
             'predictive_analytics': {
                 'enabled': engagement_predictor.enabled,
                 'trained': engagement_predictor.trained,
@@ -2445,12 +2924,131 @@ def ai_status():
             },
             'video_generation': {
                 'enabled': ai_video_generator.enabled,
-                'features': ['script_generation', 'slideshow_creation', 'text_to_video_prompts', 'caption_generation', 'platform_optimization']
+                'features': ['script_generation', 'slideshow_creation', 'text_to_video_prompts', 'caption_generation', 'platform_optimization', 'template_library', 'ffmpeg_rendering'],
+                'templates': list(ai_video_generator.VIDEO_TEMPLATES.keys())
             }
         },
         'setup_required': not ai_content_generator.enabled and AI_ENABLED,
         'api_key_status': 'configured' if os.getenv('OPENAI_API_KEY') else 'not_configured'
     })
+
+
+@app.route('/api/ai/generate-image', methods=['POST'])
+def ai_generate_image():
+    """Generate an AI image using DALL-E"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    prompt = data.get('prompt', '')
+    style = data.get('style', 'photorealistic')
+    size = data.get('size', '1024x1024')
+    platform = data.get('platform')
+    
+    if not prompt:
+        return jsonify({'error': 'Prompt is required'}), 400
+    
+    result = ai_image_generator.generate_image(prompt, style, size, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-post-image', methods=['POST'])
+def ai_generate_post_image():
+    """Generate an image optimized for social media post"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    post_content = data.get('content', '')
+    platform = data.get('platform', 'instagram')
+    style = data.get('style', 'modern')
+    include_text_space = data.get('include_text_space', True)
+    
+    if not post_content:
+        return jsonify({'error': 'Post content is required'}), 400
+    
+    result = ai_image_generator.generate_post_image(post_content, platform, style, include_text_space)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-video-thumbnail', methods=['POST'])
+def ai_generate_video_thumbnail():
+    """Generate a thumbnail image for video content"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_topic = data.get('topic', '')
+    video_type = data.get('video_type', 'product_showcase')
+    platform = data.get('platform', 'youtube')
+    style = data.get('style', 'cinematic')
+    
+    if not video_topic:
+        return jsonify({'error': 'Video topic is required'}), 400
+    
+    result = ai_image_generator.generate_video_thumbnail(video_topic, video_type, platform, style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-video-images', methods=['POST'])
+def ai_generate_video_images():
+    """Generate multiple images for video creation based on script"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_script = data.get('script', '')
+    num_images = data.get('num_images', 4)
+    style = data.get('style', 'cinematic')
+    platform = data.get('platform', 'instagram')
+    
+    if not video_script:
+        return jsonify({'error': 'Video script is required'}), 400
+    
+    result = ai_image_generator.generate_images_for_video(video_script, num_images, style, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/create-image-variations', methods=['POST'])
+def ai_create_image_variations():
+    """Create variations of an existing image"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    image_data = data.get('image_data', '')
+    num_variations = data.get('num_variations', 3)
+    
+    if not image_data:
+        return jsonify({'error': 'Image data is required'}), 400
+    
+    result = ai_image_generator.create_image_variations(image_data, num_variations)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
 
 
 @app.route('/api/ai/generate-video-script', methods=['POST'])
@@ -2578,6 +3176,87 @@ def ai_video_specs(platform):
     
     if not result.get('success'):
         return jsonify(result), 404
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/video-templates', methods=['GET'])
+def ai_video_templates():
+    """Get all available video templates"""
+    result = ai_video_generator.get_video_templates()
+    return jsonify(result)
+
+
+@app.route('/api/ai/video-templates/<template_id>', methods=['GET'])
+def ai_get_video_template(template_id):
+    """Get a specific video template"""
+    result = ai_video_generator.get_template(template_id)
+    
+    if not result.get('success'):
+        return jsonify(result), 404
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-from-template', methods=['POST'])
+def ai_generate_from_template():
+    """Generate video script using a template"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    template_id = data.get('template_id', '')
+    topic = data.get('topic', '')
+    platform = data.get('platform', 'instagram')
+    
+    if not template_id:
+        return jsonify({'error': 'template_id is required'}), 400
+    
+    if not topic:
+        return jsonify({'error': 'topic is required'}), 400
+    
+    result = ai_video_generator.generate_from_template(template_id, topic, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/render-slideshow', methods=['POST'])
+def ai_render_slideshow():
+    """Render slideshow video with FFmpeg (actual video file generation)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    images = data.get('images', [])
+    duration_per_image = data.get('duration_per_image', 3.0)
+    platform = data.get('platform', 'instagram')
+    post_type = data.get('post_type', 'reel')
+    transition = data.get('transition', 'fade')
+    output_path = data.get('output_path', '/tmp/output_video.mp4')
+    
+    if not images:
+        return jsonify({'error': 'At least one image is required'}), 400
+    
+    # Get platform specs
+    specs = ai_video_generator.platform_specs.get(platform, {}).get(post_type)
+    
+    if not specs:
+        return jsonify({
+            'error': f'Unknown platform/post type: {platform}/{post_type}',
+            'success': False
+        }), 400
+    
+    result = ai_video_generator.render_slideshow_with_ffmpeg(
+        images, duration_per_image, output_path, specs, transition
+    )
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'FFmpeg not installed' in result.get('error', '') else 500
     
     return jsonify(result)
 
