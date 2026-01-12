@@ -1,17 +1,60 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tantml:invoke name="@tanstack/react-query';
 import { socialMonitorsApi } from '../api';
-import { Plus, Trash2, Eye, RefreshCw, TrendingUp, MessageCircle, ThumbsUp, Share2 } from 'lucide-react';
+import { Plus, Trash2, Eye, RefreshCw, TrendingUp, MessageCircle, ThumbsUp, Share2, MessageSquare, BarChart3, Power, PowerOff } from 'lucide-react';
+import axios from 'axios';
 
 export default function SocialMonitoringPage() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [viewingMonitor, setViewingMonitor] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'monitors' | 'templates' | 'interactions' | 'stats'>('monitors');
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [interactions, setInteractions] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
+  const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
 
   const { data: monitorsData, isLoading } = useQuery({
     queryKey: ['social-monitors'],
     queryFn: () => socialMonitorsApi.getAll(),
   });
+
+  useEffect(() => {
+    if (activeTab === 'templates') {
+      loadTemplates();
+    } else if (activeTab === 'interactions') {
+      loadInteractions();
+    } else if (activeTab === 'stats') {
+      loadStats();
+    }
+  }, [activeTab]);
+
+  const loadTemplates = async () => {
+    try {
+      const response = await axios.get('/api/response-templates');
+      setTemplates(response.data);
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    }
+  };
+
+  const loadInteractions = async () => {
+    try {
+      const response = await axios.get('/api/chatbot/interactions?per_page=50');
+      setInteractions(response.data.interactions || []);
+    } catch (error) {
+      console.error('Error loading interactions:', error);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const response = await axios.get('/api/chatbot/stats');
+      setStats(response.data);
+    } catch (error) {
+      console.error('Error loading stats:', error);
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: socialMonitorsApi.create,
@@ -35,23 +78,103 @@ export default function SocialMonitoringPage() {
     },
   });
 
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
+      const response = await axios.put(`/api/social-monitors/${id}`, { active });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['social-monitors'] });
+    },
+  });
+
   const monitors = monitorsData?.monitors || [];
 
   return (
     <div>
       <div className="page-header">
         <h2>Social Listening & Monitoring</h2>
-        <p>Track brand mentions, keywords, and competitor activity</p>
+        <p>Track brand mentions, keywords, automated responses, and interactions</p>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <h3>Active Monitors</h3>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            <Plus size={18} />
-            New Monitor
-          </button>
-        </div>
+      {/* Tabs */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '0.5rem',
+        marginBottom: '1.5rem',
+        borderBottom: '2px solid var(--color-borderLight)',
+      }}>
+        <button
+          onClick={() => setActiveTab('monitors')}
+          style={{
+            padding: '0.75rem 1.5rem',
+            background: activeTab === 'monitors' ? 'var(--color-bgTertiary)' : 'transparent',
+            border: 'none',
+            borderBottom: activeTab === 'monitors' ? '2px solid var(--color-accentPrimary)' : 'none',
+            color: activeTab === 'monitors' ? 'var(--color-textPrimary)' : 'var(--color-textSecondary)',
+            fontWeight: activeTab === 'monitors' ? '600' : 'normal',
+            cursor: 'pointer',
+            marginBottom: '-2px',
+          }}
+        >
+          Monitors
+        </button>
+        <button
+          onClick={() => setActiveTab('templates')}
+          style={{
+            padding: '0.75rem 1.5rem',
+            background: activeTab === 'templates' ? 'var(--color-bgTertiary)' : 'transparent',
+            border: 'none',
+            borderBottom: activeTab === 'templates' ? '2px solid var(--color-accentPrimary)' : 'none',
+            color: activeTab === 'templates' ? 'var(--color-textPrimary)' : 'var(--color-textSecondary)',
+            fontWeight: activeTab === 'templates' ? '600' : 'normal',
+            cursor: 'pointer',
+            marginBottom: '-2px',
+          }}
+        >
+          Templates
+        </button>
+        <button
+          onClick={() => setActiveTab('interactions')}
+          style={{
+            padding: '0.75rem 1.5rem',
+            background: activeTab === 'interactions' ? 'var(--color-bgTertiary)' : 'transparent',
+            border: 'none',
+            borderBottom: activeTab === 'interactions' ? '2px solid var(--color-accentPrimary)' : 'none',
+            color: activeTab === 'interactions' ? 'var(--color-textPrimary)' : 'var(--color-textSecondary)',
+            fontWeight: activeTab === 'interactions' ? '600' : 'normal',
+            cursor: 'pointer',
+            marginBottom: '-2px',
+          }}
+        >
+          Interactions
+        </button>
+        <button
+          onClick={() => setActiveTab('stats')}
+          style={{
+            padding: '0.75rem 1.5rem',
+            background: activeTab === 'stats' ? 'var(--color-bgTertiary)' : 'transparent',
+            border: 'none',
+            borderBottom: activeTab === 'stats' ? '2px solid var(--color-accentPrimary)' : 'none',
+            color: activeTab === 'stats' ? 'var(--color-textPrimary)' : 'var(--color-textSecondary)',
+            fontWeight: activeTab === 'stats' ? '600' : 'normal',
+            cursor: 'pointer',
+            marginBottom: '-2px',
+          }}
+        >
+          Statistics
+        </button>
+      </div>
+
+      {activeTab === 'monitors' && (
+        <div className="card">
+          <div className="card-header">
+            <h3>Active Monitors</h3>
+            <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+              <Plus size={18} />
+              New Monitor
+            </button>
+          </div>
 
         {isLoading ? (
           <div className="loading">Loading monitors...</div>
@@ -95,7 +218,15 @@ export default function SocialMonitoringPage() {
                     Platforms: {monitor.platforms.join(', ')} • {monitor.result_count} results
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button
+                    className={`btn ${monitor.active ? 'btn-secondary' : 'btn-primary'} btn-small`}
+                    onClick={() => toggleMutation.mutate({ id: monitor.id, active: !monitor.active })}
+                    disabled={toggleMutation.isPending}
+                  >
+                    {monitor.active ? <PowerOff size={16} /> : <Power size={16} />}
+                    {monitor.active ? 'Deactivate' : 'Activate'}
+                  </button>
                   <button
                     className="btn btn-secondary btn-small"
                     onClick={() => setViewingMonitor(monitor.id)}
@@ -127,6 +258,155 @@ export default function SocialMonitoringPage() {
           </div>
         )}
       </div>
+      )}
+
+      {/* Templates Tab */}
+      {activeTab === 'templates' && (
+        <div className="card">
+          <div className="card-header">
+            <h3>Response Templates</h3>
+            <button className="btn btn-primary" onClick={() => setShowCreateTemplateModal(true)}>
+              <Plus size={18} />
+              Create Template
+            </button>
+          </div>
+          {templates.length === 0 ? (
+            <div className="empty-state">
+              <MessageSquare size={48} />
+              <h3>No templates yet</h3>
+              <p>Create response templates to automate customer service</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
+              {templates.map((template: any) => (
+                <div
+                  key={template.id}
+                  style={{
+                    padding: '1rem',
+                    border: '1px solid var(--color-borderLight)',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--color-bgSecondary)',
+                  }}
+                >
+                  <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-textPrimary)' }}>
+                    {template.name}
+                  </div>
+                  <div style={{ marginBottom: '0.5rem', color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
+                    {template.template}
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <span className="badge badge-info">{template.category}</span>
+                    {template.auto_reply && <span className="badge badge-success">Auto-Reply</span>}
+                    {template.platforms.map((platform: string) => (
+                      <span key={platform} className="badge badge-secondary">{platform}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Interactions Tab */}
+      {activeTab === 'interactions' && (
+        <div className="card">
+          <div className="card-header">
+            <h3>Recent Interactions</h3>
+          </div>
+          {interactions.length === 0 ? (
+            <div className="empty-state">
+              <MessageCircle size={48} />
+              <h3>No interactions yet</h3>
+              <p>Interactions will appear here once your monitors are active</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
+              {interactions.map((interaction: any) => (
+                <div
+                  key={interaction.id}
+                  style={{
+                    padding: '1rem',
+                    border: '1px solid var(--color-borderLight)',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--color-bgSecondary)',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <div style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>
+                      @{interaction.user} on {interaction.platform}
+                    </div>
+                    <div style={{ fontSize: '0.875rem', color: 'var(--color-textTertiary)' }}>
+                      {new Date(interaction.timestamp).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: '0.5rem', color: 'var(--color-textSecondary)' }}>
+                    <strong>Message:</strong> {interaction.message}
+                  </div>
+                  <div style={{ color: 'var(--color-textSecondary)' }}>
+                    <strong>Response:</strong> {interaction.response}
+                  </div>
+                  <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+                    {interaction.auto_replied && <span className="badge badge-success">Auto-Replied</span>}
+                    <span className={`badge ${interaction.sentiment === 'positive' ? 'badge-success' : interaction.sentiment === 'negative' ? 'badge-error' : 'badge-info'}`}>
+                      {interaction.sentiment}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Statistics Tab */}
+      {activeTab === 'stats' && (
+        <div className="card">
+          <div className="card-header">
+            <h3>Response Statistics</h3>
+          </div>
+          {!stats ? (
+            <div className="loading">Loading statistics...</div>
+          ) : (
+            <div style={{ padding: '1.5rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                <div style={{ padding: '1rem', border: '1px solid var(--color-borderLight)', borderRadius: '8px', backgroundColor: 'var(--color-bgTertiary)' }}>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)', marginBottom: '0.5rem' }}>Total Interactions</div>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--color-textPrimary)' }}>{stats.total_interactions}</div>
+                </div>
+                <div style={{ padding: '1rem', border: '1px solid var(--color-borderLight)', borderRadius: '8px', backgroundColor: 'var(--color-bgTertiary)' }}>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)', marginBottom: '0.5rem' }}>Auto Replies</div>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--color-textPrimary)' }}>{stats.auto_replies}</div>
+                </div>
+                <div style={{ padding: '1rem', border: '1px solid var(--color-borderLight)', borderRadius: '8px', backgroundColor: 'var(--color-bgTertiary)' }}>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)', marginBottom: '0.5rem' }}>Auto-Reply Rate</div>
+                  <div style={{ fontSize: '2rem', fontWeight: '700', color: 'var(--color-textPrimary)' }}>{stats.auto_reply_rate}%</div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem' }}>
+                <div>
+                  <h4 style={{ marginBottom: '1rem', color: 'var(--color-textPrimary)' }}>Platform Breakdown</h4>
+                  {Object.entries(stats.platform_breakdown || {}).map(([platform, count]: [string, any]) => (
+                    <div key={platform} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', marginBottom: '0.5rem', borderRadius: '4px', backgroundColor: 'var(--color-bgSecondary)' }}>
+                      <span style={{ color: 'var(--color-textPrimary)', textTransform: 'capitalize' }}>{platform}</span>
+                      <span style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>{count}</span>
+                    </div>
+                  ))}
+                </div>
+                <div>
+                  <h4 style={{ marginBottom: '1rem', color: 'var(--color-textPrimary)' }}>Sentiment Breakdown</h4>
+                  {Object.entries(stats.sentiment_breakdown || {}).map(([sentiment, count]: [string, any]) => (
+                    <div key={sentiment} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.5rem', marginBottom: '0.5rem', borderRadius: '4px', backgroundColor: 'var(--color-bgSecondary)' }}>
+                      <span style={{ color: 'var(--color-textPrimary)', textTransform: 'capitalize' }}>{sentiment}</span>
+                      <span style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {showModal && (
         <CreateMonitorModal
