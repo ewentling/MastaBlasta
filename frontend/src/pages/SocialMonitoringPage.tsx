@@ -13,6 +13,8 @@ export default function SocialMonitoringPage() {
   const [interactions, setInteractions] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
+  const [selectedMonitors, setSelectedMonitors] = useState<Set<string>>(new Set());
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
   const { data: monitorsData, isLoading } = useQuery({
     queryKey: ['social-monitors'],
@@ -89,6 +91,54 @@ export default function SocialMonitoringPage() {
   });
 
   const monitors = monitorsData?.monitors || [];
+
+  const toggleSelectMonitor = (id: string) => {
+    const newSelected = new Set(selectedMonitors);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedMonitors(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedMonitors.size === monitors.length) {
+      setSelectedMonitors(new Set());
+    } else {
+      setSelectedMonitors(new Set(monitors.map((m: any) => m.id)));
+    }
+  };
+
+  const handleBulkAction = async (action: 'activate' | 'deactivate' | 'delete') => {
+    if (selectedMonitors.size === 0) return;
+
+    const confirmMessage =
+      action === 'delete'
+        ? `Delete ${selectedMonitors.size} monitor(s)?`
+        : `${action === 'activate' ? 'Activate' : 'Deactivate'} ${selectedMonitors.size} monitor(s)?`;
+
+    if (!confirm(confirmMessage)) return;
+
+    setBulkActionLoading(true);
+
+    try {
+      const promises = Array.from(selectedMonitors).map(async (id) => {
+        if (action === 'delete') {
+          return deleteMutation.mutateAsync(id);
+        } else {
+          return toggleMutation.mutateAsync({ id, active: action === 'activate' });
+        }
+      });
+
+      await Promise.all(promises);
+      setSelectedMonitors(new Set());
+    } catch (error) {
+      console.error('Bulk action failed:', error);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
 
   return (
     <div>
@@ -170,10 +220,43 @@ export default function SocialMonitoringPage() {
         <div className="card">
           <div className="card-header">
             <h3>Active Monitors</h3>
-            <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-              <Plus size={18} />
-              New Monitor
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              {selectedMonitors.size > 0 && (
+                <>
+                  <span style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)', marginRight: '0.5rem' }}>
+                    {selectedMonitors.size} selected
+                  </span>
+                  <button
+                    className="btn btn-success btn-small"
+                    onClick={() => handleBulkAction('activate')}
+                    disabled={bulkActionLoading}
+                  >
+                    <Power size={16} />
+                    Activate
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-small"
+                    onClick={() => handleBulkAction('deactivate')}
+                    disabled={bulkActionLoading}
+                  >
+                    <PowerOff size={16} />
+                    Deactivate
+                  </button>
+                  <button
+                    className="btn btn-error btn-small"
+                    onClick={() => handleBulkAction('delete')}
+                    disabled={bulkActionLoading}
+                  >
+                    <Trash2 size={16} />
+                    Delete
+                  </button>
+                </>
+              )}
+              <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+                <Plus size={18} />
+                New Monitor
+              </button>
+            </div>
           </div>
 
         {isLoading ? (
@@ -185,48 +268,72 @@ export default function SocialMonitoringPage() {
             <p>Create your first monitor to track social media conversations</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {monitors.map((monitor: any) => (
-              <div
-                key={monitor.id}
-                style={{
-                  padding: '1.25rem',
-                  border: '1px solid var(--color-borderLight)',
-                  borderRadius: '8px',
-                  backgroundColor: 'var(--color-bgSecondary)',
-                }}
-              >
-                <div style={{ marginBottom: '0.75rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <div style={{ fontWeight: '700', fontSize: '1.125rem', color: 'var(--color-textPrimary)' }}>
-                      {monitor.name}
+          <>
+            {monitors.length > 0 && (
+              <div style={{ padding: '1rem', borderBottom: '1px solid var(--color-borderLight)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedMonitors.size === monitors.length}
+                    onChange={toggleSelectAll}
+                    style={{ width: '1rem', height: '1rem' }}
+                  />
+                  <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>Select All</span>
+                </label>
+              </div>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {monitors.map((monitor: any) => (
+                <div
+                  key={monitor.id}
+                  style={{
+                    padding: '1.25rem',
+                    border: '1px solid var(--color-borderLight)',
+                    borderRadius: '8px',
+                    backgroundColor: 'var(--color-bgSecondary)',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <div>
+                      <input
+                        type="checkbox"
+                        checked={selectedMonitors.has(monitor.id)}
+                        onChange={() => toggleSelectMonitor(monitor.id)}
+                        style={{ width: '1.25rem', height: '1.25rem', cursor: 'pointer' }}
+                      />
                     </div>
-                    {monitor.active ? (
-                      <span className="badge badge-success">Active</span>
-                    ) : (
-                      <span className="badge badge-error">Inactive</span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                    {monitor.keywords.map((keyword: string) => (
-                      <span key={keyword} className="badge badge-info" style={{ fontSize: '0.75rem' }}>
-                        {keyword}
-                      </span>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--color-textTertiary)' }}>
-                    Platforms: {monitor.platforms.join(', ')} • {monitor.result_count} results
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <button
-                    className={`btn ${monitor.active ? 'btn-secondary' : 'btn-primary'} btn-small`}
-                    onClick={() => toggleMutation.mutate({ id: monitor.id, active: !monitor.active })}
-                    disabled={toggleMutation.isPending}
-                  >
-                    {monitor.active ? <PowerOff size={16} /> : <Power size={16} />}
-                    {monitor.active ? 'Deactivate' : 'Activate'}
-                  </button>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ marginBottom: '0.75rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                          <div style={{ fontWeight: '700', fontSize: '1.125rem', color: 'var(--color-textPrimary)' }}>
+                            {monitor.name}
+                          </div>
+                          {monitor.active ? (
+                            <span className="badge badge-success">Active</span>
+                          ) : (
+                            <span className="badge badge-error">Inactive</span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                          {monitor.keywords.map((keyword: string) => (
+                            <span key={keyword} className="badge badge-info" style={{ fontSize: '0.75rem' }}>
+                              {keyword}
+                            </span>
+                          ))}
+                        </div>
+                        <div style={{ fontSize: '0.875rem', color: 'var(--color-textTertiary)' }}>
+                          Platforms: {monitor.platforms.join(', ')} • {monitor.result_count} results
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <button
+                          className={`btn ${monitor.active ? 'btn-secondary' : 'btn-primary'} btn-small`}
+                          onClick={() => toggleMutation.mutate({ id: monitor.id, active: !monitor.active })}
+                          disabled={toggleMutation.isPending}
+                        >
+                          {monitor.active ? <PowerOff size={16} /> : <Power size={16} />}
+                          {monitor.active ? 'Deactivate' : 'Activate'}
+                        </button>
                   <button
                     className="btn btn-secondary btn-small"
                     onClick={() => setViewingMonitor(monitor.id)}
