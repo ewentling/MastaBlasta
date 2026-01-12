@@ -451,11 +451,11 @@ function OAuthModal({
       // Initialize OAuth flow
       const response = await oauthApi.initFlow(selectedPlatform);
       
-      // Check if OAuth is properly configured
-      if (!response.oauth_url) {
-        const envVars = response.required_env_vars || [];
+      // Check if response exists and OAuth is properly configured
+      if (!response || !response.oauth_url) {
+        const envVars = response?.required_env_vars || [];
         throw new Error(
-          response.message || 
+          response?.message || 
           `OAuth not configured for ${selectedPlatform}. ` +
           `Please set these environment variables: ${envVars.join(', ')}. ` +
           `See PLATFORM_SETUP.md for detailed instructions.`

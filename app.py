@@ -103,6 +103,15 @@ scheduling_analytics = {}  # Stores historical posting performance
 image_enhancements = {}  # Stores image enhancement metadata
 engagement_predictions = {}  # Stores predicted engagement scores
 
+# OAuth configuration constants
+OAUTH_REQUIRED_ENV_VARS = {
+    'twitter': ['TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'],
+    'facebook': ['META_APP_ID', 'META_APP_SECRET'],
+    'instagram': ['META_APP_ID', 'META_APP_SECRET'],
+    'linkedin': ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'],
+    'youtube': ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']
+}
+
 
 # ==================== AI Services ====================
 
@@ -2177,13 +2186,7 @@ def oauth_init(platform):
         'message': f'Please configure OAuth credentials for {platform}. See PLATFORM_SETUP.md for instructions.',
         'platform': platform,
         'mode': 'demo',
-        'required_env_vars': {
-            'twitter': ['TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'],
-            'facebook': ['META_APP_ID', 'META_APP_SECRET'],
-            'instagram': ['META_APP_ID', 'META_APP_SECRET'],
-            'linkedin': ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'],
-            'youtube': ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']
-        }.get(platform, [])
+        'required_env_vars': OAUTH_REQUIRED_ENV_VARS.get(platform, [])
     }), 400
 
 

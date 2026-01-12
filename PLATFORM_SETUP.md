@@ -12,7 +12,7 @@ This guide provides step-by-step instructions for configuring OAuth authenticati
 
 ---
 
-## Twitter X
+## Twitter/X
 
 ### Prerequisites
 - A Twitter Developer Account
