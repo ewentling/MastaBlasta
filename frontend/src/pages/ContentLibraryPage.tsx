@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Folder, File, Image, Video, FileText, Plus, X, Settings, Download, Trash2, CheckCircle, FolderOpen } from 'lucide-react';
+import { Folder, File, Image, Video, FileText, Plus, X, Settings, Download, Trash2, CheckCircle, FolderOpen, Search, Filter } from 'lucide-react';
 
 interface DriveFile {
   id: string;
@@ -37,6 +37,9 @@ export default function ContentLibraryPage() {
   const [showGoogleSettings, setShowGoogleSettings] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [mediaFilter, setMediaFilter] = useState<'all' | 'images' | 'videos' | 'documents'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | '7' | '30' | '90'>('all');
   const [googleSettings, setGoogleSettings] = useState<GoogleDriveSettings>({
     enabled: false,
     accessToken: '',
@@ -232,6 +235,75 @@ export default function ContentLibraryPage() {
         >
           Templates
         </button>
+      </div>
+
+      {/* Search and Filter Bar */}
+      <div style={{ marginBottom: '1.5rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ flex: '1', minWidth: '250px', position: 'relative' }}>
+          <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-textTertiary)' }} />
+          <input
+            type="text"
+            placeholder={activeTab === 'media' ? 'Search media files...' : 'Search templates...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '0.625rem 0.75rem 0.625rem 2.5rem',
+              border: '1px solid var(--color-borderLight)',
+              borderRadius: '6px',
+              fontSize: '0.875rem'
+            }}
+          />
+        </div>
+        
+        {activeTab === 'media' && (
+          <>
+            <select
+              value={mediaFilter}
+              onChange={(e) => setMediaFilter(e.target.value as any)}
+              style={{
+                padding: '0.625rem 0.75rem',
+                border: '1px solid var(--color-borderLight)',
+                borderRadius: '6px',
+                fontSize: '0.875rem'
+              }}
+            >
+              <option value="all">All Types</option>
+              <option value="images">Images</option>
+              <option value="videos">Videos</option>
+              <option value="documents">Documents</option>
+            </select>
+            
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as any)}
+              style={{
+                padding: '0.625rem 0.75rem',
+                border: '1px solid var(--color-borderLight)',
+                borderRadius: '6px',
+                fontSize: '0.875rem'
+              }}
+            >
+              <option value="all">All Time</option>
+              <option value="7">Last 7 Days</option>
+              <option value="30">Last 30 Days</option>
+              <option value="90">Last 90 Days</option>
+            </select>
+          </>
+        )}
+        
+        {(searchQuery || mediaFilter !== 'all' || dateFilter !== 'all') && (
+          <button
+            className="btn btn-secondary btn-small"
+            onClick={() => {
+              setSearchQuery('');
+              setMediaFilter('all');
+              setDateFilter('all');
+            }}
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       {/* Media Library Tab */}

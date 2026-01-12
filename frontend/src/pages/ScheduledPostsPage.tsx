@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tantml:react-query';
 import { accountsApi, postsApi } from '../api';
-import { Calendar, Trash2, Check, X } from 'lucide-react';
+import { Calendar, Trash2, Check, X, Edit2, Save } from 'lucide-react';
 
 export default function ScheduledPostsPage() {
   const queryClient = useQueryClient();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [newScheduledTime, setNewScheduledTime] = useState<string>('');
 
   const { data: postsData, isLoading } = useQuery({
     queryKey: ['posts', 'scheduled'],
@@ -21,6 +23,29 @@ export default function ScheduledPostsPage() {
       setTimeout(() => setResult(null), 3000);
     },
   });
+
+  const updateScheduleMutation = useMutation({
+    mutationFn: ({ id, scheduled_time }: { id: string; scheduled_time: string }) =>
+      postsApi.schedule({ id, scheduled_time } as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      setEditingPostId(null);
+      setNewScheduledTime('');
+      setResult({ success: true, message: 'Schedule updated successfully' });
+      setTimeout(() => setResult(null), 3000);
+    },
+  });
+
+  const handleQuickEdit = (postId: string, currentTime: string) => {
+    setEditingPostId(postId);
+    setNewScheduledTime(currentTime);
+  };
+
+  const handleSaveSchedule = (postId: string) => {
+    if (newScheduledTime) {
+      updateScheduleMutation.mutate({ id: postId, scheduled_time: newScheduledTime });
+    }
+  };
 
   const posts = postsData?.posts || [];
 
@@ -79,11 +104,56 @@ export default function ScheduledPostsPage() {
                       gap: '1rem', 
                       fontSize: '0.875rem', 
                       color: '#718096',
-                      marginBottom: '0.75rem'
+                      marginBottom: '0.75rem',
+                      alignItems: 'center'
                     }}>
-                      <div>
-                        📅 {new Date(post.scheduled_for!).toLocaleString()}
-                      </div>
+                      {editingPostId === post.id ? (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            📅
+                            <input
+                              type="datetime-local"
+                              value={newScheduledTime}
+                              onChange={(e) => setNewScheduledTime(e.target.value)}
+                              style={{
+                                padding: '0.25rem 0.5rem',
+                                border: '1px solid var(--color-borderLight)',
+                                borderRadius: '4px',
+                                fontSize: '0.875rem'
+                              }}
+                            />
+                            <button
+                              className="btn btn-primary btn-small"
+                              onClick={() => handleSaveSchedule(post.id)}
+                              disabled={updateScheduleMutation.isPending}
+                              style={{ padding: '0.25rem 0.5rem' }}
+                            >
+                              <Save size={14} />
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-small"
+                              onClick={() => setEditingPostId(null)}
+                              style={{ padding: '0.25rem 0.5rem' }}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div>
+                            📅 {new Date(post.scheduled_for!).toLocaleString()}
+                          </div>
+                          <button
+                            className="btn btn-secondary btn-small"
+                            onClick={() => handleQuickEdit(post.id, new Date(post.scheduled_for!).toISOString().slice(0, 16))}
+                            style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                          >
+                            <Edit2 size={12} />
+                            Quick Edit
+                          </button>
+                        </>
+                      )}
                       <div>
                         🌐 {post.platforms.join(', ')}
                       </div>
