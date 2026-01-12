@@ -711,6 +711,13 @@ class EngagementPredictor:
 class AIVideoGenerator:
     """AI-powered video generation and editing service"""
     
+    # Video encoding constants
+    HIGH_RESOLUTION_THRESHOLD = 1920
+    HIGH_BITRATE = '5000k'
+    STANDARD_BITRATE = '3000k'
+    AUDIO_CODEC = 'aac'
+    AUDIO_BITRATE = '192k'
+    
     def __init__(self):
         self.api_key = os.getenv('OPENAI_API_KEY', '')
         self.enabled = AI_ENABLED and bool(self.api_key)
@@ -946,8 +953,8 @@ Make it engaging and platform-optimized."""
             
             caption_text = response.choices[0].message.content.strip()
             
-            # Parse hashtags
-            hashtags = re.findall(r'#\w+', caption_text)
+            # Parse hashtags - support alphanumeric and underscores
+            hashtags = re.findall(r'#[a-zA-Z0-9_]+', caption_text)
             
             return {
                 'success': True,
@@ -985,9 +992,9 @@ Make it engaging and platform-optimized."""
                 'duration_range': f"{specs['min_duration']}-{specs['max_duration']} seconds",
                 'recommended_format': 'mp4',
                 'recommended_codec': 'h264',
-                'recommended_bitrate': '5000k' if specs['width'] >= 1920 else '3000k',
-                'audio_codec': 'aac',
-                'audio_bitrate': '192k'
+                'recommended_bitrate': self.HIGH_BITRATE if specs['width'] >= self.HIGH_RESOLUTION_THRESHOLD else self.STANDARD_BITRATE,
+                'audio_codec': self.AUDIO_CODEC,
+                'audio_bitrate': self.AUDIO_BITRATE
             },
             'ffmpeg_command': self._generate_ffmpeg_command(specs, video_path)
         }
