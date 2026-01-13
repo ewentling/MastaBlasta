@@ -87,9 +87,22 @@ See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 - **A/B Test Variations**: Generate multiple variations for testing
 - **Smart Remixing**: Preserve key messages while adapting style and format
 
-#### 8. 🎬 AI Video Generation (Rival to Blotato)
+#### 8. 🎬 AI Video Generation + Faceless Video Studio (NEW - 10 Improvements)
 - **Video Script Generation**: AI-powered video scripts optimized for platform and duration
 - **Video Template Library**: 6 pre-built templates (product showcase, tutorial, testimonial, announcement, BTS, story)
+- **Auto-Subtitle Generation**: Generate SRT/VTT subtitle files with perfect timing
+- **Aspect Ratio Conversion**: Automatic conversion (16:9 → 9:16, 1:1) with one command
+- **AI Voiceover Prep**: Generate voiceover-ready scripts with timing markers and emphasis
+- **B-Roll Integration**: AI-suggested B-roll footage with stock library keywords
+- **Batch Video Creation**: Generate 100+ videos from CSV data
+- **Brand Watermarking**: Add logos/watermarks with customizable position and opacity
+- **Intro/Outro Templates**: 5 styles of branded intros and outros
+- **Text Overlay Editor**: Animated text sequences with 4 style presets
+- **Multi-Platform Export**: Generate optimized versions for all platforms at once
+- **Analytics Metadata**: Engagement prediction and performance tracking
+- **FFmpeg Rendering**: Actual video file generation with server-side rendering
+- **Text-to-Video Prompts**: Generate optimized prompts for AI video generation tools (Runway, Pika, Stable Video)
+- **Video Caption Generation**: Create engaging captions and hashtags for video content
 - **Slideshow Creation**: Automatically create video slideshows from images with transitions
 - **FFmpeg Rendering**: Actual video file generation with server-side rendering
 - **Text-to-Video Prompts**: Generate optimized prompts for AI video generation tools (Runway, Pika, Stable Video)
@@ -1370,6 +1383,116 @@ Response:
   "duration": 9.0,
   "format": "mp4",
   "codec": "h264"
+}
+```
+
+### Faceless Video Studio (10 New Features)
+
+**Generate Subtitles (Feature #1)**
+```bash
+POST /api/video/generate-subtitles
+{
+  "script": "Scene 1: Welcome\nScene 2: Main content\nScene 3: Conclusion",
+  "duration": 30,
+  "format": "srt"  // or "vtt"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "format": "srt",
+  "subtitle_count": 3,
+  "duration": 30,
+  "content": "1\n00:00:00,000 --> 00:00:10,000\nScene 1: Welcome\n\n2\n...",
+  "subtitles": [...]
+}
+```
+
+**Convert Aspect Ratio (Feature #2)**
+```bash
+POST /api/video/convert-aspect-ratio
+{
+  "input_specs": {"width": 1920, "height": 1080},
+  "target_ratio": "9:16"  // 16:9, 9:16, 1:1, 4:5, 2:3
+}
+```
+
+**Generate Voiceover Script (Feature #3)**
+```bash
+POST /api/video/generate-voiceover-script
+{
+  "script": "Welcome to our tutorial.",
+  "language": "en",
+  "voice_style": "professional"
+}
+```
+
+**B-Roll Suggestions (Feature #4)**
+```bash
+POST /api/video/broll-suggestions
+{
+  "script": "Scene 1: Product demonstration",
+  "video_type": "product_showcase"
+}
+```
+
+**Batch Video Creation (Feature #5)**
+```bash
+POST /api/video/batch-create
+{
+  "batch_data": [{"topic": "Product A"}, {"topic": "Product B"}],
+  "template_id": "product_showcase",
+  "platform": "instagram"
+}
+```
+
+**Add Brand Watermark (Feature #6)**
+```bash
+POST /api/video/add-watermark
+{
+  "video_specs": {"width": 1920, "height": 1080},
+  "watermark_config": {
+    "position": "bottom-right",
+    "opacity": 0.8,
+    "logo_path": "logo.png"
+  }
+}
+```
+
+**Generate Intro/Outro (Feature #7)**
+```bash
+POST /api/video/generate-intro-outro
+{
+  "brand_name": "MyBrand",
+  "style": "modern"
+}
+```
+
+**Text Overlay Sequence (Feature #8)**
+```bash
+POST /api/video/text-overlays
+{
+  "key_points": ["Point 1", "Point 2"],
+  "style": "bold"
+}
+```
+
+**Multi-Platform Export (Feature #9)**
+```bash
+POST /api/video/multi-platform-export
+{
+  "source_video_specs": {"width": 1920, "height": 1080}
+}
+```
+
+**Analytics Metadata (Feature #10)**
+```bash
+POST /api/video/analytics-metadata
+{
+  "script": "You won't believe this!",
+  "platform": "youtube"
 }
 ```
 

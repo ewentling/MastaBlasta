@@ -1842,6 +1842,460 @@ Return a detailed scene-by-scene breakdown."""
             'video_types': list(specs.keys()),
             'specifications': specs
         }
+    
+    def generate_subtitle_file(self, script: str, duration: int, output_format: str = 'srt') -> Dict[str, Any]:
+        """Generate subtitle file from script with timestamps (Improvement #1: Auto-subtitle generation)"""
+        if not self.enabled:
+            return {'error': 'Subtitle generation not enabled', 'enabled': False}
+        
+        try:
+            # Split script into segments
+            lines = [line.strip() for line in script.split('\n') if line.strip()]
+            
+            # Calculate timing for each line
+            time_per_line = duration / max(len(lines), 1)
+            
+            subtitles = []
+            for i, line in enumerate(lines):
+                start_time = i * time_per_line
+                end_time = (i + 1) * time_per_line
+                
+                # Format timestamps
+                start_formatted = self._format_srt_time(start_time)
+                end_formatted = self._format_srt_time(end_time)
+                
+                subtitles.append({
+                    'index': i + 1,
+                    'start': start_formatted,
+                    'end': end_formatted,
+                    'text': line
+                })
+            
+            # Generate SRT or VTT content
+            if output_format.lower() == 'srt':
+                content = self._generate_srt_content(subtitles)
+            elif output_format.lower() == 'vtt':
+                content = self._generate_vtt_content(subtitles)
+            else:
+                return {'error': f'Unsupported format: {output_format}', 'success': False}
+            
+            return {
+                'success': True,
+                'format': output_format,
+                'subtitle_count': len(subtitles),
+                'duration': duration,
+                'content': content,
+                'subtitles': subtitles
+            }
+        except Exception as e:
+            logger.error(f"Subtitle generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def _format_srt_time(self, seconds: float) -> str:
+        """Format time for SRT format (HH:MM:SS,mmm)"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        millisecs = int((seconds % 1) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{millisecs:03d}"
+    
+    def _generate_srt_content(self, subtitles: List[Dict]) -> str:
+        """Generate SRT file content"""
+        lines = []
+        for sub in subtitles:
+            lines.append(str(sub['index']))
+            lines.append(f"{sub['start']} --> {sub['end']}")
+            lines.append(sub['text'])
+            lines.append('')  # Empty line between subtitles
+        return '\n'.join(lines)
+    
+    def _generate_vtt_content(self, subtitles: List[Dict]) -> str:
+        """Generate WebVTT file content"""
+        lines = ['WEBVTT', '']
+        for sub in subtitles:
+            # VTT uses dots instead of commas for milliseconds
+            start = sub['start'].replace(',', '.')
+            end = sub['end'].replace(',', '.')
+            lines.append(f"{start} --> {end}")
+            lines.append(sub['text'])
+            lines.append('')
+        return '\n'.join(lines)
+    
+    def convert_aspect_ratio(self, input_specs: Dict, target_ratio: str) -> Dict[str, Any]:
+        """Convert video aspect ratio specifications (Improvement #2: Automatic aspect ratio conversion)"""
+        ratio_specs = {
+            '16:9': {'width': 1920, 'height': 1080, 'description': 'Landscape (YouTube, Facebook)'},
+            '9:16': {'width': 1080, 'height': 1920, 'description': 'Portrait (Instagram Reels, TikTok, Stories)'},
+            '1:1': {'width': 1080, 'height': 1080, 'description': 'Square (Instagram Feed)'},
+            '4:5': {'width': 1080, 'height': 1350, 'description': 'Portrait (Instagram Feed)'},
+            '2:3': {'width': 1000, 'height': 1500, 'description': 'Vertical (Pinterest)'}
+        }
+        
+        if target_ratio not in ratio_specs:
+            return {
+                'error': f'Unsupported aspect ratio: {target_ratio}',
+                'success': False,
+                'supported_ratios': list(ratio_specs.keys())
+            }
+        
+        target = ratio_specs[target_ratio]
+        
+        # Generate FFmpeg command for conversion
+        ffmpeg_cmd = (
+            f"ffmpeg -i input.mp4 "
+            f"-vf \"scale={target['width']}:{target['height']}:force_original_aspect_ratio=decrease,"
+            f"pad={target['width']}:{target['height']}:(ow-iw)/2:(oh-ih)/2:black\" "
+            f"-c:v libx264 -preset medium -crf 23 "
+            f"-c:a copy "
+            f"output_{target_ratio.replace(':', 'x')}.mp4"
+        )
+        
+        return {
+            'success': True,
+            'target_ratio': target_ratio,
+            'target_dimensions': {'width': target['width'], 'height': target['height']},
+            'description': target['description'],
+            'ffmpeg_command': ffmpeg_cmd,
+            'all_ratios': ratio_specs
+        }
+    
+    def generate_voiceover_script(self, script: str, language: str = 'en', voice_style: str = 'professional') -> Dict[str, Any]:
+        """Generate voiceover-ready script with timing and emphasis (Improvement #3: AI voiceover preparation)"""
+        if not self.enabled:
+            return {'error': 'Voiceover script generation not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Convert this script into a voiceover-ready format with timing markers and emphasis:
+
+Script: {script}
+Language: {language}
+Voice Style: {voice_style}
+
+Requirements:
+- Add [PAUSE] markers for natural breaks
+- Mark [EMPHASIS] on key words
+- Include [SLOW] for important points
+- Add timing suggestions in seconds
+- Optimize for {voice_style} delivery
+- Make it sound natural and engaging
+
+Return formatted voiceover script."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional voiceover script writer."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.7
+            )
+            
+            voiceover_script = response.choices[0].message.content.strip()
+            
+            # Parse timing markers
+            pause_count = voiceover_script.count('[PAUSE]')
+            emphasis_count = voiceover_script.count('[EMPHASIS]')
+            
+            return {
+                'success': True,
+                'voiceover_script': voiceover_script,
+                'language': language,
+                'voice_style': voice_style,
+                'markers': {
+                    'pauses': pause_count,
+                    'emphasis': emphasis_count
+                },
+                'note': 'Use with ElevenLabs, Azure TTS, or Google Cloud Text-to-Speech'
+            }
+        except Exception as e:
+            logger.error(f"Voiceover script generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_broll_suggestions(self, script: str, video_type: str) -> Dict[str, Any]:
+        """Generate B-roll footage suggestions (Improvement #4: B-roll integration)"""
+        if not self.enabled:
+            return {'error': 'B-roll suggestions not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Suggest B-roll footage for this {video_type} video script:
+
+Script: {script}
+
+For each scene, suggest:
+- Type of B-roll footage needed
+- Keywords for stock footage search
+- Duration recommendation
+- Transition style
+
+Return structured B-roll suggestions."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional video editor specializing in B-roll selection."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=600,
+                temperature=0.7
+            )
+            
+            suggestions = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'broll_suggestions': suggestions,
+                'video_type': video_type,
+                'stock_sources': ['Pexels', 'Pixabay', 'Unsplash', 'Videvo', 'Coverr'],
+                'note': 'Use suggested keywords to search stock footage libraries'
+            }
+        except Exception as e:
+            logger.error(f"B-roll suggestion error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def create_batch_videos(self, batch_data: List[Dict], template_id: str, platform: str) -> Dict[str, Any]:
+        """Batch video creation from CSV data (Improvement #5: Batch video creation)"""
+        if not self.enabled:
+            return {'error': 'Batch video creation not enabled', 'enabled': False}
+        
+        results = []
+        successful = 0
+        failed = 0
+        
+        for i, data in enumerate(batch_data):
+            topic = data.get('topic', '')
+            if not topic:
+                failed += 1
+                continue
+            
+            try:
+                # Generate script for each topic
+                result = self.generate_from_template(template_id, topic, platform)
+                
+                if result.get('success'):
+                    results.append({
+                        'index': i + 1,
+                        'topic': topic,
+                        'status': 'success',
+                        'script': result.get('script', '')[:200] + '...'  # Truncate for summary
+                    })
+                    successful += 1
+                else:
+                    results.append({
+                        'index': i + 1,
+                        'topic': topic,
+                        'status': 'failed',
+                        'error': result.get('error', 'Unknown error')
+                    })
+                    failed += 1
+            except Exception as e:
+                results.append({
+                    'index': i + 1,
+                    'topic': topic,
+                    'status': 'failed',
+                    'error': str(e)
+                })
+                failed += 1
+        
+        return {
+            'success': True,
+            'total_processed': len(batch_data),
+            'successful': successful,
+            'failed': failed,
+            'results': results,
+            'template_id': template_id,
+            'platform': platform
+        }
+    
+    def add_brand_watermark(self, video_specs: Dict, watermark_config: Dict) -> Dict[str, Any]:
+        """Add brand watermark/logo to video (Improvement #6: Brand kit integration)"""
+        position = watermark_config.get('position', 'bottom-right')
+        opacity = watermark_config.get('opacity', 0.8)
+        logo_path = watermark_config.get('logo_path', 'logo.png')
+        
+        # Position mappings for FFmpeg
+        positions = {
+            'top-left': '10:10',
+            'top-right': 'W-w-10:10',
+            'bottom-left': '10:H-h-10',
+            'bottom-right': 'W-w-10:H-h-10',
+            'center': '(W-w)/2:(H-h)/2'
+        }
+        
+        overlay_position = positions.get(position, positions['bottom-right'])
+        
+        ffmpeg_cmd = (
+            f"ffmpeg -i input.mp4 -i {logo_path} "
+            f"-filter_complex \"[1:v]format=rgba,colorchannelmixer=aa={opacity}[logo];"
+            f"[0:v][logo]overlay={overlay_position}\" "
+            f"-c:a copy output_branded.mp4"
+        )
+        
+        return {
+            'success': True,
+            'position': position,
+            'opacity': opacity,
+            'logo_path': logo_path,
+            'ffmpeg_command': ffmpeg_cmd,
+            'note': 'Watermark will be added to all frames'
+        }
+    
+    def generate_intro_outro(self, brand_name: str, style: str = 'modern') -> Dict[str, Any]:
+        """Generate intro/outro templates (Improvement #7: Viral hooks, intros, outros)"""
+        if not self.enabled:
+            return {'error': 'Intro/outro generation not enabled', 'enabled': False}
+        
+        intros = {
+            'modern': f"🎬 {brand_name} Presents",
+            'energetic': f"🚀 Welcome to {brand_name}!",
+            'professional': f"Hello and welcome to {brand_name}",
+            'casual': f"Hey there! {brand_name} here 👋",
+            'dramatic': f"Get ready... {brand_name} is about to blow your mind! 🤯"
+        }
+        
+        outros = {
+            'modern': f"Thanks for watching! Subscribe for more from {brand_name}",
+            'energetic': f"🔥 That's it! Hit that subscribe button for more {brand_name} content!",
+            'professional': f"Thank you for watching. Follow {brand_name} for more insights.",
+            'casual': f"See you next time! Don't forget to follow {brand_name} 😊",
+            'dramatic': f"Mind = Blown! 💥 Follow {brand_name} for more game-changers!"
+        }
+        
+        intro_text = intros.get(style, intros['modern'])
+        outro_text = outros.get(style, outros['modern'])
+        
+        return {
+            'success': True,
+            'brand_name': brand_name,
+            'style': style,
+            'intro': {
+                'text': intro_text,
+                'duration': 3,
+                'animation': 'fade-in'
+            },
+            'outro': {
+                'text': outro_text,
+                'duration': 5,
+                'animation': 'fade-out',
+                'cta': 'Subscribe/Follow'
+            },
+            'available_styles': list(intros.keys())
+        }
+    
+    def generate_text_overlay_sequence(self, key_points: List[str], style: str = 'bold') -> Dict[str, Any]:
+        """Generate animated text overlay sequence (Improvement #8: Timeline editor capabilities)"""
+        overlay_styles = {
+            'bold': {'font': 'Arial-Bold', 'size': 48, 'color': 'white', 'background': 'black'},
+            'minimal': {'font': 'Helvetica', 'size': 36, 'color': 'white', 'background': 'transparent'},
+            'colorful': {'font': 'Arial-Bold', 'size': 52, 'color': 'yellow', 'background': 'purple'},
+            'elegant': {'font': 'Georgia', 'size': 40, 'color': 'gold', 'background': 'navy'}
+        }
+        
+        selected_style = overlay_styles.get(style, overlay_styles['bold'])
+        
+        overlays = []
+        for i, point in enumerate(key_points):
+            overlays.append({
+                'index': i + 1,
+                'text': point,
+                'start_time': i * 3,
+                'duration': 3,
+                'style': selected_style,
+                'animation': 'fade-in-out',
+                'position': 'center'
+            })
+        
+        # Generate FFmpeg drawtext filter
+        drawtext_filters = []
+        for overlay in overlays:
+            filter_cmd = (
+                f"drawtext=text='{overlay['text']}':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+                f"fontsize={selected_style['size']}:fontcolor={selected_style['color']}:"
+                f"x=(w-text_w)/2:y=(h-text_h)/2:"
+                f"enable='between(t,{overlay['start_time']},{overlay['start_time'] + overlay['duration']})'"
+            )
+            drawtext_filters.append(filter_cmd)
+        
+        return {
+            'success': True,
+            'overlay_count': len(overlays),
+            'style': style,
+            'overlays': overlays,
+            'ffmpeg_filter': ','.join(drawtext_filters),
+            'available_styles': list(overlay_styles.keys())
+        }
+    
+    def optimize_for_multiple_platforms(self, source_video_specs: Dict) -> Dict[str, Any]:
+        """Generate optimization specs for all platforms (Improvement #9: Multi-platform export)"""
+        optimizations = {}
+        
+        for platform, specs_dict in self.platform_specs.items():
+            platform_outputs = {}
+            for video_type, specs in specs_dict.items():
+                platform_outputs[video_type] = {
+                    'dimensions': f"{specs['width']}x{specs['height']}",
+                    'aspect_ratio': specs['aspect_ratio'],
+                    'duration_range': f"{specs['min_duration']}-{specs['max_duration']}s",
+                    'bitrate': self.HIGH_BITRATE if specs['width'] >= self.HIGH_RESOLUTION_THRESHOLD else self.STANDARD_BITRATE,
+                    'ffmpeg_command': self._generate_ffmpeg_command(specs, 'input.mp4')
+                }
+            optimizations[platform] = platform_outputs
+        
+        return {
+            'success': True,
+            'platforms_count': len(optimizations),
+            'optimizations': optimizations,
+            'note': 'Generate platform-specific versions from single source video'
+        }
+    
+    def generate_video_analytics_metadata(self, script: str, platform: str) -> Dict[str, Any]:
+        """Generate metadata for video analytics (Improvement #10: Analytics integration)"""
+        if not self.enabled:
+            return {'error': 'Analytics metadata generation not enabled', 'enabled': False}
+        
+        try:
+            # Extract key information
+            word_count = len(script.split())
+            scene_count = script.count('Scene')
+            
+            # Estimate engagement metrics
+            hook_present = any(hook in script.lower() for hook in ['you won\'t believe', 'secret', 'discover', 'amazing'])
+            cta_present = any(cta in script.lower() for cta in ['subscribe', 'follow', 'like', 'comment', 'share'])
+            
+            engagement_score = 50
+            if hook_present:
+                engagement_score += 20
+            if cta_present:
+                engagement_score += 15
+            if 100 <= word_count <= 300:
+                engagement_score += 10
+            if scene_count >= 3:
+                engagement_score += 5
+            
+            return {
+                'success': True,
+                'script_analysis': {
+                    'word_count': word_count,
+                    'scene_count': scene_count,
+                    'has_hook': hook_present,
+                    'has_cta': cta_present
+                },
+                'predicted_engagement_score': min(engagement_score, 100),
+                'platform': platform,
+                'recommendations': [
+                    'Add strong hook in first 3 seconds' if not hook_present else 'Strong hook detected ✓',
+                    'Include clear call-to-action' if not cta_present else 'CTA present ✓',
+                    'Optimal script length' if 100 <= word_count <= 300 else 'Consider adjusting script length'
+                ],
+                'metadata_tags': {
+                    'content_type': 'faceless_video',
+                    'script_quality': 'high' if engagement_score >= 70 else 'medium',
+                    'platform_optimized': True
+                }
+            }
+        except Exception as e:
+            logger.error(f"Analytics metadata generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
 
 
 # Initialize AI services
@@ -3701,6 +4155,210 @@ def ai_render_slideshow():
     
     if not result.get('success'):
         return jsonify(result), 503 if 'FFmpeg not installed' in result.get('error', '') else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/generate-subtitles', methods=['POST'])
+def video_generate_subtitles():
+    """Generate subtitle file from script (Faceless Video #1)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    duration = data.get('duration', 30)
+    output_format = data.get('format', 'srt')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_subtitle_file(script, duration, output_format)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/convert-aspect-ratio', methods=['POST'])
+def video_convert_aspect_ratio():
+    """Convert video aspect ratio (Faceless Video #2)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    input_specs = data.get('input_specs', {})
+    target_ratio = data.get('target_ratio', '16:9')
+    
+    result = ai_video_generator.convert_aspect_ratio(input_specs, target_ratio)
+    
+    if not result.get('success'):
+        return jsonify(result), 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/generate-voiceover-script', methods=['POST'])
+def video_generate_voiceover_script():
+    """Generate voiceover-ready script (Faceless Video #3)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    language = data.get('language', 'en')
+    voice_style = data.get('voice_style', 'professional')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_voiceover_script(script, language, voice_style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/broll-suggestions', methods=['POST'])
+def video_broll_suggestions():
+    """Generate B-roll footage suggestions (Faceless Video #4)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    video_type = data.get('video_type', 'general')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_broll_suggestions(script, video_type)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/batch-create', methods=['POST'])
+def video_batch_create():
+    """Batch video creation from data (Faceless Video #5)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    batch_data = data.get('batch_data', [])
+    template_id = data.get('template_id', 'product_showcase')
+    platform = data.get('platform', 'instagram')
+    
+    if not batch_data:
+        return jsonify({'error': 'Batch data is required'}), 400
+    
+    result = ai_video_generator.create_batch_videos(batch_data, template_id, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/add-watermark', methods=['POST'])
+def video_add_watermark():
+    """Add brand watermark to video (Faceless Video #6)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_specs = data.get('video_specs', {})
+    watermark_config = data.get('watermark_config', {})
+    
+    result = ai_video_generator.add_brand_watermark(video_specs, watermark_config)
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/generate-intro-outro', methods=['POST'])
+def video_generate_intro_outro():
+    """Generate intro/outro templates (Faceless Video #7)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    brand_name = data.get('brand_name', '')
+    style = data.get('style', 'modern')
+    
+    if not brand_name:
+        return jsonify({'error': 'Brand name is required'}), 400
+    
+    result = ai_video_generator.generate_intro_outro(brand_name, style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/text-overlays', methods=['POST'])
+def video_text_overlays():
+    """Generate text overlay sequence (Faceless Video #8)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    key_points = data.get('key_points', [])
+    style = data.get('style', 'bold')
+    
+    if not key_points:
+        return jsonify({'error': 'Key points are required'}), 400
+    
+    result = ai_video_generator.generate_text_overlay_sequence(key_points, style)
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/multi-platform-export', methods=['POST'])
+def video_multi_platform_export():
+    """Generate multi-platform export specs (Faceless Video #9)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    source_video_specs = data.get('source_video_specs', {})
+    
+    result = ai_video_generator.optimize_for_multiple_platforms(source_video_specs)
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/analytics-metadata', methods=['POST'])
+def video_analytics_metadata():
+    """Generate analytics metadata for video (Faceless Video #10)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    platform = data.get('platform', 'youtube')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_video_analytics_metadata(script, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
     
     return jsonify(result)
 

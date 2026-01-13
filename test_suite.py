@@ -1162,6 +1162,180 @@ class TestContentMultiplier:
 
 
 # ============================================================================
+# FACELESS VIDEO TESTS
+# ============================================================================
+
+class TestFacelessVideo:
+    """Test faceless video generation improvements"""
+    
+    def test_generate_subtitles(self, client):
+        """Test subtitle generation (Improvement #1)"""
+        response = client.post('/api/video/generate-subtitles', json={
+            'script': 'Scene 1: Welcome\nScene 2: Main content\nScene 3: Conclusion',
+            'duration': 30,
+            'format': 'srt'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'subtitles' in data
+            assert data['format'] == 'srt'
+            assert 'content' in data
+    
+    def test_convert_aspect_ratio(self, client):
+        """Test aspect ratio conversion (Improvement #2)"""
+        response = client.post('/api/video/convert-aspect-ratio', json={
+            'input_specs': {'width': 1920, 'height': 1080},
+            'target_ratio': '9:16'
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert data['target_ratio'] == '9:16'
+        assert 'target_dimensions' in data
+        assert data['target_dimensions']['width'] == 1080
+        assert data['target_dimensions']['height'] == 1920
+        assert 'ffmpeg_command' in data
+    
+    def test_generate_voiceover_script(self, client):
+        """Test voiceover script generation (Improvement #3)"""
+        response = client.post('/api/video/generate-voiceover-script', json={
+            'script': 'Welcome to our tutorial. Today we will learn something amazing.',
+            'language': 'en',
+            'voice_style': 'professional'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'voiceover_script' in data
+            assert data['language'] == 'en'
+            assert data['voice_style'] == 'professional'
+    
+    def test_broll_suggestions(self, client):
+        """Test B-roll suggestions (Improvement #4)"""
+        response = client.post('/api/video/broll-suggestions', json={
+            'script': 'Scene 1: Product demonstration\nScene 2: Happy customers',
+            'video_type': 'product_showcase'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'broll_suggestions' in data
+            assert 'stock_sources' in data
+    
+    def test_batch_video_creation(self, client):
+        """Test batch video creation (Improvement #5)"""
+        response = client.post('/api/video/batch-create', json={
+            'batch_data': [
+                {'topic': 'Product A'},
+                {'topic': 'Product B'},
+                {'topic': 'Product C'}
+            ],
+            'template_id': 'product_showcase',
+            'platform': 'instagram'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert data['total_processed'] == 3
+            assert 'results' in data
+    
+    def test_add_watermark(self, client):
+        """Test watermark addition (Improvement #6)"""
+        response = client.post('/api/video/add-watermark', json={
+            'video_specs': {'width': 1920, 'height': 1080},
+            'watermark_config': {
+                'position': 'bottom-right',
+                'opacity': 0.8,
+                'logo_path': 'logo.png'
+            }
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert data['position'] == 'bottom-right'
+        assert 'ffmpeg_command' in data
+    
+    def test_generate_intro_outro(self, client):
+        """Test intro/outro generation (Improvement #7)"""
+        response = client.post('/api/video/generate-intro-outro', json={
+            'brand_name': 'TestBrand',
+            'style': 'modern'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'intro' in data
+            assert 'outro' in data
+            assert 'TestBrand' in data['intro']['text']
+    
+    def test_text_overlays(self, client):
+        """Test text overlay generation (Improvement #8)"""
+        response = client.post('/api/video/text-overlays', json={
+            'key_points': ['Point 1', 'Point 2', 'Point 3'],
+            'style': 'bold'
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert data['overlay_count'] == 3
+        assert 'overlays' in data
+        assert 'ffmpeg_filter' in data
+    
+    def test_multi_platform_export(self, client):
+        """Test multi-platform export (Improvement #9)"""
+        response = client.post('/api/video/multi-platform-export', json={
+            'source_video_specs': {'width': 1920, 'height': 1080}
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert 'optimizations' in data
+        assert data['platforms_count'] > 0
+        assert 'instagram' in data['optimizations']
+        assert 'youtube' in data['optimizations']
+    
+    def test_analytics_metadata(self, client):
+        """Test analytics metadata generation (Improvement #10)"""
+        response = client.post('/api/video/analytics-metadata', json={
+            'script': 'You won\'t believe this amazing tutorial! Subscribe for more.',
+            'platform': 'youtube'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'script_analysis' in data
+            assert 'predicted_engagement_score' in data
+            assert 'recommendations' in data
+
+
+# ============================================================================
 # RUN ALL TESTS
 # ============================================================================
 
