@@ -1496,6 +1496,240 @@ POST /api/video/analytics-metadata
 }
 ```
 
+### AI Voiceover Improvements (10 New Features with 60 Language Support)
+
+**Supported Languages (Feature #1) - 60 Languages**
+```bash
+GET /api/voiceover/supported-languages
+```
+
+Response:
+```json
+{
+  "success": true,
+  "total_languages": 60,
+  "languages": {
+    "en": {"name": "English", "region": "Global", "tts_providers": ["ElevenLabs", "Azure", "Google", "Amazon"]},
+    "es": {"name": "Spanish", "region": "Europe/Americas", "tts_providers": [...]},
+    "fr": {"name": "French", "region": "Europe/Africa", "tts_providers": [...]},
+    "... 57 more languages ..."
+  },
+  "regions": ["Europe", "Asia", "Americas", "Middle East", "Africa", "Global"],
+  "tts_providers": ["ElevenLabs", "Azure", "Google", "Amazon"]
+}
+```
+
+**Pronunciation Guide (Feature #2)**
+```bash
+POST /api/voiceover/pronunciation-guide
+{
+  "script": "The CEO of ACME Corporation announced SQL improvements.",
+  "language": "en"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "pronunciation_guide": "CEO - sounds like 'see-ee-oh'\nACME - sounds like 'ak-mee'\nSQL - sounds like 'sequel' or 'es-que-el'...",
+  "language": "en",
+  "note": "Use this guide with voice actors or TTS systems"
+}
+```
+
+**Emotion Markers (Feature #3)**
+```bash
+POST /api/voiceover/emotion-markers
+{
+  "script": "Welcome! This is an exciting new product launch.",
+  "video_type": "product_showcase"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "marked_script": "[FRIENDLY] Welcome! [EXCITED] This is an exciting new product launch. [CONFIDENT]",
+  "emotion_markers": {
+    "EXCITED": 1,
+    "FRIENDLY": 1,
+    "CONFIDENT": 1
+  },
+  "total_markers": 3
+}
+```
+
+**Multi-Voice Script (Feature #4)**
+```bash
+POST /api/voiceover/multi-voice-script
+{
+  "script": "Let me tell you about our product. It has amazing features.",
+  "num_voices": 2
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "multi_voice_script": "[V1] Let me tell you about our product.\n[V2] It has amazing features...",
+  "num_voices": 2,
+  "voice_line_counts": {"V1": 3, "V2": 3}
+}
+```
+
+**Breath Marks (Feature #5)**
+```bash
+POST /api/voiceover/breath-marks
+{
+  "script": "This is a long sentence that needs breath control.",
+  "style": "natural"
+}
+```
+
+Styles: `natural`, `fast_paced`, `dramatic`, `conversational`
+
+Response:
+```json
+{
+  "success": true,
+  "marked_script": "This is a long sentence [BREATH] that needs breath control. [MEDIUM_PAUSE]",
+  "style": "natural",
+  "breath_marks": 2,
+  "pause_marks": 1
+}
+```
+
+**Duration Estimate (Feature #6)**
+```bash
+POST /api/voiceover/duration-estimate
+{
+  "script": "This is a test script with several words.",
+  "language": "en",
+  "speech_rate": "normal"
+}
+```
+
+Speech rates: `slow` (100 wpm), `normal` (150 wpm), `fast` (180 wpm), `very_fast` (200 wpm)
+
+Response:
+```json
+{
+  "success": true,
+  "total_duration_seconds": 5.2,
+  "total_duration_minutes": 0.09,
+  "word_count": 8,
+  "speech_rate": "normal",
+  "words_per_minute": 150,
+  "segment_timings": [
+    {"segment": 1, "text": "This is a test...", "duration": 3.2, "start_time": 0, "end_time": 3.2}
+  ]
+}
+```
+
+**Accent Guidance (Feature #7)**
+```bash
+POST /api/voiceover/accent-guidance
+{
+  "script": "Hello, welcome to our tutorial.",
+  "target_accent": "british"
+}
+```
+
+Accents: `neutral`, `american`, `british`, `australian`, `scottish`, `irish`, `southern`, `new_york`, `california`, `canadian`
+
+Response:
+```json
+{
+  "success": true,
+  "accent_guidance": "For British accent:\n- Pronounce 'hello' with rounded 'o'\n- 'welcome' with clear 't' sound...",
+  "target_accent": "british",
+  "available_accents": ["neutral", "american", "british", ...]
+}
+```
+
+**TTS Configuration (Feature #8)**
+```bash
+POST /api/voiceover/tts-config
+{
+  "script": "Test script for TTS.",
+  "language": "en",
+  "provider": "elevenlabs"
+}
+```
+
+Providers: `elevenlabs`, `azure`, `google`, `amazon`
+
+Response:
+```json
+{
+  "success": true,
+  "provider": "elevenlabs",
+  "character_count": 20,
+  "estimated_cost_usd": 0.03,
+  "configuration": {
+    "api_endpoint": "https://api.elevenlabs.io/v1/text-to-speech",
+    "recommended_voices": {
+      "male": ["Adam", "Antoni", "Arnold"],
+      "female": ["Bella", "Domi", "Elli"]
+    },
+    "parameters": {"stability": 0.75, "similarity_boost": 0.75},
+    "features": ["Voice cloning", "Emotion control", "60+ languages"],
+    "pricing": "Starts at $5/month for 30,000 characters"
+  }
+}
+```
+
+**Background Music Sync (Feature #9)**
+```bash
+POST /api/voiceover/music-sync
+{
+  "script": "Welcome to this tutorial. Let me show you the features.",
+  "music_style": "corporate"
+}
+```
+
+Styles: `corporate`, `energetic`, `calm`, `dramatic`, `upbeat`, `cinematic`
+
+Response:
+```json
+{
+  "success": true,
+  "music_sync_guide": "0:00 - Fade in corporate music at -20dB\n0:05 - Increase to -15dB during hook...",
+  "music_style": "corporate",
+  "available_styles": ["corporate", "energetic", "calm", "dramatic", "upbeat", "cinematic"]
+}
+```
+
+**Quality Check (Feature #10)**
+```bash
+POST /api/voiceover/quality-check
+{
+  "script": "This is a test script. It should be analyzed for quality.",
+  "language": "en"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "quality_score": 85,
+  "quality_rating": "Good",
+  "quality_issues": [],
+  "warnings": ["Script is short, consider expanding"],
+  "suggestions": ["Add more pauses for better pacing"],
+  "statistics": {
+    "word_count": 10,
+    "sentence_count": 2,
+    "avg_sentence_length": 5.0
+  },
+  "ai_analysis": "Script flows naturally. Consider adding emphasis markers..."
+}
+```
+
 **Generate Text-to-Video Prompt**
 ```bash
 POST /api/ai/generate-video-prompt

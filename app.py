@@ -2012,6 +2012,673 @@ Return formatted voiceover script."""
             logger.error(f"Voiceover script generation error: {str(e)}")
             return {'error': str(e), 'success': False}
     
+    # ===== AI VOICEOVER IMPROVEMENTS (10 Features) =====
+    
+    def get_supported_languages(self) -> Dict[str, Any]:
+        """Get list of 60 supported languages for voiceover (Voiceover Improvement #1)"""
+        languages = {
+            # Major World Languages
+            'en': {'name': 'English', 'region': 'Global', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'es': {'name': 'Spanish', 'region': 'Europe/Americas', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'fr': {'name': 'French', 'region': 'Europe/Africa', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'de': {'name': 'German', 'region': 'Europe', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'it': {'name': 'Italian', 'region': 'Europe', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'pt': {'name': 'Portuguese', 'region': 'Europe/Americas/Africa', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'ru': {'name': 'Russian', 'region': 'Europe/Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'ja': {'name': 'Japanese', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'ko': {'name': 'Korean', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'zh': {'name': 'Chinese (Mandarin)', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            
+            # European Languages
+            'nl': {'name': 'Dutch', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'pl': {'name': 'Polish', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'sv': {'name': 'Swedish', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'no': {'name': 'Norwegian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'da': {'name': 'Danish', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'fi': {'name': 'Finnish', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'cs': {'name': 'Czech', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'ro': {'name': 'Romanian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'hu': {'name': 'Hungarian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'el': {'name': 'Greek', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            
+            # Middle Eastern & African Languages
+            'ar': {'name': 'Arabic', 'region': 'Middle East/Africa', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'he': {'name': 'Hebrew', 'region': 'Middle East', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'tr': {'name': 'Turkish', 'region': 'Middle East/Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'fa': {'name': 'Persian (Farsi)', 'region': 'Middle East', 'tts_providers': ['Google', 'Amazon']},
+            'sw': {'name': 'Swahili', 'region': 'Africa', 'tts_providers': ['Google', 'Amazon']},
+            'zu': {'name': 'Zulu', 'region': 'Africa', 'tts_providers': ['Google']},
+            'am': {'name': 'Amharic', 'region': 'Africa', 'tts_providers': ['Google']},
+            
+            # Asian Languages
+            'hi': {'name': 'Hindi', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'bn': {'name': 'Bengali', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'ur': {'name': 'Urdu', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'th': {'name': 'Thai', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'vi': {'name': 'Vietnamese', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'id': {'name': 'Indonesian', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'ms': {'name': 'Malay', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'tl': {'name': 'Filipino (Tagalog)', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'ta': {'name': 'Tamil', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'te': {'name': 'Telugu', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'ml': {'name': 'Malayalam', 'region': 'Asia', 'tts_providers': ['Google']},
+            'kn': {'name': 'Kannada', 'region': 'Asia', 'tts_providers': ['Google']},
+            'mr': {'name': 'Marathi', 'region': 'Asia', 'tts_providers': ['Google']},
+            'gu': {'name': 'Gujarati', 'region': 'Asia', 'tts_providers': ['Google']},
+            
+            # More European Languages
+            'uk': {'name': 'Ukrainian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'bg': {'name': 'Bulgarian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'sk': {'name': 'Slovak', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'hr': {'name': 'Croatian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'sr': {'name': 'Serbian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'sl': {'name': 'Slovenian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'lt': {'name': 'Lithuanian', 'region': 'Europe', 'tts_providers': ['Google']},
+            'lv': {'name': 'Latvian', 'region': 'Europe', 'tts_providers': ['Google']},
+            'et': {'name': 'Estonian', 'region': 'Europe', 'tts_providers': ['Google']},
+            'is': {'name': 'Icelandic', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            
+            # Additional Languages
+            'ca': {'name': 'Catalan', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'gl': {'name': 'Galician', 'region': 'Europe', 'tts_providers': ['Google']},
+            'eu': {'name': 'Basque', 'region': 'Europe', 'tts_providers': ['Google']},
+            'cy': {'name': 'Welsh', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'ga': {'name': 'Irish', 'region': 'Europe', 'tts_providers': ['Google']},
+            'mt': {'name': 'Maltese', 'region': 'Europe', 'tts_providers': ['Google']},
+            'sq': {'name': 'Albanian', 'region': 'Europe', 'tts_providers': ['Google']},
+            'mk': {'name': 'Macedonian', 'region': 'Europe', 'tts_providers': ['Google']},
+            'af': {'name': 'Afrikaans', 'region': 'Africa', 'tts_providers': ['Azure', 'Google']},
+            'ne': {'name': 'Nepali', 'region': 'Asia', 'tts_providers': ['Google']},
+            'si': {'name': 'Sinhala', 'region': 'Asia', 'tts_providers': ['Google']},
+        }
+        
+        return {
+            'success': True,
+            'total_languages': len(languages),
+            'languages': languages,
+            'regions': ['Europe', 'Asia', 'Americas', 'Middle East', 'Africa', 'Global'],
+            'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']
+        }
+    
+    def generate_pronunciation_guide(self, script: str, language: str = 'en') -> Dict[str, Any]:
+        """Generate pronunciation guide for difficult words (Voiceover Improvement #2)"""
+        if not self.enabled:
+            return {'error': 'Pronunciation guide not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Analyze this script and provide pronunciation guidance for difficult or ambiguous words:
+
+Script: {script}
+Language: {language}
+
+Identify:
+1. Technical terms that need pronunciation guidance
+2. Proper nouns (names, brands, places)
+3. Acronyms and how to pronounce them
+4. Words with multiple pronunciations
+5. Foreign words or phrases
+
+For each word, provide:
+- The word
+- Phonetic spelling
+- Audio guidance (e.g., "sounds like...")
+- Context notes
+
+Return as structured pronunciation guide."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional pronunciation coach and linguist."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=600,
+                temperature=0.5
+            )
+            
+            guide = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'pronunciation_guide': guide,
+                'language': language,
+                'script_length': len(script),
+                'note': 'Use this guide with voice actors or TTS systems for accurate pronunciation'
+            }
+        except Exception as e:
+            logger.error(f"Pronunciation guide error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_emotion_markers(self, script: str, video_type: str = 'general') -> Dict[str, Any]:
+        """Add emotion and tone markers to script (Voiceover Improvement #3)"""
+        if not self.enabled:
+            return {'error': 'Emotion markers not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Add detailed emotion and tone markers to this voiceover script:
+
+Script: {script}
+Video Type: {video_type}
+
+Add markers for:
+- [EXCITED] - High energy, enthusiastic
+- [CALM] - Peaceful, soothing tone
+- [SERIOUS] - Formal, authoritative
+- [FRIENDLY] - Warm, conversational
+- [URGENT] - Quick, pressing tone
+- [QUESTIONING] - Curious, inquisitive
+- [CONFIDENT] - Strong, assured
+- [EMPATHETIC] - Understanding, compassionate
+
+Also add:
+- [SMILE] - Voice should sound like smiling
+- [WHISPER] - Soft, intimate delivery
+- Volume markers: [LOUDER] [SOFTER]
+- Pace markers: [FASTER] [SLOWER]
+
+Return the script with emotion markers inserted naturally."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a voice direction expert for professional voiceover work."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.7
+            )
+            
+            marked_script = response.choices[0].message.content.strip()
+            
+            # Count emotion markers
+            emotion_types = ['EXCITED', 'CALM', 'SERIOUS', 'FRIENDLY', 'URGENT', 'QUESTIONING', 'CONFIDENT', 'EMPATHETIC']
+            emotion_counts = {emotion: marked_script.count(f'[{emotion}]') for emotion in emotion_types}
+            
+            return {
+                'success': True,
+                'marked_script': marked_script,
+                'video_type': video_type,
+                'emotion_markers': emotion_counts,
+                'total_markers': sum(emotion_counts.values()),
+                'note': 'Use with emotion-capable TTS or provide to voice actors'
+            }
+        except Exception as e:
+            logger.error(f"Emotion markers error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_multi_voice_script(self, script: str, num_voices: int = 2) -> Dict[str, Any]:
+        """Split script for multiple voice actors/personas (Voiceover Improvement #4)"""
+        if not self.enabled:
+            return {'error': 'Multi-voice script not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Convert this script into a multi-voice conversation or narration:
+
+Script: {script}
+Number of Voices: {num_voices}
+
+Create a natural dialogue or narration that uses {num_voices} distinct voices:
+- Voice 1: [V1] tags
+- Voice 2: [V2] tags
+- Voice 3: [V3] tags (if applicable)
+
+For each voice, suggest:
+- Character/persona (e.g., narrator, expert, customer, host)
+- Voice characteristics (age, gender, tone)
+- Accent/dialect suggestions
+
+Make the conversation natural and engaging. Return formatted multi-voice script."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional scriptwriter specializing in dialogue and voice direction."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=900,
+                temperature=0.8
+            )
+            
+            multi_voice_script = response.choices[0].message.content.strip()
+            
+            # Count voice tags
+            voice_tags = {f'V{i+1}': multi_voice_script.count(f'[V{i+1}]') for i in range(num_voices)}
+            
+            return {
+                'success': True,
+                'multi_voice_script': multi_voice_script,
+                'num_voices': num_voices,
+                'voice_line_counts': voice_tags,
+                'note': 'Assign different voice actors or TTS voices to each [V#] tag'
+            }
+        except Exception as e:
+            logger.error(f"Multi-voice script error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_breath_marks(self, script: str, style: str = 'natural') -> Dict[str, Any]:
+        """Add breath marks and pacing guidance (Voiceover Improvement #5)"""
+        if not self.enabled:
+            return {'error': 'Breath marks not enabled', 'enabled': False}
+        
+        try:
+            breath_styles = {
+                'natural': 'Natural breathing patterns, breath every 8-12 words',
+                'fast_paced': 'Quick delivery, shorter breath intervals',
+                'dramatic': 'Strategic pauses for dramatic effect',
+                'conversational': 'Casual, frequent breaths like normal speech'
+            }
+            
+            style_guide = breath_styles.get(style, breath_styles['natural'])
+            
+            prompt = f"""Add breath marks and pacing guidance to this voiceover script:
+
+Script: {script}
+Style: {style} - {style_guide}
+
+Add markers:
+- [BREATH] - Take a breath
+- [SHORT_PAUSE] - 0.5 second pause
+- [MEDIUM_PAUSE] - 1 second pause
+- [LONG_PAUSE] - 2+ second pause
+- [NO_BREATH] - Continue without breath (for impact)
+
+Consider:
+- Sentence structure and natural breaks
+- Punctuation cues
+- Emotional beats
+- Narrative flow
+
+Return script with breathing and pacing markers."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional voice coach specializing in breath control and pacing."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.6
+            )
+            
+            marked_script = response.choices[0].message.content.strip()
+            
+            # Count markers
+            breath_count = marked_script.count('[BREATH]')
+            pause_count = marked_script.count('PAUSE')
+            
+            return {
+                'success': True,
+                'marked_script': marked_script,
+                'style': style,
+                'breath_marks': breath_count,
+                'pause_marks': pause_count,
+                'note': 'Follow breath marks for natural, professional delivery'
+            }
+        except Exception as e:
+            logger.error(f"Breath marks error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def estimate_voiceover_duration(self, script: str, language: str = 'en', speech_rate: str = 'normal') -> Dict[str, Any]:
+        """Estimate voiceover duration with timing breakdown (Voiceover Improvement #6)"""
+        
+        speech_rates = {
+            'slow': 100,      # words per minute
+            'normal': 150,    # words per minute
+            'fast': 180,      # words per minute
+            'very_fast': 200  # words per minute
+        }
+        
+        wpm = speech_rates.get(speech_rate, 150)
+        
+        # Count words
+        words = len(script.split())
+        
+        # Base duration in seconds
+        base_duration = (words / wpm) * 60
+        
+        # Add pause time (estimate 0.5s per sentence)
+        sentences = script.count('.') + script.count('!') + script.count('?')
+        pause_time = sentences * 0.5
+        
+        # Total duration
+        total_duration = base_duration + pause_time
+        
+        # Calculate per-segment timing if script has line breaks
+        segments = script.split('\n')
+        segment_timings = []
+        cumulative_time = 0
+        
+        for i, segment in enumerate(segments):
+            if segment.strip():
+                seg_words = len(segment.split())
+                seg_duration = (seg_words / wpm) * 60 + 0.5
+                segment_timings.append({
+                    'segment': i + 1,
+                    'text': segment[:50] + '...' if len(segment) > 50 else segment,
+                    'duration': round(seg_duration, 2),
+                    'start_time': round(cumulative_time, 2),
+                    'end_time': round(cumulative_time + seg_duration, 2)
+                })
+                cumulative_time += seg_duration
+        
+        return {
+            'success': True,
+            'total_duration_seconds': round(total_duration, 2),
+            'total_duration_minutes': round(total_duration / 60, 2),
+            'word_count': words,
+            'speech_rate': speech_rate,
+            'words_per_minute': wpm,
+            'estimated_pauses': sentences,
+            'segment_count': len([s for s in segments if s.strip()]),
+            'segment_timings': segment_timings,
+            'language': language,
+            'note': 'Actual duration may vary by ±15% based on delivery style'
+        }
+    
+    def generate_accent_guidance(self, script: str, target_accent: str = 'neutral') -> Dict[str, Any]:
+        """Generate accent and dialect guidance (Voiceover Improvement #7)"""
+        if not self.enabled:
+            return {'error': 'Accent guidance not enabled', 'enabled': False}
+        
+        try:
+            accents = {
+                'neutral': 'Standard neutral accent, clear and universally understood',
+                'american': 'General American English (TV/radio standard)',
+                'british': 'Received Pronunciation (BBC English)',
+                'australian': 'General Australian English',
+                'scottish': 'Scottish English accent',
+                'irish': 'Irish English accent',
+                'southern': 'Southern US accent',
+                'new_york': 'New York City accent',
+                'california': 'California/West Coast accent',
+                'canadian': 'Canadian English accent'
+            }
+            
+            accent_info = accents.get(target_accent, accents['neutral'])
+            
+            prompt = f"""Provide accent and dialect guidance for this voiceover script:
+
+Script: {script}
+Target Accent: {target_accent} - {accent_info}
+
+Provide guidance on:
+1. Key vowel sounds specific to this accent
+2. Consonant pronunciations that differ
+3. Intonation patterns
+4. Stress patterns
+5. Common phrases that need special attention
+6. Words to avoid or replace for this accent
+7. Rhythm and cadence notes
+
+Make it practical and easy to follow for voice actors."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a dialect coach with expertise in accents and regional speech patterns."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=700,
+                temperature=0.6
+            )
+            
+            guidance = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'accent_guidance': guidance,
+                'target_accent': target_accent,
+                'accent_description': accent_info,
+                'available_accents': list(accents.keys()),
+                'note': 'Use with professional voice actors familiar with the target accent'
+            }
+        except Exception as e:
+            logger.error(f"Accent guidance error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_tts_config(self, script: str, language: str = 'en', provider: str = 'elevenlabs') -> Dict[str, Any]:
+        """Generate TTS provider-specific configuration (Voiceover Improvement #8)"""
+        
+        # TTS provider configurations
+        configs = {
+            'elevenlabs': {
+                'api_endpoint': 'https://api.elevenlabs.io/v1/text-to-speech',
+                'recommended_voices': {
+                    'male': ['Adam', 'Antoni', 'Arnold', 'Callum', 'Charlie'],
+                    'female': ['Bella', 'Domi', 'Elli', 'Emily', 'Rachel']
+                },
+                'parameters': {
+                    'stability': 0.75,
+                    'similarity_boost': 0.75,
+                    'model_id': 'eleven_monolingual_v1'
+                },
+                'features': ['Voice cloning', 'Emotion control', 'Multi-lingual', '60+ languages'],
+                'pricing': 'Starts at $5/month for 30,000 characters'
+            },
+            'azure': {
+                'api_endpoint': 'https://[region].tts.speech.microsoft.com/cognitiveservices/v1',
+                'recommended_voices': {
+                    'male': ['en-US-GuyNeural', 'en-US-DavisNeural', 'en-GB-RyanNeural'],
+                    'female': ['en-US-JennyNeural', 'en-US-AriaNeural', 'en-GB-SoniaNeural']
+                },
+                'parameters': {
+                    'rate': '0%',
+                    'pitch': '0%',
+                    'volume': '0%'
+                },
+                'ssml_support': True,
+                'features': ['Neural voices', '110+ languages', 'SSML tags', 'Custom neural voice'],
+                'pricing': 'Pay-as-you-go, $15 per 1M characters'
+            },
+            'google': {
+                'api_endpoint': 'https://texttospeech.googleapis.com/v1/text:synthesize',
+                'recommended_voices': {
+                    'male': ['en-US-Neural2-D', 'en-US-Neural2-A', 'en-GB-Neural2-B'],
+                    'female': ['en-US-Neural2-C', 'en-US-Neural2-E', 'en-US-Neural2-F']
+                },
+                'parameters': {
+                    'speakingRate': 1.0,
+                    'pitch': 0.0,
+                    'volumeGainDb': 0.0
+                },
+                'ssml_support': True,
+                'features': ['WaveNet voices', '40+ languages', 'SSML support', 'Custom voice'],
+                'pricing': 'Free tier: 1M characters/month, then $4 per 1M'
+            },
+            'amazon': {
+                'api_endpoint': 'Amazon Polly API',
+                'recommended_voices': {
+                    'male': ['Matthew', 'Joey', 'Justin', 'Kevin'],
+                    'female': ['Joanna', 'Kendra', 'Kimberly', 'Salli']
+                },
+                'parameters': {
+                    'Engine': 'neural',
+                    'SampleRate': '24000',
+                    'OutputFormat': 'mp3'
+                },
+                'ssml_support': True,
+                'features': ['Neural voices', '60+ languages', 'Newscaster style', 'Conversational style'],
+                'pricing': 'Free tier: 5M characters/month (12 months), then $16 per 1M'
+            }
+        }
+        
+        config = configs.get(provider, configs['elevenlabs'])
+        
+        # Calculate character count and estimate cost
+        char_count = len(script)
+        
+        # Estimate cost per provider (simplified)
+        cost_estimates = {
+            'elevenlabs': (char_count / 30000) * 5,  # Rough monthly cost
+            'azure': (char_count / 1000000) * 15,
+            'google': max(0, (char_count / 1000000 - 1) * 4),  # Free tier included
+            'amazon': max(0, (char_count / 1000000) * 16)
+        }
+        
+        return {
+            'success': True,
+            'provider': provider,
+            'language': language,
+            'character_count': char_count,
+            'estimated_cost_usd': round(cost_estimates.get(provider, 0), 2),
+            'configuration': config,
+            'ssml_enabled': config.get('ssml_support', False),
+            'all_providers': list(configs.keys()),
+            'note': 'Configure API keys in your environment before use'
+        }
+    
+    def generate_background_music_sync(self, script: str, music_style: str = 'corporate') -> Dict[str, Any]:
+        """Generate background music sync points (Voiceover Improvement #9)"""
+        if not self.enabled:
+            return {'error': 'Music sync not enabled', 'enabled': False}
+        
+        try:
+            music_styles = {
+                'corporate': 'Professional, uplifting, motivational',
+                'energetic': 'Fast-paced, exciting, high-energy',
+                'calm': 'Peaceful, soothing, ambient',
+                'dramatic': 'Intense, suspenseful, emotional',
+                'upbeat': 'Happy, cheerful, positive',
+                'cinematic': 'Epic, orchestral, grand'
+            }
+            
+            style_desc = music_styles.get(music_style, music_styles['corporate'])
+            
+            prompt = f"""Analyze this voiceover script and suggest background music sync points:
+
+Script: {script}
+Music Style: {music_style} - {style_desc}
+
+Provide:
+1. Music cue points (when to start, stop, fade in/out)
+2. Volume levels relative to voice (e.g., -20dB, -15dB)
+3. Music change suggestions for different sections
+4. Emotional sync points where music should match content
+5. Silence points where music should drop out
+6. Build/crescendo points
+
+Format as timestamp-based music direction."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are an audio engineer specializing in music and voiceover mixing."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=700,
+                temperature=0.7
+            )
+            
+            music_sync = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'music_sync_guide': music_sync,
+                'music_style': music_style,
+                'style_description': style_desc,
+                'available_styles': list(music_styles.keys()),
+                'note': 'Adjust music volume to ensure voiceover remains clear (-15dB to -20dB is typical)'
+            }
+        except Exception as e:
+            logger.error(f"Music sync error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_voiceover_quality_check(self, script: str, language: str = 'en') -> Dict[str, Any]:
+        """Analyze script for voiceover quality issues (Voiceover Improvement #10)"""
+        if not self.enabled:
+            return {'error': 'Quality check not enabled', 'enabled': False}
+        
+        try:
+            # Automated checks
+            quality_issues = []
+            warnings = []
+            suggestions = []
+            
+            # Check 1: Script length
+            word_count = len(script.split())
+            if word_count < 20:
+                warnings.append('Script is very short (< 20 words). Consider expanding.')
+            elif word_count > 500:
+                warnings.append('Script is very long (> 500 words). Consider breaking into segments.')
+            
+            # Check 2: Sentence length
+            sentences = [s.strip() for s in script.replace('!', '.').replace('?', '.').split('.') if s.strip()]
+            avg_sentence_length = sum(len(s.split()) for s in sentences) / max(len(sentences), 1)
+            if avg_sentence_length > 25:
+                quality_issues.append('Sentences are too long (avg > 25 words). Voice actors may struggle with breath control.')
+            
+            # Check 3: Difficult consonant clusters
+            difficult_patterns = ['str', 'spr', 'thr', 'scr', 'spl']
+            difficult_words = [word for word in script.split() if any(pattern in word.lower() for pattern in difficult_patterns)]
+            if len(difficult_words) > 10:
+                warnings.append(f'Script contains many words with difficult consonant clusters: {", ".join(difficult_words[:5])}...')
+            
+            # Check 4: Punctuation
+            if script.count(',') + script.count('.') + script.count('!') + script.count('?') < word_count / 20:
+                quality_issues.append('Insufficient punctuation. Add commas and periods for natural pacing.')
+            
+            # Check 5: Acronyms without periods
+            import re
+            acronyms = re.findall(r'\b[A-Z]{2,}\b', script)
+            if acronyms:
+                suggestions.append(f'Found acronyms: {", ".join(set(acronyms))}. Clarify pronunciation in notes.')
+            
+            # AI-powered analysis
+            prompt = f"""Analyze this voiceover script for quality and readability:
+
+Script: {script}
+Language: {language}
+
+Check for:
+1. Tongue twisters or difficult phrases
+2. Ambiguous pronunciations
+3. Awkward phrasing that sounds unnatural when spoken
+4. Missing punctuation that affects pacing
+5. Words that might be misread
+6. Overall flow and rhythm
+
+Provide specific, actionable feedback."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a voiceover director with expertise in script quality assurance."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=600,
+                temperature=0.5
+            )
+            
+            ai_analysis = response.choices[0].message.content.strip()
+            
+            # Calculate quality score
+            quality_score = 100
+            quality_score -= len(quality_issues) * 15
+            quality_score -= len(warnings) * 5
+            quality_score = max(0, quality_score)
+            
+            return {
+                'success': True,
+                'quality_score': quality_score,
+                'quality_rating': 'Excellent' if quality_score >= 90 else 'Good' if quality_score >= 70 else 'Fair' if quality_score >= 50 else 'Needs Improvement',
+                'quality_issues': quality_issues,
+                'warnings': warnings,
+                'suggestions': suggestions,
+                'ai_analysis': ai_analysis,
+                'statistics': {
+                    'word_count': word_count,
+                    'sentence_count': len(sentences),
+                    'avg_sentence_length': round(avg_sentence_length, 1),
+                    'difficult_words': len(difficult_words),
+                    'acronyms': len(acronyms)
+                },
+                'language': language,
+                'note': 'Address quality issues before recording for best results'
+            }
+        except Exception as e:
+            logger.error(f"Quality check error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
     def generate_broll_suggestions(self, script: str, video_type: str) -> Dict[str, Any]:
         """Generate B-roll footage suggestions (Improvement #4: B-roll integration)"""
         if not self.enabled:
@@ -4217,6 +4884,212 @@ def video_generate_voiceover_script():
         return jsonify({'error': 'Script is required'}), 400
     
     result = ai_video_generator.generate_voiceover_script(script, language, voice_style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+# ===== AI VOICEOVER IMPROVEMENTS API ENDPOINTS (10 Features) =====
+
+@app.route('/api/voiceover/supported-languages', methods=['GET'])
+def voiceover_supported_languages():
+    """Get list of 60 supported languages (Voiceover Improvement #1)"""
+    result = ai_video_generator.get_supported_languages()
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/pronunciation-guide', methods=['POST'])
+def voiceover_pronunciation_guide():
+    """Generate pronunciation guide (Voiceover Improvement #2)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    language = data.get('language', 'en')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_pronunciation_guide(script, language)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/emotion-markers', methods=['POST'])
+def voiceover_emotion_markers():
+    """Add emotion and tone markers (Voiceover Improvement #3)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    video_type = data.get('video_type', 'general')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_emotion_markers(script, video_type)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/multi-voice-script', methods=['POST'])
+def voiceover_multi_voice_script():
+    """Generate multi-voice script (Voiceover Improvement #4)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    num_voices = data.get('num_voices', 2)
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    if num_voices < 2 or num_voices > 5:
+        return jsonify({'error': 'Number of voices must be between 2 and 5'}), 400
+    
+    result = ai_video_generator.generate_multi_voice_script(script, num_voices)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/breath-marks', methods=['POST'])
+def voiceover_breath_marks():
+    """Add breath marks and pacing (Voiceover Improvement #5)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    style = data.get('style', 'natural')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_breath_marks(script, style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/duration-estimate', methods=['POST'])
+def voiceover_duration_estimate():
+    """Estimate voiceover duration (Voiceover Improvement #6)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    language = data.get('language', 'en')
+    speech_rate = data.get('speech_rate', 'normal')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.estimate_voiceover_duration(script, language, speech_rate)
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/accent-guidance', methods=['POST'])
+def voiceover_accent_guidance():
+    """Generate accent guidance (Voiceover Improvement #7)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    target_accent = data.get('target_accent', 'neutral')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_accent_guidance(script, target_accent)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/tts-config', methods=['POST'])
+def voiceover_tts_config():
+    """Generate TTS provider config (Voiceover Improvement #8)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    language = data.get('language', 'en')
+    provider = data.get('provider', 'elevenlabs')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_tts_config(script, language, provider)
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/music-sync', methods=['POST'])
+def voiceover_music_sync():
+    """Generate background music sync (Voiceover Improvement #9)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    music_style = data.get('music_style', 'corporate')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_background_music_sync(script, music_style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/quality-check', methods=['POST'])
+def voiceover_quality_check():
+    """Analyze script quality (Voiceover Improvement #10)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    language = data.get('language', 'en')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_voiceover_quality_check(script, language)
     
     if not result.get('success'):
         return jsonify(result), 503 if 'enabled' in result else 500

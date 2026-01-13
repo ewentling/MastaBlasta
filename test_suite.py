@@ -1336,6 +1336,178 @@ class TestFacelessVideo:
 
 
 # ============================================================================
+# AI VOICEOVER IMPROVEMENTS TESTS (10 Features)
+# ============================================================================
+
+class TestVoiceoverImprovements:
+    """Test suite for AI voiceover improvements"""
+    
+    def test_supported_languages(self, client):
+        """Test 60 language support list (Voiceover #1)"""
+        response = client.get('/api/voiceover/supported-languages')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert data['total_languages'] >= 60
+        assert 'languages' in data
+        assert 'en' in data['languages']
+        assert 'es' in data['languages']
+        assert 'ja' in data['languages']
+        assert 'tts_providers' in data
+    
+    def test_pronunciation_guide(self, client):
+        """Test pronunciation guide generation (Voiceover #2)"""
+        response = client.post('/api/voiceover/pronunciation-guide', json={
+            'script': 'The CEO of ACME Corporation announced SQL database improvements.',
+            'language': 'en'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'pronunciation_guide' in data
+            assert data['language'] == 'en'
+    
+    def test_emotion_markers(self, client):
+        """Test emotion marker generation (Voiceover #3)"""
+        response = client.post('/api/voiceover/emotion-markers', json={
+            'script': 'Welcome! This is an exciting new product launch.',
+            'video_type': 'product_showcase'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'marked_script' in data
+            assert 'emotion_markers' in data
+            assert data['total_markers'] >= 0
+    
+    def test_multi_voice_script(self, client):
+        """Test multi-voice script generation (Voiceover #4)"""
+        response = client.post('/api/voiceover/multi-voice-script', json={
+            'script': 'Let me tell you about our product. It has amazing features.',
+            'num_voices': 2
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'multi_voice_script' in data
+            assert data['num_voices'] == 2
+            assert 'voice_line_counts' in data
+    
+    def test_breath_marks(self, client):
+        """Test breath mark generation (Voiceover #5)"""
+        response = client.post('/api/voiceover/breath-marks', json={
+            'script': 'This is a long sentence that needs breath control.',
+            'style': 'natural'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'marked_script' in data
+            assert data['style'] == 'natural'
+            assert 'breath_marks' in data
+    
+    def test_duration_estimate(self, client):
+        """Test voiceover duration estimation (Voiceover #6)"""
+        response = client.post('/api/voiceover/duration-estimate', json={
+            'script': 'This is a test script with several words to estimate duration.',
+            'language': 'en',
+            'speech_rate': 'normal'
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert 'total_duration_seconds' in data
+        assert 'word_count' in data
+        assert 'speech_rate' in data
+        assert data['words_per_minute'] == 150
+        assert 'segment_timings' in data
+    
+    def test_accent_guidance(self, client):
+        """Test accent guidance generation (Voiceover #7)"""
+        response = client.post('/api/voiceover/accent-guidance', json={
+            'script': 'Hello, welcome to our tutorial.',
+            'target_accent': 'british'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'accent_guidance' in data
+            assert data['target_accent'] == 'british'
+            assert 'available_accents' in data
+    
+    def test_tts_config(self, client):
+        """Test TTS configuration generation (Voiceover #8)"""
+        response = client.post('/api/voiceover/tts-config', json={
+            'script': 'Test script for TTS configuration.',
+            'language': 'en',
+            'provider': 'elevenlabs'
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert data['success'] is True
+        assert data['provider'] == 'elevenlabs'
+        assert 'character_count' in data
+        assert 'configuration' in data
+        assert 'recommended_voices' in data['configuration']
+        assert 'estimated_cost_usd' in data
+    
+    def test_music_sync(self, client):
+        """Test background music sync generation (Voiceover #9)"""
+        response = client.post('/api/voiceover/music-sync', json={
+            'script': 'Welcome to this tutorial. Let me show you the features.',
+            'music_style': 'corporate'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'music_sync_guide' in data
+            assert data['music_style'] == 'corporate'
+            assert 'available_styles' in data
+    
+    def test_quality_check(self, client):
+        """Test voiceover quality check (Voiceover #10)"""
+        response = client.post('/api/voiceover/quality-check', json={
+            'script': 'This is a test script. It should be analyzed for quality.',
+            'language': 'en'
+        })
+        
+        assert response.status_code in [200, 503]
+        data = response.get_json()
+        
+        if response.status_code == 200:
+            assert data['success'] is True
+            assert 'quality_score' in data
+            assert 'quality_rating' in data
+            assert 'quality_issues' in data
+            assert 'statistics' in data
+            assert 'word_count' in data['statistics']
+
+
+# ============================================================================
 # RUN ALL TESTS
 # ============================================================================
 
