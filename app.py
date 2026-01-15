@@ -380,8 +380,9 @@ class IntelligentScheduler:
                 score += 10
             if 12 <= hour <= 14 or 17 <= hour <= 19:
                 score += 15
-        except (ValueError, IndexError, AttributeError):
-            pass
+        except (ValueError, IndexError, AttributeError) as exc:
+            # If scheduled_time is in an unexpected format, skip time-based scoring but continue.
+            logger.debug("Skipping time-based engagement scoring due to invalid scheduled_time %r: %s", scheduled_time, exc)
 
         # Hashtag analysis
         hashtag_count = len(re.findall(r'#\w+', content))
@@ -2714,7 +2715,6 @@ Format as timestamp-based music direction."""
                 quality_issues.append('Insufficient punctuation. Add commas and periods for natural pacing.')
 
             # Check 5: Acronyms without periods
-            import re
             acronyms = re.findall(r'\b[A-Z]{2,}\b', script)
             if acronyms:
                 suggestions.append(f'Found acronyms: {", ".join(set(acronyms))}. Clarify pronunciation in notes.')
@@ -7084,8 +7084,8 @@ def execute_bulk_import():
 
                 posts_db[post_id] = post_record
 
-                # Publish immediately (results not currently used but could be for error tracking)
-                _ = publish_to_platforms(post_id, list(set(platforms)), content, row.get('media'), credentials, post_type, post_options)
+                # Publish immediately
+                publish_to_platforms(post_id, list(set(platforms)), content, row.get('media'), credentials, post_type, post_options)
 
             created_posts.append({
                 'row': i + 1,
@@ -7289,7 +7289,6 @@ def templates():
         template_id = str(uuid.uuid4())
 
         # Extract variables from content
-        import re
         content = data.get('content', '')
         variables = list(set(re.findall(r'\{\{(\w+)\}\}', content)))
 
