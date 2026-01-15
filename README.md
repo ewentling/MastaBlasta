@@ -199,6 +199,11 @@ The application will be available at `http://localhost:33766`
 
 **Access the Web UI**: Open your browser and navigate to `http://localhost:33766`
 
+**Included Dependencies**:
+- ✅ FFmpeg pre-installed for video clipping functionality
+- ✅ All Python dependencies
+- ✅ Auto-restart on failure
+
 **Auto-Restart Configuration**: The Docker Compose configuration includes `restart: unless-stopped`, which means:
 - ✅ Automatically starts when Docker daemon starts (on system boot)
 - ✅ Automatically restarts if the application crashes
@@ -222,6 +227,7 @@ docker run -d \
 - ✅ Container automatically starts on system boot
 - ✅ Container restarts automatically on failure
 - ✅ Container stays stopped only when manually stopped with `docker stop mastablasta`
+- ✅ FFmpeg included in the container for video clipping
 
 ### Local Development
 
@@ -229,6 +235,15 @@ docker run -d \
 ```bash
 # Install Python dependencies
 pip install -r requirements.txt
+
+# (Optional) Install ffmpeg for video clipping feature
+# Ubuntu/Debian
+sudo apt-get install ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# Windows - Download from https://ffmpeg.org/download.html
 
 # Run the application
 python app.py
@@ -865,7 +880,11 @@ export GOOGLE_API_KEY=your-gemini-api-key-here
 GET /api/clips/status
 ```
 
-5. (Optional) Install ffmpeg for clip extraction:
+5. Install ffmpeg for clip extraction:
+
+**Docker (Recommended)**: FFmpeg is automatically included in the Docker image - no additional setup needed!
+
+**Local Development**:
 ```bash
 # Ubuntu/Debian
 sudo apt-get install ffmpeg
