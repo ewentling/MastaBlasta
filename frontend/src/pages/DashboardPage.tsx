@@ -33,7 +33,14 @@ export default function DashboardPage() {
     { icon: TrendingUp, label: 'Analytics', path: '/analytics', color: '#3b82f6' },
   ];
 
-  const StatCard = ({ icon: Icon, value, label, gradient }: any) => (
+  interface StatCardProps {
+    icon: React.ComponentType<{ size?: number }>;
+    value: number;
+    label: string;
+    gradient: string;
+  }
+
+  const StatCard = ({ icon: Icon, value, label, gradient }: StatCardProps) => (
     <article className="card" role="region" aria-label={label}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
         <div style={{ 

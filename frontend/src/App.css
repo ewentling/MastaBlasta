@@ -5,16 +5,23 @@
   --color-bgTertiary: #1d1d28;
   --color-bgQuaternary: #24242f;
   
+  /* Opacity levels */
+  --opacity-glass-light: 0.05;
+  --opacity-glass-medium: 0.08;
+  --opacity-glass-strong: 0.12;
+  --opacity-border: 0.1;
+  --opacity-sidebar: 0.85;
+  
   /* Glassmorphism colors */
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-bg-hover: rgba(255, 255, 255, 0.08);
-  --glass-bg-active: rgba(255, 255, 255, 0.12);
-  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-bg: rgba(255, 255, 255, var(--opacity-glass-light));
+  --glass-bg-hover: rgba(255, 255, 255, var(--opacity-glass-medium));
+  --glass-bg-active: rgba(255, 255, 255, var(--opacity-glass-strong));
+  --glass-border: rgba(255, 255, 255, var(--opacity-border));
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   
   /* Sidebar with glassmorphism */
-  --color-sidebarBg: rgba(102, 126, 234, 0.08);
-  --color-sidebarBackdrop: rgba(16, 16, 24, 0.85);
+  --color-sidebarBg: rgba(102, 126, 234, var(--opacity-glass-medium));
+  --color-sidebarBackdrop: rgba(16, 16, 24, var(--opacity-sidebar));
   --color-sidebarBorder: rgba(102, 126, 234, 0.15);
   --color-sidebarText: rgba(255, 255, 255, 0.95);
   --color-sidebarHover: rgba(102, 126, 234, 0.15);
