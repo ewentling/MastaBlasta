@@ -419,12 +419,12 @@ class ConnectionHealthMonitor:
         # Test API connectivity
         try:
             if platform == 'twitter' and access_token:
-                client = tweepy.Client(bearer_token=access_token)
+                client = tweepy.Client(access_token)  # Use access_token parameter for user auth
                 client.get_me()
             elif platform == 'meta' and access_token:
                 response = requests.get(
                     'https://graph.facebook.com/v18.0/me',
-                    params={'access_token': access_token}
+                    headers={'Authorization': f'Bearer {access_token}'}
                 )
                 response.raise_for_status()
             elif platform == 'linkedin' and access_token:
@@ -519,7 +519,7 @@ class PlatformAccountValidator:
         
         try:
             if platform == 'twitter':
-                client = tweepy.Client(bearer_token=access_token)
+                client = tweepy.Client(access_token)  # Use access_token parameter for user auth
                 me = client.get_me()
                 validation['account_info'] = {
                     'username': me.data.username,
@@ -539,7 +539,7 @@ class PlatformAccountValidator:
                 validation['account_info'] = {
                     'user_id': data.get('id'),
                     'name': data.get('name'),
-                    'pages': [{'id': page['id'], 'name': page['name']} for page in data.get('accounts', {}).get('data', [])]
+                    'pages': [{'id': page['id'], 'name': page['name']} for page in data.get('accounts', [])]
                 }
                 
                 if not validation['account_info'].get('pages'):
@@ -740,7 +740,8 @@ class QuickConnectWizard:
             elif base_platform == 'google':
                 result['authorization_url'] = GoogleOAuth.get_authorization_url(state)
             else:
-                result['instructions'] = f'Please configure {platform} manually via API keys'
+                result['error'] = f'Platform {platform} not supported for OAuth connection'
+                result['instructions'] = f'Please configure {platform} manually via API keys or check platform documentation'
         except Exception as e:
             result['error'] = f'Failed to generate connection URL: {str(e)}'
             logger.error(f"Connection URL generation failed for {platform}: {e}")
@@ -939,7 +940,10 @@ class BulkConnectionManager:
             
             # Estimate time
             setup_time_str = config.get('setup_time', '3 minutes')
-            minutes = int(''.join(filter(str.isdigit, setup_time_str))) if setup_time_str else 3
+            # Extract first number from string like "2 minutes" or "10 minutes"
+            import re
+            match = re.search(r'\d+', setup_time_str)
+            minutes = int(match.group()) if match else 3
             result['estimated_time_minutes'] += minutes
         
         return result

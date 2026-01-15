@@ -5494,7 +5494,14 @@ def check_connection_health(account_id):
         # Get token expiration if available
         expires_at = account.get('token_expires_at')
         if expires_at and isinstance(expires_at, str):
-            expires_at = datetime.fromisoformat(expires_at)
+            try:
+                # Handle both with and without timezone info
+                if expires_at.endswith('Z'):
+                    expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                else:
+                    expires_at = datetime.fromisoformat(expires_at)
+            except ValueError:
+                expires_at = None  # If parsing fails, set to None
         
         status = ConnectionHealthMonitor.check_connection_status(platform, access_token, expires_at)
         
@@ -5656,7 +5663,7 @@ def auto_refresh_token(account_id):
         result = AutoReconnectionService.auto_refresh_if_needed(platform, account_data)
         
         # If token was refreshed, update the account
-        if result['refreshed']:
+        if result['refreshed'] and result.get('expires_at'):
             account['credentials']['access_token'] = result['new_token']
             account['token_expires_at'] = result['expires_at'].isoformat()
             accounts_db[account_id] = account
