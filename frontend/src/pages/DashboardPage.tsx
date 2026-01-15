@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { postsApi, accountsApi } from '../api';
-import { BarChart3, Users, Send, Calendar, Plus, Sparkles, TrendingUp, Zap } from 'lucide-react';
+import { BarChart3, Users, Send, Calendar, Plus, Sparkles, TrendingUp, Zap, Activity } from 'lucide-react';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -26,196 +26,210 @@ export default function DashboardPage() {
   const recentPosts = posts.slice(0, 5);
 
   const quickActions = [
-    { icon: Plus, label: 'Create Post', path: '/create-post', color: '#667eea' },
-    { icon: Calendar, label: 'Schedule Post', path: '/create-post', color: '#48bb78' },
-    { icon: Users, label: 'Add Account', path: '/accounts', color: '#ed8936' },
-    { icon: Sparkles, label: 'AI Assistant', path: '/chatbot', color: '#9f7aea' },
-    { icon: TrendingUp, label: 'View Analytics', path: '/analytics', color: '#4299e1' },
+    { icon: Plus, label: 'Create Post', path: '/post', color: '#7c3aed' },
+    { icon: Calendar, label: 'Schedule', path: '/scheduled', color: '#10b981' },
+    { icon: Users, label: 'Accounts', path: '/accounts', color: '#f59e0b' },
+    { icon: Sparkles, label: 'AI Assistant', path: '/chatbot', color: '#8b5cf6' },
+    { icon: TrendingUp, label: 'Analytics', path: '/analytics', color: '#3b82f6' },
   ];
 
+  const StatCard = ({ icon: Icon, value, label, gradient }: any) => (
+    <article className="card" role="region" aria-label={label}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ 
+          background: gradient,
+          padding: '1rem', 
+          borderRadius: '1rem',
+          color: 'white',
+          boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)'
+        }}>
+          <Icon size={28} />
+        </div>
+        <div>
+          <div style={{ 
+            fontSize: '2.5rem', 
+            fontWeight: '700', 
+            color: 'var(--color-textPrimary)',
+            letterSpacing: '-0.03em',
+            lineHeight: '1'
+          }}>
+            {value}
+          </div>
+          <div style={{ 
+            color: 'var(--color-textSecondary)', 
+            fontSize: '0.9375rem',
+            fontWeight: '500',
+            marginTop: '0.25rem'
+          }}>{label}</div>
+        </div>
+      </div>
+    </article>
+  );
+
   return (
-    <div>
-      <div className="page-header">
+    <div role="main">
+      <header className="page-header">
         <h2>Dashboard</h2>
         <p>Overview of your social media posting activity</p>
-      </div>
+      </header>
 
-      {/* Quick Actions */}
-      <div className="card" style={{ marginBottom: '2rem' }}>
-        <div className="card-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Zap size={20} style={{ color: 'var(--color-accentPrimary)' }} />
-            <h3>Quick Actions</h3>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
-          {quickActions.map((action) => (
-            <button
-              key={action.label}
-              className="btn btn-secondary"
-              onClick={() => navigate(action.path)}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '0.5rem',
-                padding: '1rem',
-                height: 'auto',
-                backgroundColor: 'var(--color-bgSecondary)',
-                border: '2px solid var(--color-borderLight)',
-                transition: 'all 0.2s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = action.color;
-                e.currentTarget.style.transform = 'translateY(-2px)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--color-borderLight)';
-                e.currentTarget.style.transform = 'translateY(0)';
-              }}
-            >
-              <div style={{ 
-                background: `linear-gradient(135deg, ${action.color} 0%, ${action.color}cc 100%)`,
-                padding: '0.75rem',
-                borderRadius: '8px',
-                color: 'white',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <action.icon size={24} />
-              </div>
-              <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>{action.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-2">
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ 
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-              padding: '1rem', 
-              borderRadius: '12px',
-              color: 'white'
-            }}>
-              <Users size={24} />
-            </div>
-            <div>
-              <div style={{ fontSize: '2rem', fontWeight: '700', color: '#1a202c' }}>
-                {activeAccounts}
-              </div>
-              <div style={{ color: '#718096', fontSize: '0.875rem' }}>Active Accounts</div>
+      {/* Bento Grid Layout */}
+      <div className="bento-grid bento-grid-4">
+        
+        {/* Quick Actions - Full width featured card */}
+        <section className="card bento-item-2x" aria-labelledby="quick-actions-heading">
+          <div className="card-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+              <Zap size={22} style={{ color: 'var(--color-accentPrimary)' }} />
+              <h3 id="quick-actions-heading">Quick Actions</h3>
             </div>
           </div>
-        </div>
-
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ 
-              background: 'linear-gradient(135deg, #48bb78 0%, #38a169 100%)', 
-              padding: '1rem', 
-              borderRadius: '12px',
-              color: 'white'
-            }}>
-              <Send size={24} />
-            </div>
-            <div>
-              <div style={{ fontSize: '2rem', fontWeight: '700', color: '#1a202c' }}>
-                {publishedPosts}
-              </div>
-              <div style={{ color: '#718096', fontSize: '0.875rem' }}>Published Posts</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ 
-              background: 'linear-gradient(135deg, #ed8936 0%, #dd6b20 100%)', 
-              padding: '1rem', 
-              borderRadius: '12px',
-              color: 'white'
-            }}>
-              <Calendar size={24} />
-            </div>
-            <div>
-              <div style={{ fontSize: '2rem', fontWeight: '700', color: '#1a202c' }}>
-                {scheduledPosts}
-              </div>
-              <div style={{ color: '#718096', fontSize: '0.875rem' }}>Scheduled Posts</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ 
-              background: 'linear-gradient(135deg, #4299e1 0%, #3182ce 100%)', 
-              padding: '1rem', 
-              borderRadius: '12px',
-              color: 'white'
-            }}>
-              <BarChart3 size={24} />
-            </div>
-            <div>
-              <div style={{ fontSize: '2rem', fontWeight: '700', color: '#1a202c' }}>
-                {posts.length}
-              </div>
-              <div style={{ color: '#718096', fontSize: '0.875rem' }}>Total Posts</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="card" style={{ marginTop: '2rem' }}>
-        <div className="card-header">
-          <h3>Recent Activity</h3>
-        </div>
-        {recentPosts.length === 0 ? (
-          <div className="empty-state">
-            <Send size={48} />
-            <h3>No posts yet</h3>
-            <p>Create your first post to get started!</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {recentPosts.map(post => (
-              <div 
-                key={post.id} 
-                style={{ 
-                  padding: '1rem', 
-                  border: '1px solid #e2e8f0', 
-                  borderRadius: '8px',
+          <nav style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
+            gap: '0.875rem' 
+          }}>
+            {quickActions.map((action) => (
+              <button
+                key={action.label}
+                className="btn btn-secondary"
+                onClick={() => navigate(action.path)}
+                aria-label={action.label}
+                style={{
                   display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  padding: '1.25rem 1rem',
+                  height: 'auto',
                 }}
               >
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: '#1a202c' }}>
-                    {post.content.substring(0, 100)}{post.content.length > 100 ? '...' : ''}
-                  </div>
-                  <div style={{ fontSize: '0.875rem', color: '#718096' }}>
-                    {post.platforms.join(', ')} • {new Date(post.created_at).toLocaleDateString()}
-                  </div>
+                <div style={{ 
+                  background: `linear-gradient(135deg, ${action.color} 0%, ${action.color}dd 100%)`,
+                  padding: '0.875rem',
+                  borderRadius: '0.875rem',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: `0 4px 12px ${action.color}40`
+                }}>
+                  <action.icon size={24} />
                 </div>
-                <div>
-                  {post.status === 'published' && (
-                    <span className="badge badge-success">Published</span>
-                  )}
-                  {post.status === 'scheduled' && (
-                    <span className="badge badge-info">Scheduled</span>
-                  )}
-                  {post.status === 'publishing' && (
-                    <span className="badge badge-warning">Publishing</span>
-                  )}
-                </div>
-              </div>
+                <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>{action.label}</span>
+              </button>
             ))}
+          </nav>
+        </section>
+
+        {/* Stats Cards */}
+        <StatCard 
+          icon={Users} 
+          value={activeAccounts} 
+          label="Active Accounts"
+          gradient="linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)"
+        />
+
+        <StatCard 
+          icon={Send} 
+          value={publishedPosts} 
+          label="Published"
+          gradient="linear-gradient(135deg, #10b981 0%, #059669 100%)"
+        />
+
+        <StatCard 
+          icon={Calendar} 
+          value={scheduledPosts} 
+          label="Scheduled"
+          gradient="linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
+        />
+
+        <StatCard 
+          icon={BarChart3} 
+          value={posts.length} 
+          label="Total Posts"
+          gradient="linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
+        />
+
+        {/* Recent Activity - Takes 2 columns */}
+        <section className="card bento-item-2x" aria-labelledby="recent-activity-heading">
+          <div className="card-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+              <Activity size={22} style={{ color: 'var(--color-accentPrimary)' }} />
+              <h3 id="recent-activity-heading">Recent Activity</h3>
+            </div>
           </div>
-        )}
+          {recentPosts.length === 0 ? (
+            <div className="empty-state">
+              <Send size={56} />
+              <h3>No posts yet</h3>
+              <p>Create your first post to get started!</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+              {recentPosts.map(post => (
+                <article 
+                  key={post.id} 
+                  style={{ 
+                    padding: '1rem', 
+                    background: 'var(--glass-bg)',
+                    backdropFilter: 'blur(10px)',
+                    borderRadius: '0.75rem',
+                    border: '1px solid var(--glass-border)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'var(--glass-bg-hover)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'var(--glass-bg)';
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ 
+                      fontWeight: '600', 
+                      marginBottom: '0.5rem', 
+                      color: 'var(--color-textPrimary)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {post.content.substring(0, 100)}{post.content.length > 100 ? '...' : ''}
+                    </div>
+                    <div style={{ 
+                      fontSize: '0.875rem', 
+                      color: 'var(--color-textSecondary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}>
+                      <span>{post.platforms.join(', ')}</span>
+                      <span>•</span>
+                      <time dateTime={post.created_at}>
+                        {new Date(post.created_at).toLocaleDateString()}
+                      </time>
+                    </div>
+                  </div>
+                  <div style={{ flexShrink: 0 }}>
+                    {post.status === 'published' && (
+                      <span className="badge badge-success">Published</span>
+                    )}
+                    {post.status === 'scheduled' && (
+                      <span className="badge badge-info">Scheduled</span>
+                    )}
+                    {post.status === 'publishing' && (
+                      <span className="badge badge-warning">Publishing</span>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
