@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -15,6 +15,7 @@ import ContentCalendarPage from './pages/ContentCalendarPage';
 import ContentLibraryPage from './pages/ContentLibraryPage';
 import ABTestingPage from './pages/ABTestingPage';
 import ChatbotPage from './pages/ChatbotPage';
+import ClipsPage from './pages/ClipsPage';
 import SettingsModal from './components/SettingsModal';
 import { ThemeProvider } from './ThemeContext';
 import { AIProvider } from './contexts/AIContext';
@@ -49,6 +50,7 @@ export const appRoutes: AppRouteConfig[] = [
   { path: '/library', label: 'Content Library', icon: Folder, element: <ContentLibraryPage /> },
   { path: '/ab-testing', label: 'A/B Testing', icon: Sparkles, element: <ABTestingPage /> },
   { path: '/chatbot', label: 'AI Assistant', icon: MessageSquare, element: <ChatbotPage /> },
+  { path: '/clips', label: 'Video Clipper', icon: Scissors, element: <ClipsPage /> },
 ];
 
 function Navigation() {
