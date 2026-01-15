@@ -28,7 +28,7 @@ class PostStatus(enum.Enum):
 class User(Base):
     """User model for authentication and authorization"""
     __tablename__ = 'users'
-    
+
     id = Column(String(36), primary_key=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
@@ -39,13 +39,13 @@ class User(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     last_login = Column(DateTime)
-    
+
     # Relationships
     accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
     posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
     media = relationship("Media", back_populates="user", cascade="all, delete-orphan")
     templates = relationship("Template", back_populates="user", cascade="all, delete-orphan")
-    
+
     def __repr__(self):
         return f"<User {self.email} ({self.role.value})>"
 
@@ -53,7 +53,7 @@ class User(Base):
 class Account(Base):
     """Social media platform account model"""
     __tablename__ = 'accounts'
-    
+
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
     platform = Column(String(50), nullable=False, index=True)
@@ -67,11 +67,11 @@ class Account(Base):
     platform_metadata = Column(JSON)  # Platform-specific data
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    
+
     # Relationships
     user = relationship("User", back_populates="accounts")
     posts = relationship("Post", secondary="post_accounts", back_populates="accounts")
-    
+
     def __repr__(self):
         return f"<Account {self.platform}:{self.platform_username}>"
 
@@ -79,7 +79,7 @@ class Account(Base):
 class Post(Base):
     """Post model"""
     __tablename__ = 'posts'
-    
+
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
     content = Column(Text, nullable=False)
@@ -91,13 +91,13 @@ class Post(Base):
     parallel_execution = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    
+
     # Relationships
     user = relationship("User", back_populates="posts")
     accounts = relationship("Account", secondary="post_accounts", back_populates="posts")
     media = relationship("Media", secondary="post_media", back_populates="posts")
     analytics = relationship("PostAnalytics", back_populates="post", cascade="all, delete-orphan")
-    
+
     def __repr__(self):
         return f"<Post {self.id} ({self.status.value})>"
 
@@ -105,7 +105,7 @@ class Post(Base):
 class PostAccount(Base):
     """Association table for posts and accounts (many-to-many)"""
     __tablename__ = 'post_accounts'
-    
+
     post_id = Column(String(36), ForeignKey('posts.id'), primary_key=True)
     account_id = Column(String(36), ForeignKey('accounts.id'), primary_key=True)
     platform_post_id = Column(String(255))  # ID returned by platform API
@@ -116,7 +116,7 @@ class PostAccount(Base):
 class Media(Base):
     """Media file model"""
     __tablename__ = 'media'
-    
+
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
     filename = Column(String(255), nullable=False)
@@ -130,11 +130,11 @@ class Media(Base):
     duration = Column(Float)  # for videos, in seconds
     file_metadata = Column(JSON)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
-    
+
     # Relationships
     user = relationship("User", back_populates="media")
     posts = relationship("Post", secondary="post_media", back_populates="media")
-    
+
     def __repr__(self):
         return f"<Media {self.filename}>"
 
@@ -142,7 +142,7 @@ class Media(Base):
 class PostMedia(Base):
     """Association table for posts and media (many-to-many)"""
     __tablename__ = 'post_media'
-    
+
     post_id = Column(String(36), ForeignKey('posts.id'), primary_key=True)
     media_id = Column(String(36), ForeignKey('media.id'), primary_key=True)
     order = Column(Integer, default=0)  # Order in carousel/album
@@ -151,7 +151,7 @@ class PostMedia(Base):
 class PostAnalytics(Base):
     """Post analytics and performance metrics"""
     __tablename__ = 'post_analytics'
-    
+
     id = Column(String(36), primary_key=True)
     post_id = Column(String(36), ForeignKey('posts.id'), nullable=False, index=True)
     platform = Column(String(50), nullable=False)
@@ -164,10 +164,10 @@ class PostAnalytics(Base):
     click_through_rate = Column(Float, default=0.0)
     raw_data = Column(JSON)  # Full platform response
     collected_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
-    
+
     # Relationships
     post = relationship("Post", back_populates="analytics")
-    
+
     def __repr__(self):
         return f"<Analytics {self.post_id}:{self.platform}>"
 
@@ -175,7 +175,7 @@ class PostAnalytics(Base):
 class Template(Base):
     """Post template model"""
     __tablename__ = 'templates'
-    
+
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
     name = Column(String(255), nullable=False)
@@ -187,10 +187,10 @@ class Template(Base):
     use_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    
+
     # Relationships
     user = relationship("User", back_populates="templates")
-    
+
     def __repr__(self):
         return f"<Template {self.name}>"
 
@@ -198,7 +198,7 @@ class Template(Base):
 class ABTest(Base):
     """A/B testing experiment model"""
     __tablename__ = 'ab_tests'
-    
+
     id = Column(String(36), primary_key=True)
     name = Column(String(255), nullable=False)
     description = Column(Text)
@@ -213,7 +213,7 @@ class ABTest(Base):
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    
+
     def __repr__(self):
         return f"<ABTest {self.name} ({self.status})>"
 
@@ -221,7 +221,7 @@ class ABTest(Base):
 class SocialMonitor(Base):
     """Social listening monitor model"""
     __tablename__ = 'social_monitors'
-    
+
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
     name = Column(String(255), nullable=False)
@@ -232,11 +232,11 @@ class SocialMonitor(Base):
     filters = Column(JSON)  # Additional filters (language, location, etc.)
     last_check = Column(DateTime)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    
+
     # Relationships
     user = relationship("User")
     results = relationship("MonitorResult", back_populates="monitor", cascade="all, delete-orphan")
-    
+
     def __repr__(self):
         return f"<SocialMonitor {self.name}>"
 
@@ -244,7 +244,7 @@ class SocialMonitor(Base):
 class MonitorResult(Base):
     """Results from social listening monitors"""
     __tablename__ = 'monitor_results'
-    
+
     id = Column(String(36), primary_key=True)
     monitor_id = Column(String(36), ForeignKey('social_monitors.id'), nullable=False, index=True)
     platform = Column(String(50), nullable=False)
@@ -256,10 +256,10 @@ class MonitorResult(Base):
     sentiment = Column(String(50))  # positive, neutral, negative
     matched_keywords = Column(JSON)
     discovered_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
-    
+
     # Relationships
     monitor = relationship("SocialMonitor", back_populates="results")
-    
+
     def __repr__(self):
         return f"<MonitorResult {self.monitor_id}:{self.platform}>"
 
@@ -267,7 +267,7 @@ class MonitorResult(Base):
 class URLShortener(Base):
     """URL shortening and tracking model"""
     __tablename__ = 'url_shortener'
-    
+
     id = Column(String(36), primary_key=True)
     short_code = Column(String(20), unique=True, nullable=False, index=True)
     original_url = Column(Text, nullable=False)
@@ -277,11 +277,11 @@ class URLShortener(Base):
     url_metadata = Column(JSON)  # UTM parameters, etc.
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     expires_at = Column(DateTime)
-    
+
     # Relationships
     user = relationship("User")
     click_events = relationship("URLClick", back_populates="url", cascade="all, delete-orphan")
-    
+
     def __repr__(self):
         return f"<URLShortener {self.short_code}>"
 
@@ -289,7 +289,7 @@ class URLShortener(Base):
 class URLClick(Base):
     """URL click tracking model"""
     __tablename__ = 'url_clicks'
-    
+
     id = Column(String(36), primary_key=True)
     url_id = Column(String(36), ForeignKey('url_shortener.id'), nullable=False, index=True)
     clicked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
@@ -299,10 +299,10 @@ class URLClick(Base):
     country = Column(String(2))
     city = Column(String(100))
     device_type = Column(String(50))  # mobile, desktop, tablet
-    
+
     # Relationships
     url = relationship("URLShortener", back_populates="click_events")
-    
+
     def __repr__(self):
         return f"<URLClick {self.url_id}>"
 
@@ -310,7 +310,7 @@ class URLClick(Base):
 class ResponseTemplate(Base):
     """Automated response template model"""
     __tablename__ = 'response_templates'
-    
+
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
     name = Column(String(255), nullable=False)
@@ -320,10 +320,10 @@ class ResponseTemplate(Base):
     is_active = Column(Boolean, default=True)
     use_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    
+
     # Relationships
     user = relationship("User")
-    
+
     def __repr__(self):
         return f"<ResponseTemplate {self.name}>"
 
@@ -331,7 +331,7 @@ class ResponseTemplate(Base):
 class ChatbotInteraction(Base):
     """Chatbot conversation history model"""
     __tablename__ = 'chatbot_interactions'
-    
+
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
     platform = Column(String(50), nullable=False)
@@ -342,10 +342,10 @@ class ChatbotInteraction(Base):
     sentiment = Column(String(50))
     is_automated = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
-    
+
     # Relationships
     user = relationship("User")
     template = relationship("ResponseTemplate")
-    
+
     def __repr__(self):
         return f"<ChatbotInteraction {self.platform}:{self.platform_user_id}>"
