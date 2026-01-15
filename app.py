@@ -773,12 +773,20 @@ class AIImageGenerator:
                     return None
             
             # Use ThreadPoolExecutor for parallel image generation
-            with ThreadPoolExecutor(max_workers=min(len(scenes), 3)) as executor:
-                scene_data = list(enumerate(scenes, 1))
-                futures = {executor.submit(generate_scene_image, data): data for data in scene_data}
-                
-                for future in as_completed(futures):
-                    result = future.result()
+            # Only use parallelization if we have multiple scenes
+            if len(scenes) > 1:
+                with ThreadPoolExecutor(max_workers=min(len(scenes), 3)) as executor:
+                    scene_data = list(enumerate(scenes, 1))
+                    futures = {executor.submit(generate_scene_image, data): data for data in scene_data}
+                    
+                    for future in as_completed(futures):
+                        result = future.result()
+                        if result:
+                            generated_images.append(result)
+            else:
+                # Single scene, no need for thread pool overhead
+                for i, scene in enumerate(scenes, 1):
+                    result = generate_scene_image((i, scene))
                     if result:
                         generated_images.append(result)
             

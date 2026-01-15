@@ -19,6 +19,7 @@ import uuid
 import logging
 import time
 import json
+import threading
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional, Callable
 from functools import wraps, lru_cache
@@ -26,6 +27,7 @@ from flask import request, jsonify, g
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from sqlalchemy import cast, String, or_
 
 # Import production infrastructure
 try:
@@ -339,24 +341,29 @@ class MediaManager:
 
 # ==================== 4. AUTHENTICATION MIDDLEWARE ====================
 
-# Cache for user lookups to reduce database queries
+import threading
+
+# Cache for user lookups to reduce database queries (thread-safe)
 _user_cache = {}
+_cache_lock = threading.RLock()
 _cache_ttl = 300  # 5 minutes
 
 def _get_cached_user(user_id: str) -> Optional[Dict]:
-    """Get user from cache if available and not expired"""
-    if user_id in _user_cache:
-        cached_data, timestamp = _user_cache[user_id]
-        if time.time() - timestamp < _cache_ttl:
-            return cached_data
-        else:
-            # Expired, remove from cache
-            del _user_cache[user_id]
+    """Get user from cache if available and not expired (thread-safe)"""
+    with _cache_lock:
+        if user_id in _user_cache:
+            cached_data, timestamp = _user_cache[user_id]
+            if time.time() - timestamp < _cache_ttl:
+                return cached_data
+            else:
+                # Expired, remove from cache
+                del _user_cache[user_id]
     return None
 
 def _cache_user(user_id: str, user_data: Dict):
-    """Cache user data with timestamp"""
-    _user_cache[user_id] = (user_data, time.time())
+    """Cache user data with timestamp (thread-safe)"""
+    with _cache_lock:
+        _user_cache[user_id] = (user_data, time.time())
 
 def get_current_user() -> Optional[Dict]:
     """Get current authenticated user from request with caching"""
@@ -644,15 +651,12 @@ class SearchManager:
                     platforms_filter = filters['platforms']
                     if isinstance(platforms_filter, list):
                         # Check if any of the requested platforms exist in the post's platforms array
-                        from sqlalchemy import cast, String
-                        from sqlalchemy.dialects.postgresql import ARRAY
                         # For each platform, check if it exists in the JSON array
                         platform_conditions = []
                         for platform in platforms_filter:
                             # Use contains operator for JSONB or array membership check
                             platform_conditions.append(Post.platforms.contains(platform))
                         if platform_conditions:
-                            from sqlalchemy import or_
                             q = q.filter(or_(*platform_conditions))
                     else:
                         # Single platform fallback to like (less efficient but works)
@@ -798,7 +802,12 @@ class RetryManager:
         self._retry_cache = {}  # Cache retry attempts to avoid duplicate retries
     
     def retry_with_backoff(self, func: Callable, *args, **kwargs) -> Dict:
-        """Retry a function with exponential backoff (non-blocking for web requests)"""
+        """Retry a function with exponential backoff (non-blocking for web requests)
+        
+        Note: This implementation removes blocking time.sleep() to prevent freezing Flask threads.
+        For production use with proper delayed retries, implement a task queue like Celery or RQ.
+        Current behavior: Immediate retries which may not be ideal for rate-limited APIs.
+        """
         last_exception = None
         
         for attempt in range(self.max_retries):
@@ -807,11 +816,11 @@ class RetryManager:
             except Exception as e:
                 last_exception = e
                 if attempt < self.max_retries - 1:
-                    # Calculate exponential backoff
+                    # Calculate exponential backoff delay (for logging/monitoring)
                     delay = min(self.base_delay * (2 ** attempt), self.max_delay)
-                    logger.warning(f"Attempt {attempt + 1} failed: {e}. Will retry immediately without blocking...")
+                    logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying immediately (production should use task queue with {delay}s delay)...")
                     # Note: Removed blocking time.sleep() to prevent freezing Flask threads
-                    # For production, use task queue (Celery/RQ) for proper async retries
+                    # For production, use task queue (Celery/RQ) for proper async retries with delays
                 else:
                     logger.error(f"All {self.max_retries} attempts failed: {e}")
         
@@ -872,7 +881,7 @@ class RetryManager:
             if post_ids_to_retry:
                 session.query(Post).filter(Post.id.in_(post_ids_to_retry)).update(
                     {Post.status: PostStatus.SCHEDULED},
-                    synchronize_session=False
+                    synchronize_session='fetch'  # Fetch to maintain session state consistency
                 )
                 session.commit()
         
