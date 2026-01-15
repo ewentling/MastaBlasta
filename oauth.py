@@ -182,7 +182,8 @@ class MetaOAuth:
             return None
 
     @classmethod
-    def post_instagram_media(cls, access_token: str, instagram_account_id: str, image_url: str, caption: str) -> Optional[Dict[str, Any]]:
+    def post_instagram_media(cls, access_token: str, instagram_account_id: str,
+                             image_url: str, caption: str) -> Optional[Dict[str, Any]]:
         """Post to Instagram"""
         try:
             # Step 1: Create media container
@@ -470,7 +471,10 @@ class ConnectionHealthMonitor:
                     'Grant requested permissions',
                     'You will be redirected back automatically'
                 ],
-                'required_permissions': ['pages_manage_posts', 'pages_read_engagement', 'instagram_basic', 'instagram_content_publish']
+                'required_permissions': [
+                    'pages_manage_posts', 'pages_read_engagement',
+                    'instagram_basic', 'instagram_content_publish'
+                ]
             },
             'linkedin': {
                 'title': 'Reconnect LinkedIn',

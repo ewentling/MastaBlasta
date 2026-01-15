@@ -692,7 +692,10 @@ class AIImageGenerator:
         template_desc = self.THUMBNAIL_TEMPLATES.get(video_type, 'Engaging video thumbnail')
 
         # Build thumbnail prompt
-        prompt = f"Create a compelling video thumbnail for: {video_topic}. {template_desc}. Include bold text overlay space. High contrast, eye-catching, professional quality."
+        prompt = (
+            f"Create a compelling video thumbnail for: {video_topic}. {template_desc}. "
+            f"Include bold text overlay space. High contrast, eye-catching, professional quality."
+        )
 
         # Determine size based on platform
         size_map = {
@@ -816,7 +819,10 @@ class AIImageGenerator:
 
         # Build prompt based on post content
         text_space_note = "with space for text overlay" if include_text_space else ""
-        prompt = f"Create a social media image for this post: '{post_content}'. Platform: {platform}. Professional, engaging, {text_space_note}"
+        prompt = (
+            f"Create a social media image for this post: '{post_content}'. "
+            f"Platform: {platform}. Professional, engaging, {text_space_note}"
+        )
 
         result = self.generate_image(prompt, style, platform=platform)
 
@@ -1321,7 +1327,7 @@ Return only the {platform} post, no explanations."""
             return {'error': str(e), 'success': False}
 
     def generate_content_variations(self, content: str, num_variations: int = 3,
-                                     platform: str = 'twitter') -> Dict[str, Any]:
+                                    platform: str = 'twitter') -> Dict[str, Any]:
         """Generate multiple variations of the same content for A/B testing"""
         if not self.enabled:
             return {'error': 'Content multiplier not enabled', 'enabled': False}
@@ -1503,7 +1509,8 @@ Scene 2 (X-Y seconds): [Visual description] | Text: [text overlay]
             response = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are a professional video script writer specializing in social media content."},
+                    {"role": "system",
+                     "content": "You are a professional video script writer specializing in social media content."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=800,
@@ -1581,7 +1588,11 @@ Scene 2 (X-Y seconds): [Visual description] | Text: [text overlay]
                 },
                 'status': 'ready_for_generation',
                 'note': 'Video will be generated using ffmpeg with specified parameters',
-                'ffmpeg_command_template': f"ffmpeg -framerate 1/{duration_per_image} -pattern_type glob -i 'image*.jpg' -vf scale={specs.get('width')}:{specs.get('height')} -c:v libx264 -pix_fmt yuv420p output.mp4"
+                'ffmpeg_command_template': (
+                    f"ffmpeg -framerate 1/{duration_per_image} -pattern_type glob -i 'image*.jpg' "
+                    f"-vf scale={specs.get('width')}:{specs.get('height')} "
+                    f"-c:v libx264 -pix_fmt yuv420p output.mp4"
+                )
             }
 
             return video_metadata
@@ -1728,7 +1739,8 @@ Make it engaging and platform-optimized."""
         """Generate ffmpeg command for video optimization"""
         return (
             f"ffmpeg -i {input_path} "
-            f"-vf \"scale={specs['width']}:{specs['height']}:force_original_aspect_ratio=decrease,pad={specs['width']}:{specs['height']}:(ow-iw)/2:(oh-ih)/2\" "
+            f"-vf \"scale={specs['width']}:{specs['height']}:force_original_aspect_ratio=decrease,"
+            f"pad={specs['width']}:{specs['height']}:(ow-iw)/2:(oh-ih)/2\" "
             f"-c:v libx264 -preset medium -crf 23 "
             f"-c:a aac -b:a 192k "
             f"-movflags +faststart "
@@ -1794,7 +1806,8 @@ Return a detailed scene-by-scene breakdown."""
             response = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": f"You are a professional video script writer specializing in {template['style']} content."},
+                    {"role": "system",
+                     "content": f"You are a professional video script writer specializing in {template['style']} content."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=800,
@@ -1819,7 +1832,8 @@ Return a detailed scene-by-scene breakdown."""
             return {'error': str(e), 'success': False}
 
     def render_slideshow_with_ffmpeg(self, images: List[str], duration_per_image: float,
-                                      output_path: str, specs: Dict, transition: str = 'fade') -> Dict[str, Any]:
+                                     output_path: str, specs: Dict,
+                                     transition: str = 'fade') -> Dict[str, Any]:
         """Actually render video using FFmpeg (requires ffmpeg installed)"""
         if not images:
             return {'error': 'At least one image is required', 'success': False}
@@ -2095,12 +2109,18 @@ Return formatted voiceover script."""
             'en': {'name': 'English', 'region': 'Global', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
             'es': {'name': 'Spanish', 'region': 'Europe/Americas', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
             'fr': {'name': 'French', 'region': 'Europe/Africa', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
-            'de': {'name': 'German', 'region': 'Europe', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
-            'it': {'name': 'Italian', 'region': 'Europe', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
-            'pt': {'name': 'Portuguese', 'region': 'Europe/Americas/Africa', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
-            'ru': {'name': 'Russian', 'region': 'Europe/Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
-            'ja': {'name': 'Japanese', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
-            'ko': {'name': 'Korean', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'de': {'name': 'German', 'region': 'Europe',
+                   'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'it': {'name': 'Italian', 'region': 'Europe',
+                   'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'pt': {'name': 'Portuguese', 'region': 'Europe/Americas/Africa',
+                   'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'ru': {'name': 'Russian', 'region': 'Europe/Asia',
+                   'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'ja': {'name': 'Japanese', 'region': 'Asia',
+                   'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'ko': {'name': 'Korean', 'region': 'Asia',
+                   'tts_providers': ['Azure', 'Google', 'Amazon']},
             'zh': {'name': 'Chinese (Mandarin)', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
 
             # European Languages
@@ -2306,7 +2326,8 @@ Make the conversation natural and engaging. Return formatted multi-voice script.
             response = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are a professional scriptwriter specializing in dialogue and voice direction."},
+                    {"role": "system",
+                     "content": "You are a professional scriptwriter specializing in dialogue and voice direction."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=900,
@@ -2489,7 +2510,8 @@ Make it practical and easy to follow for voice actors."""
             response = openai.chat.completions.create(
                 model="gpt-3.5-turbo",
                 messages=[
-                    {"role": "system", "content": "You are a dialect coach with expertise in accents and regional speech patterns."},
+                    {"role": "system",
+                     "content": "You are a dialect coach with expertise in accents and regional speech patterns."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=700,
@@ -6443,7 +6465,8 @@ def refresh_monitor(monitor_id):
 
 # ==================== VIDEO CLIPPING WITH GEMINI AI ====================
 
-from video_clipper import video_clipper
+from video_clipper import video_clipper  # noqa: E402
+
 
 @app.route('/api/clips/status', methods=['GET'])
 def clips_status():
@@ -7129,7 +7152,7 @@ def list_bulk_imports():
 @app.route('/api/google-calendar/auth', methods=['POST'])
 def google_calendar_auth():
     """Exchange authorization code for tokens"""
-    data = request.json
+    # data = request.json  # Currently unused in mock implementation
     # code = data.get('code')  # Currently unused in mock implementation
 
     # TODO: In production, exchange code for tokens with Google OAuth2
@@ -7165,7 +7188,7 @@ def sync_google_calendar():
 @app.route('/api/google-drive/auth', methods=['POST'])
 def google_drive_auth():
     """Exchange authorization code for tokens"""
-    data = request.json
+    # data = request.json  # Currently unused in mock implementation
     # code = data.get('code')  # Currently unused in mock implementation
 
     # TODO: In production, exchange code for tokens with Google OAuth2

@@ -400,7 +400,11 @@ class RedditMonitor:
             keyword = random.choice(keywords)
             mentions.append({
                 'platform': 'reddit',
-                'text': f"Discussion about {keyword}: {random.choice(['Really impressed', 'Having issues with', 'Love using', 'Not sure about'])} this product",
+                'text': (
+                    f"Discussion about {keyword}: "
+                    f"{random.choice(['Really impressed', 'Having issues with', 'Love using', 'Not sure about'])} "
+                    f"this product"
+                ),
                 'author': f"u/redditor{random.randint(1000, 9999)}",
                 'author_followers': random.randint(0, 5000),
                 'engagement': random.randint(0, 1000),
