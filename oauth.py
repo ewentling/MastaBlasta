@@ -383,3 +383,637 @@ def refresh_access_token(platform: str, refresh_token: str) -> Optional[Dict[str
     except Exception as e:
         logger.error(f"Token refresh failed for {platform}: {e}")
         return None
+
+
+class ConnectionHealthMonitor:
+    """Monitor OAuth connection health and status"""
+    
+    @staticmethod
+    def check_connection_status(platform: str, access_token: str, expires_at: datetime) -> Dict[str, Any]:
+        """Check if a connection is healthy"""
+        status = {
+            'platform': platform,
+            'is_connected': True,
+            'is_expired': False,
+            'expires_in_hours': None,
+            'health_status': 'healthy',
+            'warnings': []
+        }
+        
+        # Check expiration
+        if expires_at:
+            now = datetime.utcnow()
+            if expires_at < now:
+                status['is_expired'] = True
+                status['health_status'] = 'expired'
+                status['warnings'].append('Token has expired')
+            else:
+                delta = expires_at - now
+                hours_remaining = delta.total_seconds() / 3600
+                status['expires_in_hours'] = round(hours_remaining, 1)
+                
+                if hours_remaining < 24:
+                    status['health_status'] = 'expiring_soon'
+                    status['warnings'].append(f'Token expires in {round(hours_remaining, 1)} hours')
+        
+        # Test API connectivity
+        try:
+            if platform == 'twitter' and access_token:
+                client = tweepy.Client(bearer_token=access_token)
+                client.get_me()
+            elif platform == 'meta' and access_token:
+                response = requests.get(
+                    'https://graph.facebook.com/v18.0/me',
+                    params={'access_token': access_token}
+                )
+                response.raise_for_status()
+            elif platform == 'linkedin' and access_token:
+                response = requests.get(
+                    'https://api.linkedin.com/v2/me',
+                    headers={'Authorization': f'Bearer {access_token}'}
+                )
+                response.raise_for_status()
+            elif platform == 'google' and access_token:
+                response = requests.get(
+                    'https://www.googleapis.com/oauth2/v1/userinfo',
+                    headers={'Authorization': f'Bearer {access_token}'}
+                )
+                response.raise_for_status()
+        except Exception as e:
+            status['health_status'] = 'unhealthy'
+            status['warnings'].append(f'API test failed: {str(e)}')
+            status['is_connected'] = False
+        
+        return status
+    
+    @staticmethod
+    def get_reconnection_instructions(platform: str) -> Dict[str, Any]:
+        """Get instructions for reconnecting a platform"""
+        instructions = {
+            'twitter': {
+                'title': 'Reconnect Twitter/X',
+                'steps': [
+                    'Go to Accounts page',
+                    'Click "Connect Twitter/X"',
+                    'Authorize the application',
+                    'You will be redirected back automatically'
+                ],
+                'required_permissions': ['tweet.read', 'tweet.write', 'users.read', 'offline.access']
+            },
+            'meta': {
+                'title': 'Reconnect Facebook/Instagram',
+                'steps': [
+                    'Go to Accounts page',
+                    'Click "Connect Facebook" or "Connect Instagram"',
+                    'Log in to Facebook if needed',
+                    'Select the Page/Account to connect',
+                    'Grant requested permissions',
+                    'You will be redirected back automatically'
+                ],
+                'required_permissions': ['pages_manage_posts', 'pages_read_engagement', 'instagram_basic', 'instagram_content_publish']
+            },
+            'linkedin': {
+                'title': 'Reconnect LinkedIn',
+                'steps': [
+                    'Go to Accounts page',
+                    'Click "Connect LinkedIn"',
+                    'Log in to LinkedIn if needed',
+                    'Grant requested permissions',
+                    'You will be redirected back automatically'
+                ],
+                'required_permissions': ['w_member_social', 'r_liteprofile', 'r_emailaddress']
+            },
+            'google': {
+                'title': 'Reconnect YouTube',
+                'steps': [
+                    'Go to Accounts page',
+                    'Click "Connect YouTube"',
+                    'Select your Google account',
+                    'Grant YouTube permissions',
+                    'You will be redirected back automatically'
+                ],
+                'required_permissions': ['youtube.upload', 'youtube']
+            }
+        }
+        
+        return instructions.get(platform, {
+            'title': f'Reconnect {platform.title()}',
+            'steps': ['Visit Accounts page and click Connect button'],
+            'required_permissions': []
+        })
+
+
+class PlatformAccountValidator:
+    """Validate platform accounts and permissions"""
+    
+    @staticmethod
+    def validate_account_setup(platform: str, access_token: str) -> Dict[str, Any]:
+        """Validate that an account is properly configured"""
+        validation = {
+            'platform': platform,
+            'is_valid': True,
+            'errors': [],
+            'warnings': [],
+            'account_info': {}
+        }
+        
+        try:
+            if platform == 'twitter':
+                client = tweepy.Client(bearer_token=access_token)
+                me = client.get_me()
+                validation['account_info'] = {
+                    'username': me.data.username,
+                    'name': me.data.name,
+                    'id': me.data.id
+                }
+            elif platform == 'meta':
+                response = requests.get(
+                    'https://graph.facebook.com/v18.0/me',
+                    params={
+                        'access_token': access_token,
+                        'fields': 'id,name,accounts{id,name,access_token}'
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                validation['account_info'] = {
+                    'user_id': data.get('id'),
+                    'name': data.get('name'),
+                    'pages': [{'id': page['id'], 'name': page['name']} for page in data.get('accounts', {}).get('data', [])]
+                }
+                
+                if not validation['account_info'].get('pages'):
+                    validation['warnings'].append('No Facebook Pages found. You need a Page to post.')
+            elif platform == 'linkedin':
+                response = requests.get(
+                    'https://api.linkedin.com/v2/me',
+                    headers={'Authorization': f'Bearer {access_token}'}
+                )
+                response.raise_for_status()
+                data = response.json()
+                validation['account_info'] = {
+                    'id': data.get('id'),
+                    'firstName': data.get('localizedFirstName'),
+                    'lastName': data.get('localizedLastName')
+                }
+            elif platform == 'google':
+                response = requests.get(
+                    'https://www.googleapis.com/youtube/v3/channels',
+                    params={'part': 'snippet', 'mine': 'true'},
+                    headers={'Authorization': f'Bearer {access_token}'}
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                if data.get('items'):
+                    channel = data['items'][0]
+                    validation['account_info'] = {
+                        'channel_id': channel['id'],
+                        'title': channel['snippet']['title'],
+                        'description': channel['snippet']['description']
+                    }
+                else:
+                    validation['errors'].append('No YouTube channel found for this account')
+                    validation['is_valid'] = False
+                    
+        except Exception as e:
+            validation['is_valid'] = False
+            validation['errors'].append(f'Validation failed: {str(e)}')
+        
+        return validation
+    
+    @staticmethod
+    def check_permissions(platform: str, access_token: str) -> Dict[str, Any]:
+        """Check what permissions are granted for an account"""
+        permissions = {
+            'platform': platform,
+            'granted_permissions': [],
+            'missing_permissions': [],
+            'can_post': False,
+            'can_read': False
+        }
+        
+        try:
+            if platform == 'twitter':
+                # Twitter API v2 doesn't provide a simple scope check, assume granted based on successful connection
+                permissions['granted_permissions'] = ['tweet.read', 'tweet.write', 'users.read']
+                permissions['can_post'] = True
+                permissions['can_read'] = True
+            elif platform == 'meta':
+                response = requests.get(
+                    'https://graph.facebook.com/v18.0/me/permissions',
+                    params={'access_token': access_token}
+                )
+                response.raise_for_status()
+                data = response.json()
+                
+                for perm in data.get('data', []):
+                    if perm.get('status') == 'granted':
+                        permissions['granted_permissions'].append(perm['permission'])
+                
+                permissions['can_post'] = 'pages_manage_posts' in permissions['granted_permissions']
+                permissions['can_read'] = 'pages_read_engagement' in permissions['granted_permissions']
+            elif platform == 'linkedin':
+                # LinkedIn doesn't provide a scope introspection endpoint, assume based on successful auth
+                permissions['granted_permissions'] = ['w_member_social', 'r_liteprofile']
+                permissions['can_post'] = True
+                permissions['can_read'] = True
+            elif platform == 'google':
+                response = requests.get(
+                    'https://www.googleapis.com/oauth2/v1/tokeninfo',
+                    params={'access_token': access_token}
+                )
+                response.raise_for_status()
+                data = response.json()
+                permissions['granted_permissions'] = data.get('scope', '').split()
+                permissions['can_post'] = 'https://www.googleapis.com/auth/youtube.upload' in permissions['granted_permissions']
+                permissions['can_read'] = 'https://www.googleapis.com/auth/youtube' in permissions['granted_permissions']
+                
+        except Exception as e:
+            logger.error(f"Permission check failed for {platform}: {e}")
+        
+        return permissions
+
+
+class QuickConnectWizard:
+    """Simplified wizard for quick platform connections"""
+    
+    PLATFORM_CONFIGS = {
+        'twitter': {
+            'display_name': 'Twitter/X',
+            'icon': '𝕏',
+            'color': '#000000',
+            'difficulty': 'easy',
+            'setup_time': '2 minutes',
+            'features': ['Post tweets', 'Post threads', 'Upload media', 'Auto-scheduling']
+        },
+        'meta_facebook': {
+            'display_name': 'Facebook',
+            'icon': '📘',
+            'color': '#1877F2',
+            'difficulty': 'easy',
+            'setup_time': '3 minutes',
+            'features': ['Post to Pages', 'Share photos/videos', 'Auto-scheduling', 'Analytics']
+        },
+        'meta_instagram': {
+            'display_name': 'Instagram',
+            'icon': '📷',
+            'color': '#E4405F',
+            'difficulty': 'medium',
+            'setup_time': '5 minutes',
+            'features': ['Post photos/videos', 'Reels', 'Stories', 'Auto-scheduling'],
+            'requirements': ['Business/Creator account', 'Connected to Facebook Page']
+        },
+        'linkedin': {
+            'display_name': 'LinkedIn',
+            'icon': '💼',
+            'color': '#0A66C2',
+            'difficulty': 'easy',
+            'setup_time': '2 minutes',
+            'features': ['Post updates', 'Share articles', 'Auto-scheduling', 'Professional network']
+        },
+        'google_youtube': {
+            'display_name': 'YouTube',
+            'icon': '▶️',
+            'color': '#FF0000',
+            'difficulty': 'medium',
+            'setup_time': '4 minutes',
+            'features': ['Upload videos', 'Shorts', 'Thumbnails', 'Descriptions'],
+            'requirements': ['YouTube channel']
+        },
+        'tiktok': {
+            'display_name': 'TikTok',
+            'icon': '🎵',
+            'color': '#000000',
+            'difficulty': 'hard',
+            'setup_time': '10 minutes',
+            'features': ['Upload videos', 'Auto-scheduling', 'Trending sounds'],
+            'requirements': ['Business account', 'Manual API setup required']
+        },
+        'pinterest': {
+            'display_name': 'Pinterest',
+            'icon': '📌',
+            'color': '#E60023',
+            'difficulty': 'easy',
+            'setup_time': '3 minutes',
+            'features': ['Create pins', 'Upload images', 'Boards', 'Auto-scheduling']
+        }
+    }
+    
+    @classmethod
+    def get_quick_connect_options(cls) -> Dict[str, Any]:
+        """Get all quick connect platform options"""
+        return {
+            'platforms': cls.PLATFORM_CONFIGS,
+            'recommended_order': ['twitter', 'meta_facebook', 'meta_instagram', 'linkedin', 'google_youtube'],
+            'total_platforms': len(cls.PLATFORM_CONFIGS)
+        }
+    
+    @classmethod
+    def get_platform_config(cls, platform: str) -> Dict[str, Any]:
+        """Get configuration for a specific platform"""
+        return cls.PLATFORM_CONFIGS.get(platform, {})
+    
+    @classmethod
+    def generate_connection_url(cls, platform: str, state: str, user_id: str) -> Dict[str, Any]:
+        """Generate a connection URL with enhanced user experience"""
+        base_platform = platform.split('_')[0] if '_' in platform else platform
+        
+        result = {
+            'platform': platform,
+            'display_name': cls.PLATFORM_CONFIGS.get(platform, {}).get('display_name', platform.title()),
+            'state': state,
+            'user_id': user_id,
+            'authorization_url': None,
+            'instructions': None
+        }
+        
+        try:
+            if base_platform == 'twitter':
+                auth_data = TwitterOAuth.get_authorization_url(state)
+                result['authorization_url'] = auth_data['authorization_url']
+                result['code_verifier'] = auth_data['code_verifier']
+            elif base_platform == 'meta':
+                result['authorization_url'] = MetaOAuth.get_authorization_url(state)
+            elif base_platform == 'linkedin':
+                result['authorization_url'] = LinkedInOAuth.get_authorization_url(state)
+            elif base_platform == 'google':
+                result['authorization_url'] = GoogleOAuth.get_authorization_url(state)
+            else:
+                result['instructions'] = f'Please configure {platform} manually via API keys'
+        except Exception as e:
+            result['error'] = f'Failed to generate connection URL: {str(e)}'
+            logger.error(f"Connection URL generation failed for {platform}: {e}")
+        
+        return result
+
+
+class ConnectionTroubleshooter:
+    """Diagnose and fix connection issues"""
+    
+    @staticmethod
+    def diagnose_connection_issue(platform: str, error_code: str = None, error_message: str = None) -> Dict[str, Any]:
+        """Diagnose connection issues and provide solutions"""
+        diagnosis = {
+            'platform': platform,
+            'issue_type': 'unknown',
+            'severity': 'medium',
+            'possible_causes': [],
+            'solutions': [],
+            'docs_url': None
+        }
+        
+        # Analyze error patterns
+        if error_message:
+            error_lower = error_message.lower()
+            
+            if 'invalid_client' in error_lower or 'client_id' in error_lower:
+                diagnosis['issue_type'] = 'invalid_credentials'
+                diagnosis['severity'] = 'high'
+                diagnosis['possible_causes'] = [
+                    'Client ID is incorrect',
+                    'Client ID not set in environment variables',
+                    'Using wrong type of credentials (API key vs OAuth)'
+                ]
+                diagnosis['solutions'] = [
+                    f'Verify {platform.upper()}_CLIENT_ID environment variable',
+                    f'Check credentials in {platform} developer dashboard',
+                    'Restart application after updating environment variables',
+                    'Ensure no extra spaces or quotes in credentials'
+                ]
+            elif 'redirect_uri' in error_lower or 'callback' in error_lower:
+                diagnosis['issue_type'] = 'redirect_uri_mismatch'
+                diagnosis['severity'] = 'high'
+                diagnosis['possible_causes'] = [
+                    'Redirect URI not registered in platform',
+                    'Redirect URI doesn\'t match exactly',
+                    'Missing protocol (http:// or https://)',
+                    'Trailing slash mismatch'
+                ]
+                diagnosis['solutions'] = [
+                    f'Register redirect URI in {platform} app settings',
+                    'Ensure exact match including protocol and port',
+                    f'Check {platform.upper()}_REDIRECT_URI environment variable',
+                    'Remove any trailing slashes from redirect URI'
+                ]
+            elif 'expired' in error_lower or 'token' in error_lower:
+                diagnosis['issue_type'] = 'expired_token'
+                diagnosis['severity'] = 'medium'
+                diagnosis['possible_causes'] = [
+                    'Access token has expired',
+                    'Refresh token is invalid',
+                    'Platform revoked access'
+                ]
+                diagnosis['solutions'] = [
+                    'Reconnect the account',
+                    'Check if user revoked access in platform settings',
+                    'Enable automatic token refresh',
+                    'Verify refresh token is stored correctly'
+                ]
+            elif 'permission' in error_lower or 'scope' in error_lower or 'access denied' in error_lower:
+                diagnosis['issue_type'] = 'insufficient_permissions'
+                diagnosis['severity'] = 'high'
+                diagnosis['possible_causes'] = [
+                    'Required permissions not granted',
+                    'User denied permissions during OAuth',
+                    'App doesn\'t have access to required features'
+                ]
+                diagnosis['solutions'] = [
+                    'Reconnect and grant all requested permissions',
+                    f'Check app permissions in {platform} developer dashboard',
+                    'For Facebook/Instagram: Ensure app has required products added',
+                    'For YouTube: Verify YouTube Data API is enabled'
+                ]
+            elif 'rate' in error_lower or '429' in error_lower:
+                diagnosis['issue_type'] = 'rate_limit'
+                diagnosis['severity'] = 'low'
+                diagnosis['possible_causes'] = [
+                    'Too many API requests',
+                    'Platform rate limit exceeded'
+                ]
+                diagnosis['solutions'] = [
+                    'Wait before retrying',
+                    'Reduce posting frequency',
+                    'Check platform API usage dashboard',
+                    'Consider upgrading API tier if available'
+                ]
+            elif 'network' in error_lower or 'timeout' in error_lower or 'connection' in error_lower:
+                diagnosis['issue_type'] = 'network_error'
+                diagnosis['severity'] = 'low'
+                diagnosis['possible_causes'] = [
+                    'Network connectivity issues',
+                    'Platform API is down',
+                    'Firewall blocking requests'
+                ]
+                diagnosis['solutions'] = [
+                    'Check internet connection',
+                    'Retry in a few moments',
+                    'Check platform status page',
+                    'Verify no firewall/proxy blocking requests'
+                ]
+        
+        # Add platform-specific documentation
+        docs_urls = {
+            'twitter': 'https://developer.twitter.com/en/docs/authentication/oauth-2-0',
+            'meta': 'https://developers.facebook.com/docs/facebook-login',
+            'linkedin': 'https://docs.microsoft.com/en-us/linkedin/shared/authentication/authentication',
+            'google': 'https://developers.google.com/identity/protocols/oauth2'
+        }
+        diagnosis['docs_url'] = docs_urls.get(platform)
+        
+        return diagnosis
+    
+    @staticmethod
+    def test_connection_prerequisites(platform: str) -> Dict[str, Any]:
+        """Test if all prerequisites are met for connecting a platform"""
+        test_results = {
+            'platform': platform,
+            'ready_to_connect': True,
+            'checks': []
+        }
+        
+        # Check environment variables
+        env_var_map = {
+            'twitter': ('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'),
+            'meta': ('META_APP_ID', 'META_APP_SECRET'),
+            'linkedin': ('LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'),
+            'google': ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET')
+        }
+        
+        if platform in env_var_map:
+            for var in env_var_map[platform]:
+                value = os.getenv(var)
+                check = {
+                    'name': f'Environment variable: {var}',
+                    'status': 'pass' if value else 'fail',
+                    'message': 'Set' if value else 'Not set - connection will fail'
+                }
+                test_results['checks'].append(check)
+                if not value:
+                    test_results['ready_to_connect'] = False
+        
+        # Check redirect URI
+        redirect_var_map = {
+            'twitter': 'TWITTER_REDIRECT_URI',
+            'meta': 'META_REDIRECT_URI',
+            'linkedin': 'LINKEDIN_REDIRECT_URI',
+            'google': 'GOOGLE_REDIRECT_URI'
+        }
+        
+        if platform in redirect_var_map:
+            redirect_uri = os.getenv(redirect_var_map[platform])
+            check = {
+                'name': f'Redirect URI: {redirect_var_map[platform]}',
+                'status': 'pass' if redirect_uri else 'fail',
+                'message': redirect_uri if redirect_uri else 'Not set'
+            }
+            test_results['checks'].append(check)
+            if not redirect_uri:
+                test_results['ready_to_connect'] = False
+        
+        return test_results
+
+
+class BulkConnectionManager:
+    """Manage multiple platform connections at once"""
+    
+    @staticmethod
+    def prepare_bulk_connection(platforms: list, user_id: str) -> Dict[str, Any]:
+        """Prepare to connect multiple platforms in sequence"""
+        wizard = QuickConnectWizard()
+        
+        result = {
+            'total_platforms': len(platforms),
+            'connection_sequence': [],
+            'estimated_time_minutes': 0
+        }
+        
+        for platform in platforms:
+            config = wizard.get_platform_config(platform)
+            state = secrets.token_urlsafe(32)
+            
+            connection_data = wizard.generate_connection_url(platform, state, user_id)
+            connection_data['config'] = config
+            
+            result['connection_sequence'].append(connection_data)
+            
+            # Estimate time
+            setup_time_str = config.get('setup_time', '3 minutes')
+            minutes = int(''.join(filter(str.isdigit, setup_time_str))) if setup_time_str else 3
+            result['estimated_time_minutes'] += minutes
+        
+        return result
+    
+    @staticmethod
+    def get_bulk_connection_progress(user_id: str, platforms: list) -> Dict[str, Any]:
+        """Get progress of bulk connection setup"""
+        # This would normally query the database for connected accounts
+        # For now, return a structure showing what to track
+        return {
+            'user_id': user_id,
+            'total_platforms': len(platforms),
+            'completed': 0,
+            'in_progress': 0,
+            'pending': len(platforms),
+            'failed': 0,
+            'platform_status': {platform: 'pending' for platform in platforms}
+        }
+
+
+class AutoReconnectionService:
+    """Automatically handle token refreshes and reconnections"""
+    
+    @staticmethod
+    def should_refresh_token(expires_at: datetime, refresh_buffer_hours: int = 2) -> bool:
+        """Check if token should be refreshed proactively"""
+        if not expires_at:
+            return False
+        
+        buffer_time = datetime.utcnow() + timedelta(hours=refresh_buffer_hours)
+        return expires_at <= buffer_time
+    
+    @staticmethod
+    def auto_refresh_if_needed(platform: str, account_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Automatically refresh token if needed"""
+        result = {
+            'refreshed': False,
+            'new_token': None,
+            'expires_at': None,
+            'error': None
+        }
+        
+        try:
+            expires_at = account_data.get('token_expires_at')
+            refresh_token = account_data.get('refresh_token')
+            
+            if not expires_at or not refresh_token:
+                return result
+            
+            if AutoReconnectionService.should_refresh_token(expires_at):
+                new_token_data = refresh_access_token(platform, refresh_token)
+                
+                if new_token_data:
+                    result['refreshed'] = True
+                    result['new_token'] = new_token_data['access_token']
+                    result['expires_at'] = new_token_data['expires_at']
+                else:
+                    result['error'] = 'Token refresh failed'
+        except Exception as e:
+            result['error'] = str(e)
+            logger.error(f"Auto-refresh failed for {platform}: {e}")
+        
+        return result
+    
+    @staticmethod
+    def schedule_token_refresh_check(account_id: str, platform: str, expires_at: datetime):
+        """Schedule a token refresh check (would integrate with task queue)"""
+        # This would normally schedule a background task
+        # For now, return scheduling info
+        check_time = expires_at - timedelta(hours=2)
+        
+        return {
+            'account_id': account_id,
+            'platform': platform,
+            'check_scheduled_for': check_time.isoformat(),
+            'message': 'Token refresh will be attempted automatically before expiration'
+        }

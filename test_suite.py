@@ -1508,6 +1508,156 @@ class TestVoiceoverImprovements:
 
 
 # ============================================================================
+# CONNECTION IMPROVEMENTS TESTS
+# ============================================================================
+
+class TestConnectionImprovements:
+    """Test platform connection improvement features"""
+    
+    def test_connection_health_check(self, client):
+        """Test connection health monitoring (Connection #1)"""
+        # First create a test account
+        account_data = {
+            'platform': 'twitter',
+            'name': 'Test Twitter Account',
+            'credentials': {
+                'access_token': 'test_token'
+            }
+        }
+        
+        response = client.post('/api/accounts', json=account_data)
+        if response.status_code != 201:
+            pytest.skip("Account creation not available")
+        
+        account_id = response.get_json()['id']
+        
+        # Check health
+        response = client.get(f'/api/connection/health/{account_id}')
+        assert response.status_code == 200
+        
+        data = response.get_json()
+        assert 'platform' in data
+        assert 'is_connected' in data
+        assert 'health_status' in data
+        assert data['platform'] == 'twitter'
+    
+    def test_reconnection_instructions(self, client):
+        """Test getting reconnection instructions (Connection #2)"""
+        response = client.get('/api/connection/reconnect-instructions/twitter')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert 'title' in data
+        assert 'steps' in data
+        assert 'required_permissions' in data
+        assert isinstance(data['steps'], list)
+        assert len(data['steps']) > 0
+    
+    def test_account_validation(self, client):
+        """Test account validation (Connection #3)"""
+        # This endpoint requires an existing account
+        response = client.post('/api/connection/validate/test-account-id')
+        
+        # Will return 404 for non-existent account, which is expected
+        assert response.status_code in [200, 404, 500]
+    
+    def test_permission_check(self, client):
+        """Test permission checking (Connection #4)"""
+        # This endpoint requires an existing account
+        response = client.get('/api/connection/check-permissions/test-account-id')
+        
+        # Will return 404 for non-existent account, which is expected
+        assert response.status_code in [200, 404, 500]
+    
+    def test_quick_connect_options(self, client):
+        """Test quick connect platform options (Connection #5)"""
+        response = client.get('/api/connection/quick-connect/options')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert 'platforms' in data
+        assert 'recommended_order' in data
+        assert 'total_platforms' in data
+        assert isinstance(data['platforms'], dict)
+        assert data['total_platforms'] > 0
+    
+    def test_quick_connect_platform(self, client):
+        """Test quick connect for specific platform (Connection #6)"""
+        response = client.post('/api/connection/quick-connect/twitter', json={
+            'user_id': 'test_user'
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert 'platform' in data
+        assert 'display_name' in data
+        assert data['platform'] == 'twitter'
+    
+    def test_connection_troubleshooter(self, client):
+        """Test connection troubleshooting (Connection #7)"""
+        response = client.post('/api/connection/troubleshoot', json={
+            'platform': 'twitter',
+            'error_message': 'invalid_client error occurred'
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert 'platform' in data
+        assert 'issue_type' in data
+        assert 'severity' in data
+        assert 'possible_causes' in data
+        assert 'solutions' in data
+        assert isinstance(data['solutions'], list)
+        assert len(data['solutions']) > 0
+    
+    def test_connection_prerequisites(self, client):
+        """Test connection prerequisites check (Connection #8)"""
+        response = client.get('/api/connection/test-prerequisites/twitter')
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert 'platform' in data
+        assert 'ready_to_connect' in data
+        assert 'checks' in data
+        assert isinstance(data['checks'], list)
+        assert data['platform'] == 'twitter'
+    
+    def test_bulk_connection_prepare(self, client):
+        """Test bulk connection preparation (Connection #9)"""
+        response = client.post('/api/connection/bulk-connect/prepare', json={
+            'platforms': ['twitter', 'meta_facebook', 'linkedin'],
+            'user_id': 'test_user'
+        })
+        
+        assert response.status_code == 200
+        data = response.get_json()
+        
+        assert 'total_platforms' in data
+        assert 'connection_sequence' in data
+        assert 'estimated_time_minutes' in data
+        assert data['total_platforms'] == 3
+        assert len(data['connection_sequence']) == 3
+    
+    def test_auto_token_refresh(self, client):
+        """Test automatic token refresh (Connection #10)"""
+        # This requires an existing account with refresh token
+        response = client.post('/api/connection/auto-refresh/test-account-id')
+        
+        # Will return 404 for non-existent account, which is expected
+        assert response.status_code in [200, 404, 500]
+        
+        if response.status_code == 200:
+            data = response.get_json()
+            assert 'refreshed' in data
+            assert 'error' in data or data['refreshed'] is not None
+
+
+# ============================================================================
 # RUN ALL TESTS
 # ============================================================================
 

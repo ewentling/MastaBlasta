@@ -5477,6 +5477,194 @@ def oauth_connect():
     }), 201
 
 
+@app.route('/api/connection/health/<account_id>', methods=['GET'])
+def check_connection_health(account_id):
+    """Check the health status of a platform connection"""
+    try:
+        from oauth import ConnectionHealthMonitor
+        
+        account = accounts_db.get(account_id)
+        if not account:
+            return jsonify({'error': 'Account not found'}), 404
+        
+        platform = account.get('platform', '')
+        credentials = account.get('credentials', {})
+        access_token = credentials.get('access_token', '')
+        
+        # Get token expiration if available
+        expires_at = account.get('token_expires_at')
+        if expires_at and isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        
+        status = ConnectionHealthMonitor.check_connection_status(platform, access_token, expires_at)
+        
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/reconnect-instructions/<platform>', methods=['GET'])
+def get_reconnection_instructions(platform):
+    """Get instructions for reconnecting a platform"""
+    try:
+        from oauth import ConnectionHealthMonitor
+        
+        instructions = ConnectionHealthMonitor.get_reconnection_instructions(platform)
+        return jsonify(instructions)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/validate/<account_id>', methods=['POST'])
+def validate_account(account_id):
+    """Validate account setup and permissions"""
+    try:
+        from oauth import PlatformAccountValidator
+        
+        account = accounts_db.get(account_id)
+        if not account:
+            return jsonify({'error': 'Account not found'}), 404
+        
+        platform = account.get('platform', '')
+        credentials = account.get('credentials', {})
+        access_token = credentials.get('access_token', '')
+        
+        validation = PlatformAccountValidator.validate_account_setup(platform, access_token)
+        return jsonify(validation)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/check-permissions/<account_id>', methods=['GET'])
+def check_permissions(account_id):
+    """Check what permissions are granted for an account"""
+    try:
+        from oauth import PlatformAccountValidator
+        
+        account = accounts_db.get(account_id)
+        if not account:
+            return jsonify({'error': 'Account not found'}), 404
+        
+        platform = account.get('platform', '')
+        credentials = account.get('credentials', {})
+        access_token = credentials.get('access_token', '')
+        
+        permissions = PlatformAccountValidator.check_permissions(platform, access_token)
+        return jsonify(permissions)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/quick-connect/options', methods=['GET'])
+def get_quick_connect_options():
+    """Get all available quick connect platform options"""
+    try:
+        from oauth import QuickConnectWizard
+        
+        options = QuickConnectWizard.get_quick_connect_options()
+        return jsonify(options)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/quick-connect/<platform>', methods=['POST'])
+def quick_connect_platform(platform):
+    """Start quick connect flow for a platform"""
+    try:
+        from oauth import QuickConnectWizard
+        import secrets
+        
+        user_id = request.json.get('user_id', 'default_user')
+        state = secrets.token_urlsafe(32)
+        
+        wizard = QuickConnectWizard()
+        connection_data = wizard.generate_connection_url(platform, state, user_id)
+        
+        return jsonify(connection_data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/troubleshoot', methods=['POST'])
+def troubleshoot_connection():
+    """Diagnose connection issues and provide solutions"""
+    try:
+        from oauth import ConnectionTroubleshooter
+        
+        data = request.get_json()
+        platform = data.get('platform', '')
+        error_code = data.get('error_code')
+        error_message = data.get('error_message')
+        
+        if not platform:
+            return jsonify({'error': 'Platform is required'}), 400
+        
+        diagnosis = ConnectionTroubleshooter.diagnose_connection_issue(platform, error_code, error_message)
+        return jsonify(diagnosis)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/test-prerequisites/<platform>', methods=['GET'])
+def test_connection_prerequisites(platform):
+    """Test if all prerequisites are met for connecting a platform"""
+    try:
+        from oauth import ConnectionTroubleshooter
+        
+        test_results = ConnectionTroubleshooter.test_connection_prerequisites(platform)
+        return jsonify(test_results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/bulk-connect/prepare', methods=['POST'])
+def prepare_bulk_connection():
+    """Prepare to connect multiple platforms in sequence"""
+    try:
+        from oauth import BulkConnectionManager
+        
+        data = request.get_json()
+        platforms = data.get('platforms', [])
+        user_id = data.get('user_id', 'default_user')
+        
+        if not platforms:
+            return jsonify({'error': 'Platforms list is required'}), 400
+        
+        result = BulkConnectionManager.prepare_bulk_connection(platforms, user_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/auto-refresh/<account_id>', methods=['POST'])
+def auto_refresh_token(account_id):
+    """Automatically refresh token if needed"""
+    try:
+        from oauth import AutoReconnectionService
+        
+        account = accounts_db.get(account_id)
+        if not account:
+            return jsonify({'error': 'Account not found'}), 404
+        
+        platform = account.get('platform', '')
+        
+        account_data = {
+            'token_expires_at': account.get('token_expires_at'),
+            'refresh_token': account.get('refresh_token')
+        }
+        
+        result = AutoReconnectionService.auto_refresh_if_needed(platform, account_data)
+        
+        # If token was refreshed, update the account
+        if result['refreshed']:
+            account['credentials']['access_token'] = result['new_token']
+            account['token_expires_at'] = result['expires_at'].isoformat()
+            accounts_db[account_id] = account
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/post', methods=['POST'])
 def create_post():
