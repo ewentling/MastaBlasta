@@ -111,9 +111,16 @@ def save_uploaded_file(file_obj, user_id: str, original_filename: str) -> Dict[s
                     user_thumbnail_dir.mkdir(parents=True, exist_ok=True)
                     thumbnail_path = user_thumbnail_dir / thumbnail_filename
                     
-                    # Create thumbnail
-                    img.thumbnail(THUMBNAIL_SIZE)
-                    img.save(thumbnail_path)
+                    # Create thumbnail with optimized settings
+                    # Use LANCZOS for better quality but faster than BICUBIC
+                    img.thumbnail(THUMBNAIL_SIZE, Image.LANCZOS)
+                    
+                    # Optimize save settings for better performance
+                    save_kwargs = {'optimize': True, 'quality': 85}
+                    if img.format == 'JPEG':
+                        save_kwargs['progressive'] = True
+                    
+                    img.save(thumbnail_path, **save_kwargs)
             except Exception as e:
                 logger.warning(f"Failed to process image: {e}")
         
