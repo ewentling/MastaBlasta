@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { postsApi, accountsApi } from '../api';
 import { BarChart3, Users, Send, Calendar, Plus, Sparkles, TrendingUp, Zap, Activity } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -40,6 +41,32 @@ export default function DashboardPage() {
     gradient: string;
   }
 
+  const AnimatedNumber = ({ value }: { value: number }) => {
+    const [displayValue, setDisplayValue] = useState(0);
+
+    useEffect(() => {
+      const duration = 1000;
+      const steps = 30;
+      const stepValue = value / steps;
+      const stepDuration = duration / steps;
+      let currentStep = 0;
+
+      const timer = setInterval(() => {
+        currentStep++;
+        if (currentStep <= steps) {
+          setDisplayValue(Math.floor(stepValue * currentStep));
+        } else {
+          setDisplayValue(value);
+          clearInterval(timer);
+        }
+      }, stepDuration);
+
+      return () => clearInterval(timer);
+    }, [value]);
+
+    return <>{displayValue}</>;
+  };
+
   const StatCard = ({ icon: Icon, value, label, gradient }: StatCardProps) => (
     <article className="card" role="region" aria-label={label}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -48,7 +75,8 @@ export default function DashboardPage() {
           padding: '1rem', 
           borderRadius: '1rem',
           color: 'white',
-          boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)'
+          boxShadow: `0 4px 12px ${gradient.match(/#[0-9a-f]{6}/i)?.[0]}40`,
+          transition: 'all 0.3s var(--ease-smooth)'
         }}>
           <Icon size={28} />
         </div>
@@ -60,7 +88,7 @@ export default function DashboardPage() {
             letterSpacing: '-0.03em',
             lineHeight: '1'
           }}>
-            {value}
+            <AnimatedNumber value={value} />
           </div>
           <div style={{ 
             color: 'var(--color-textSecondary)', 
@@ -99,7 +127,7 @@ export default function DashboardPage() {
             {quickActions.map((action) => (
               <button
                 key={action.label}
-                className="btn btn-secondary"
+                className="btn btn-secondary btn-ripple"
                 onClick={() => navigate(action.path)}
                 aria-label={action.label}
                 style={{
@@ -119,7 +147,8 @@ export default function DashboardPage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  boxShadow: `0 4px 12px ${action.color}40`
+                  boxShadow: `0 4px 12px ${action.color}40`,
+                  transition: 'all 0.3s var(--ease-smooth)'
                 }}>
                   <action.icon size={24} />
                 </div>
@@ -187,13 +216,16 @@ export default function DashboardPage() {
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     gap: '1rem',
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s var(--ease-smooth)',
+                    cursor: 'pointer'
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = 'var(--glass-bg-hover)';
+                    e.currentTarget.style.transform = 'translateX(4px)';
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.background = 'var(--glass-bg)';
+                    e.currentTarget.style.transform = 'translateX(0)';
                   }}
                 >
                   <div style={{ flex: 1, minWidth: 0 }}>
