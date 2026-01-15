@@ -4,7 +4,7 @@ Real OAuth implementation for social media platforms
 import os
 import requests
 from typing import Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import secrets
 import tweepy
 from requests_oauthlib import OAuth2Session
@@ -79,7 +79,7 @@ class TwitterOAuth:
             return {
                 'access_token': token_data['access_token'],
                 'refresh_token': token_data.get('refresh_token'),
-                'expires_at': datetime.utcnow() + timedelta(seconds=token_data['expires_in'])
+                'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
             }
         except Exception as e:
             logger.error(f"Twitter token exchange failed: {e}")
@@ -154,7 +154,7 @@ class MetaOAuth:
             
             return {
                 'access_token': long_lived_data['access_token'],
-                'expires_at': datetime.utcnow() + timedelta(seconds=long_lived_data.get('expires_in', 5184000))  # ~60 days
+                'expires_at': datetime.now(timezone.utc) + timedelta(seconds=long_lived_data.get('expires_in', 5184000))  # ~60 days
             }
         except Exception as e:
             logger.error(f"Meta token exchange failed: {e}")
@@ -253,7 +253,7 @@ class LinkedInOAuth:
             token_data = response.json()
             return {
                 'access_token': token_data['access_token'],
-                'expires_at': datetime.utcnow() + timedelta(seconds=token_data['expires_in'])
+                'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
             }
         except Exception as e:
             logger.error(f"LinkedIn token exchange failed: {e}")
@@ -345,7 +345,7 @@ class GoogleOAuth:
             return {
                 'access_token': token_data['access_token'],
                 'refresh_token': token_data.get('refresh_token'),
-                'expires_at': datetime.utcnow() + timedelta(seconds=token_data['expires_in'])
+                'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
             }
         except Exception as e:
             logger.error(f"Google token exchange failed: {e}")
@@ -378,7 +378,7 @@ def refresh_access_token(platform: str, refresh_token: str) -> Optional[Dict[str
         
         return {
             'access_token': token_data['access_token'],
-            'expires_at': datetime.utcnow() + timedelta(seconds=token_data['expires_in'])
+            'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
         }
     except Exception as e:
         logger.error(f"Token refresh failed for {platform}: {e}")
@@ -402,7 +402,7 @@ class ConnectionHealthMonitor:
         
         # Check expiration
         if expires_at:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             if expires_at < now:
                 status['is_expired'] = True
                 status['health_status'] = 'expired'
@@ -973,7 +973,7 @@ class AutoReconnectionService:
         if not expires_at:
             return False
         
-        buffer_time = datetime.utcnow() + timedelta(hours=refresh_buffer_hours)
+        buffer_time = datetime.now(timezone.utc) + timedelta(hours=refresh_buffer_hours)
         return expires_at <= buffer_time
     
     @staticmethod

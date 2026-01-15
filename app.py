@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory, redirect
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.memory import MemoryJobStore
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid
 import os
@@ -11,6 +11,11 @@ import json
 import time
 import re
 from typing import List, Dict, Any, Optional, Tuple
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 try:
     import openai
     from PIL import Image, ImageEnhance, ImageFilter
@@ -24,10 +29,6 @@ try:
 except ImportError:
     AI_ENABLED = False
     logger.warning("AI libraries not installed. AI features will be disabled.")
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
@@ -3710,7 +3711,7 @@ def publish_to_platforms(post_id, platforms, content, media, credentials_dict, p
     if post_id in posts_db:
         posts_db[post_id]['status'] = 'published'
         posts_db[post_id]['results'] = results
-        posts_db[post_id]['published_at'] = datetime.utcnow().isoformat()
+        posts_db[post_id]['published_at'] = datetime.now(timezone.utc).isoformat()
         posts_db[post_id]['execution_time_seconds'] = round(execution_time, 2)
         posts_db[post_id]['parallel_execution'] = parallel
 
@@ -3722,7 +3723,7 @@ def health_check():
         'status': 'healthy',
         'service': 'MastaBlasta',
         'version': '1.0.0',
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.now(timezone.utc).isoformat()
     })
 
 
@@ -3778,7 +3779,7 @@ def add_account():
         'username': username,
         'credentials': credentials,
         'enabled': True,
-        'created_at': datetime.utcnow().isoformat()
+        'created_at': datetime.now(timezone.utc).isoformat()
     }
     
     accounts_db[account_id] = account_record
@@ -3841,7 +3842,7 @@ def update_account(account_id):
     if 'enabled' in data:
         account['enabled'] = data['enabled']
     
-    account['updated_at'] = datetime.utcnow().isoformat()
+    account['updated_at'] = datetime.now(timezone.utc).isoformat()
     
     return jsonify({
         'success': True,
@@ -5271,7 +5272,7 @@ def oauth_init(platform):
         state_token = str(uuid.uuid4())
         oauth_states[state_token] = {
             'platform': platform,
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': datetime.now(timezone.utc).isoformat()
         }
         
         # Map platform names to OAuth classes and check if credentials are configured
@@ -5475,7 +5476,7 @@ def oauth_connect():
             'oauth': True
         },
         'enabled': True,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'auth_method': 'oauth'
     }
     
@@ -5762,7 +5763,7 @@ def create_post():
         'post_type': post_type,
         'post_options': post_options,
         'status': 'publishing',
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'scheduled_for': None
     }
     
@@ -5866,7 +5867,7 @@ def schedule_post():
         'post_type': post_type,
         'post_options': post_options,
         'status': 'scheduled',
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'scheduled_for': scheduled_time
     }
     
@@ -6034,7 +6035,7 @@ def shorten_url():
         'utm_source': utm_source,
         'utm_medium': utm_medium,
         'utm_campaign': utm_campaign,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'clicks': 0
     }
     
@@ -6065,7 +6066,7 @@ def redirect_short_url(short_code):
     
     # Track click
     click_data = {
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'user_agent': request.headers.get('User-Agent', ''),
         'referer': request.headers.get('Referer', ''),
         'ip': request.remote_addr
@@ -6213,7 +6214,7 @@ def create_social_monitor():
         'keywords': keywords,
         'platforms': platforms,
         'active': True,
-        'created_at': datetime.utcnow().isoformat()
+        'created_at': datetime.now(timezone.utc).isoformat()
     }
     
     # Initialize results storage
@@ -6261,7 +6262,7 @@ def _simulate_monitor_scan(monitor_id):
                         'shares': random.randint(0, 100),
                         'comments': random.randint(0, 50)
                     },
-                    'timestamp': (datetime.utcnow() - timedelta(hours=random.randint(0, 48))).isoformat(),
+                    'timestamp': (datetime.now(timezone.utc) - timedelta(hours=random.randint(0, 48))).isoformat(),
                     'read': False
                 }
                 monitor_results[monitor_id].append(result)
@@ -6288,7 +6289,7 @@ def update_social_monitor(monitor_id):
     if 'active' in data:
         monitor['active'] = data['active']
     
-    monitor['updated_at'] = datetime.utcnow().isoformat()
+    monitor['updated_at'] = datetime.now(timezone.utc).isoformat()
     
     return jsonify({
         'success': True,
@@ -6459,7 +6460,7 @@ def _simulate_post_analytics(post_id):
             },
             'hourly_data': hourly_data,
             'demographics': demographics,
-            'last_updated': datetime.utcnow().isoformat()
+            'last_updated': datetime.now(timezone.utc).isoformat()
         }
     
     return post_analytics[post_id]
@@ -6715,7 +6716,7 @@ def execute_bulk_import():
                 # Schedule the post
                 if not scheduled_time:
                     # Auto-schedule at intervals
-                    scheduled_dt = datetime.utcnow() + timedelta(minutes=len(created_posts) * 5)
+                    scheduled_dt = datetime.now(timezone.utc) + timedelta(minutes=len(created_posts) * 5)
                     scheduled_time = scheduled_dt.isoformat() + 'Z'
                 
                 scheduled_dt = datetime.fromisoformat(scheduled_time.replace('Z', '+00:00'))
@@ -6729,7 +6730,7 @@ def execute_bulk_import():
                     'post_type': post_type,
                     'post_options': post_options,
                     'status': 'scheduled',
-                    'created_at': datetime.utcnow().isoformat(),
+                    'created_at': datetime.now(timezone.utc).isoformat(),
                     'scheduled_for': scheduled_time,
                     'bulk_import_id': import_id
                 }
@@ -6755,7 +6756,7 @@ def execute_bulk_import():
                     'post_type': post_type,
                     'post_options': post_options,
                     'status': 'publishing',
-                    'created_at': datetime.utcnow().isoformat(),
+                    'created_at': datetime.now(timezone.utc).isoformat(),
                     'bulk_import_id': import_id
                 }
                 
@@ -6780,7 +6781,7 @@ def execute_bulk_import():
     # Store import job info
     bulk_imports[import_id] = {
         'id': import_id,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'total_rows': len(rows),
         'successful': len(created_posts),
         'failed': len(failed_posts),
@@ -6976,7 +6977,7 @@ def templates():
             'content': content,
             'platforms': data.get('platforms', []),
             'variables': variables,
-            'createdAt': datetime.utcnow().isoformat() + 'Z'
+            'createdAt': datetime.now(timezone.utc).isoformat() + 'Z'
         }
         
         templates_db[template_id] = template
@@ -7023,7 +7024,7 @@ def create_post_version():
         'platforms': data['platforms'],
         'hashtags': data.get('hashtags', []),
         'cta': data.get('cta', ''),
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'status': 'draft'  # draft, testing, winner, archived
     }
     
@@ -7080,7 +7081,7 @@ def publish_version(version_id):
     
     # Update status
     version['status'] = 'testing'
-    version['published_at'] = datetime.utcnow().isoformat()
+    version['published_at'] = datetime.now(timezone.utc).isoformat()
     
     # Simulate initial analytics (in production, integrate with platform APIs)
     import random
@@ -7199,7 +7200,7 @@ def response_templates_list():
             'sentiment': data.get('sentiment', 'neutral'),  # positive, neutral, negative, urgent
             'keywords': data.get('keywords', []),
             'auto_reply': data.get('auto_reply', False),
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': datetime.now(timezone.utc).isoformat()
         }
         
         response_templates[template_id] = template
@@ -7228,7 +7229,7 @@ def response_template_detail(template_id):
         template['sentiment'] = data.get('sentiment', template['sentiment'])
         template['keywords'] = data.get('keywords', template['keywords'])
         template['auto_reply'] = data.get('auto_reply', template['auto_reply'])
-        template['updated_at'] = datetime.utcnow().isoformat()
+        template['updated_at'] = datetime.now(timezone.utc).isoformat()
         
         logger.info(f"Updated response template {template_id}")
         return jsonify(template)
@@ -7326,7 +7327,7 @@ def chatbot_interactions_list():
             'sentiment': data.get('sentiment', 'neutral'),
             'auto_replied': data.get('auto_replied', False),
             'template_used': data.get('template_used'),
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'user': data.get('user', 'Unknown')
         }
         

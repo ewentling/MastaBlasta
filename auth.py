@@ -5,7 +5,7 @@ import os
 import uuid
 import bcrypt
 import jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import request, jsonify
 from typing import Optional, Dict, Any, Callable
@@ -59,8 +59,8 @@ def create_access_token(user_id: str, role: str) -> str:
         'user_id': user_id,
         'role': role,
         'type': 'access',
-        'exp': datetime.utcnow() + ACCESS_TOKEN_EXPIRES,
-        'iat': datetime.utcnow()
+        'exp': datetime.now(timezone.utc) + ACCESS_TOKEN_EXPIRES,
+        'iat': datetime.now(timezone.utc)
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
@@ -70,8 +70,8 @@ def create_refresh_token(user_id: str) -> str:
     payload = {
         'user_id': user_id,
         'type': 'refresh',
-        'exp': datetime.utcnow() + REFRESH_TOKEN_EXPIRES,
-        'iat': datetime.utcnow()
+        'exp': datetime.now(timezone.utc) + REFRESH_TOKEN_EXPIRES,
+        'iat': datetime.now(timezone.utc)
     }
     return jwt.encode(payload, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 

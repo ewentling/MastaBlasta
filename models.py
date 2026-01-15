@@ -1,9 +1,9 @@
 """
 Database models for MastaBlasta social media management platform
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Float, JSON, Enum
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import relationship
 import enum
 
@@ -36,8 +36,8 @@ class User(Base):
     role = Column(Enum(UserRole), default=UserRole.EDITOR, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     api_key = Column(String(64), unique=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     last_login = Column(DateTime)
     
     # Relationships
@@ -65,8 +65,8 @@ class Account(Base):
     token_expires_at = Column(DateTime)
     is_active = Column(Boolean, default=True, nullable=False)
     platform_metadata = Column(JSON)  # Platform-specific data
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     user = relationship("User", back_populates="accounts")
@@ -89,8 +89,8 @@ class Post(Base):
     published_at = Column(DateTime)
     post_options = Column(JSON)  # Platform-specific options
     parallel_execution = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     user = relationship("User", back_populates="posts")
@@ -129,7 +129,7 @@ class Media(Base):
     height = Column(Integer)
     duration = Column(Float)  # for videos, in seconds
     file_metadata = Column(JSON)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     
     # Relationships
     user = relationship("User", back_populates="media")
@@ -163,7 +163,7 @@ class PostAnalytics(Base):
     engagement_rate = Column(Float, default=0.0)
     click_through_rate = Column(Float, default=0.0)
     raw_data = Column(JSON)  # Full platform response
-    collected_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    collected_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     
     # Relationships
     post = relationship("Post", back_populates="analytics")
@@ -185,8 +185,8 @@ class Template(Base):
     platforms = Column(JSON)  # Supported platforms
     is_shared = Column(Boolean, default=False)  # Shared with team
     use_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     user = relationship("User", back_populates="templates")
@@ -212,7 +212,7 @@ class ABTest(Base):
     results = Column(JSON)  # Test results and winner
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     
     def __repr__(self):
         return f"<ABTest {self.name} ({self.status})>"
@@ -231,7 +231,7 @@ class SocialMonitor(Base):
     notification_email = Column(String(255))
     filters = Column(JSON)  # Additional filters (language, location, etc.)
     last_check = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     
     # Relationships
     user = relationship("User")
@@ -255,7 +255,7 @@ class MonitorResult(Base):
     engagement = Column(JSON)  # likes, shares, comments
     sentiment = Column(String(50))  # positive, neutral, negative
     matched_keywords = Column(JSON)
-    discovered_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    discovered_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     
     # Relationships
     monitor = relationship("SocialMonitor", back_populates="results")
@@ -275,7 +275,7 @@ class URLShortener(Base):
     post_id = Column(String(36), ForeignKey('posts.id'))
     clicks = Column(Integer, default=0)
     url_metadata = Column(JSON)  # UTM parameters, etc.
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     expires_at = Column(DateTime)
     
     # Relationships
@@ -292,7 +292,7 @@ class URLClick(Base):
     
     id = Column(String(36), primary_key=True)
     url_id = Column(String(36), ForeignKey('url_shortener.id'), nullable=False, index=True)
-    clicked_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    clicked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     ip_address = Column(String(45))  # IPv6 support
     user_agent = Column(Text)
     referrer = Column(Text)
@@ -319,7 +319,7 @@ class ResponseTemplate(Base):
     platforms = Column(JSON)  # Applicable platforms
     is_active = Column(Boolean, default=True)
     use_count = Column(Integer, default=0)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     
     # Relationships
     user = relationship("User")
@@ -341,7 +341,7 @@ class ChatbotInteraction(Base):
     response_template_id = Column(String(36), ForeignKey('response_templates.id'))
     sentiment = Column(String(50))
     is_automated = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     
     # Relationships
     user = relationship("User")
