@@ -133,7 +133,7 @@ class AIModelTrainer:
 
         # Convert labels to numeric
         label_map = {'low': 0, 'medium': 1, 'high': 2}
-        y = np.array([label_map[l] for l in labels])
+        y = np.array([label_map[label] for label in labels])
 
         # Vectorize text
         vectorizer = TfidfVectorizer(max_features=1000, stop_words='english')
@@ -258,7 +258,7 @@ class AIModelTrainer:
         return results
 
     def predict_engagement(self, content: str, features: Dict[str, Any],
-                          model_name: str = 'engagement_predictor_engagement') -> float:
+                           model_name: str = 'engagement_predictor_engagement') -> float:
         """Predict engagement for new content"""
         if model_name not in self.models:
             # Return simulated prediction

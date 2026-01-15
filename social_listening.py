@@ -39,7 +39,7 @@ class SocialListeningDashboard:
         self.reddit_monitor = RedditMonitor()
 
     def create_monitor(self, monitor_id: str, keywords: List[str],
-                      platforms: List[str], filters: Dict[str, Any] = None) -> Dict[str, Any]:
+                       platforms: List[str], filters: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Create a new social listening monitor
 
@@ -125,7 +125,7 @@ class SocialListeningDashboard:
                 'monitor_id': monitor_id,
                 'type': 'sentiment_spike',
                 'severity': 'high',
-                'message': f'{negative_count} negative mentions detected ({negative_count/len(mentions)*100:.1f}%)',
+                'message': f'{negative_count} negative mentions detected ({negative_count / len(mentions) * 100:.1f}%)',
                 'timestamp': datetime.now(timezone.utc).isoformat()
             })
             logger.warning(f"Alert: High negative sentiment for monitor '{monitor_id}'")

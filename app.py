@@ -75,16 +75,20 @@ try:
 except ImportError as e:
     logger.warning(f"⚠ Advanced features not available: {e}")
 
+
 # Helper functions
 def use_database():
     """Check if database should be used"""
     return PRODUCTION_MODE and DB_ENABLED
+
 
 def get_user_from_request():
     """Get current user from request if authenticated"""
     if PRODUCTION_MODE:
         return get_current_user()
     return None
+
+
 # ==================== End Production Integration ====================
 
 # Performance optimization: Response caching decorator
@@ -100,6 +104,7 @@ def cache_response(max_age=300):
             return response
         return decorated_function
     return decorator
+
 
 # Configure scheduler
 jobstores = {
@@ -375,7 +380,7 @@ class IntelligentScheduler:
                 score += 10
             if 12 <= hour <= 14 or 17 <= hour <= 19:
                 score += 15
-        except:
+        except (ValueError, IndexError, AttributeError):
             pass
 
         # Hashtag analysis
@@ -627,7 +632,7 @@ class AIImageGenerator:
         }
 
     def generate_image(self, prompt: str, style: str = 'photorealistic',
-                      size: str = '1024x1024', platform: str = None) -> Dict[str, Any]:
+                       size: str = '1024x1024', platform: str = None) -> Dict[str, Any]:
         """Generate an AI image using DALL-E"""
         if not self.enabled:
             return {'error': 'AI image generation not enabled', 'enabled': False}
@@ -732,7 +737,7 @@ class AIImageGenerator:
                 words = video_script.split()
                 chunk_size = max(len(words) // num_images, 10)
                 for i in range(0, len(words), chunk_size):
-                    chunk = ' '.join(words[i:i+chunk_size])
+                    chunk = ' '.join(words[i:i + chunk_size])
                     if chunk:
                         scenes.append(chunk)
 
@@ -804,7 +809,7 @@ class AIImageGenerator:
             return {'error': str(e), 'success': False}
 
     def generate_post_image(self, post_content: str, platform: str = 'instagram',
-                           style: str = 'modern', include_text_space: bool = True) -> Dict[str, Any]:
+                            style: str = 'modern', include_text_space: bool = True) -> Dict[str, Any]:
         """Generate an image optimized for social media post"""
         if not self.enabled:
             return {'error': 'AI image generation not enabled', 'enabled': False}
@@ -964,7 +969,7 @@ class EngagementPredictor:
 
             if 8 <= hour <= 20:
                 base_score += 10
-        except:
+        except (ValueError, IndexError, AttributeError):
             hour = 12
 
         score = min(base_score, 100)
@@ -1013,7 +1018,7 @@ class EngagementPredictor:
                 var.get('platform', 'twitter')
             )
             prediction['variation_id'] = i
-            prediction['variation_name'] = var.get('name', f'Variation {i+1}')
+            prediction['variation_name'] = var.get('name', f'Variation {i + 1}')
             results.append(prediction)
 
         # Sort by score
@@ -1260,7 +1265,7 @@ class ContentMultiplier:
             openai.api_key = self.api_key
 
     def multiply_content(self, source_content: str, source_type: str, target_platforms: List[str],
-                        brand_voice: str = 'professional') -> Dict[str, Any]:
+                         brand_voice: str = 'professional') -> Dict[str, Any]:
         """Convert one piece of content into multiple platform-specific posts"""
         if not self.enabled:
             return {'error': 'Content multiplier not enabled', 'enabled': False}
@@ -1316,7 +1321,7 @@ Return only the {platform} post, no explanations."""
             return {'error': str(e), 'success': False}
 
     def generate_content_variations(self, content: str, num_variations: int = 3,
-                                   platform: str = 'twitter') -> Dict[str, Any]:
+                                     platform: str = 'twitter') -> Dict[str, Any]:
         """Generate multiple variations of the same content for A/B testing"""
         if not self.enabled:
             return {'error': 'Content multiplier not enabled', 'enabled': False}
@@ -1325,7 +1330,7 @@ Return only the {platform} post, no explanations."""
             variations = []
 
             for i in range(num_variations):
-                prompt = f"""Create variation #{i+1} of this {platform} post with a different angle:
+                prompt = f"""Create variation #{i + 1} of this {platform} post with a different angle:
 
 Original: "{content}"
 
@@ -1814,7 +1819,7 @@ Return a detailed scene-by-scene breakdown."""
             return {'error': str(e), 'success': False}
 
     def render_slideshow_with_ffmpeg(self, images: List[str], duration_per_image: float,
-                                    output_path: str, specs: Dict, transition: str = 'fade') -> Dict[str, Any]:
+                                      output_path: str, specs: Dict, transition: str = 'fade') -> Dict[str, Any]:
         """Actually render video using FFmpeg (requires ffmpeg installed)"""
         if not images:
             return {'error': 'At least one image is required', 'success': False}
@@ -2311,7 +2316,7 @@ Make the conversation natural and engaging. Return formatted multi-voice script.
             multi_voice_script = response.choices[0].message.content.strip()
 
             # Count voice tags
-            voice_tags = {f'V{i+1}': multi_voice_script.count(f'[V{i+1}]') for i in range(num_voices)}
+            voice_tags = {f'V{i + 1}': multi_voice_script.count(f'[V{i + 1}]') for i in range(num_voices)}
 
             return {
                 'success': True,
@@ -3209,9 +3214,9 @@ class TwitterAdapter(PlatformAdapter):
             'thread': {'requests_per_hour': 30, 'requests_per_day': 300}
         }
         super().__init__('twitter',
-                        supported_post_types=['standard', 'thread'],
-                        post_type_descriptions=descriptions,
-                        rate_limits=rate_limits)
+                         supported_post_types=['standard', 'thread'],
+                         post_type_descriptions=descriptions,
+                         rate_limits=rate_limits)
 
     def get_post_type_requirements(self, post_type):
         """Get requirements for Twitter post types"""
@@ -3272,9 +3277,9 @@ class FacebookAdapter(PlatformAdapter):
             'reel': {'requests_per_hour': 50, 'requests_per_day': 500}
         }
         super().__init__('facebook',
-                        supported_post_types=['feed_post', 'reel'],
-                        post_type_descriptions=descriptions,
-                        rate_limits=rate_limits)
+                         supported_post_types=['feed_post', 'reel'],
+                         post_type_descriptions=descriptions,
+                         rate_limits=rate_limits)
 
     def get_post_type_requirements(self, post_type):
         """Get requirements for Facebook post types"""
@@ -3351,8 +3356,8 @@ class InstagramAdapter(PlatformAdapter):
             'carousel': 'Multi-image or video post (2-10 items)'
         }
         super().__init__('instagram',
-                        supported_post_types=['feed_post', 'reel', 'story', 'carousel'],
-                        post_type_descriptions=descriptions)
+                         supported_post_types=['feed_post', 'reel', 'story', 'carousel'],
+                         post_type_descriptions=descriptions)
 
     def get_post_type_requirements(self, post_type):
         """Get requirements for Instagram post types"""
@@ -6776,8 +6781,8 @@ def get_post_analytics(post_id):
 @app.route('/api/analytics/dashboard', methods=['GET'])
 def get_analytics_dashboard():
     """Get overall analytics dashboard data"""
-    # Get date range from query params
-    days = int(request.args.get('days', 30))
+    # Get date range from query params (currently unused but available for future filtering)
+    # days = int(request.args.get('days', 30))
 
     # Get all published posts
     published_posts = [p for p in posts_db.values() if p['status'] == 'published']
@@ -6888,7 +6893,8 @@ def validate_bulk_import():
     warnings = []
     valid_rows = []
 
-    required_fields = ['content']
+    # Required field: content
+    # required_fields = ['content']
 
     for i, row in enumerate(rows):
         row_errors = []
@@ -7055,8 +7061,8 @@ def execute_bulk_import():
 
                 posts_db[post_id] = post_record
 
-                # Publish immediately
-                results = publish_to_platforms(post_id, list(set(platforms)), content, row.get('media'), credentials, post_type, post_options)
+                # Publish immediately (results not currently used but could be for error tracking)
+                _ = publish_to_platforms(post_id, list(set(platforms)), content, row.get('media'), credentials, post_type, post_options)
 
             created_posts.append({
                 'row': i + 1,
@@ -7124,7 +7130,7 @@ def list_bulk_imports():
 def google_calendar_auth():
     """Exchange authorization code for tokens"""
     data = request.json
-    code = data.get('code')
+    # code = data.get('code')  # Currently unused in mock implementation
 
     # TODO: In production, exchange code for tokens with Google OAuth2
     # This is a simplified mock response
@@ -7139,7 +7145,7 @@ def google_calendar_auth():
 def sync_google_calendar():
     """Sync posts with Google Calendar"""
     data = request.json
-    access_token = data.get('access_token')
+    # access_token = data.get('access_token')  # Currently unused in mock implementation
     calendar_id = data.get('calendar_id', 'primary')
     events = data.get('events', [])
 
@@ -7160,7 +7166,7 @@ def sync_google_calendar():
 def google_drive_auth():
     """Exchange authorization code for tokens"""
     data = request.json
-    code = data.get('code')
+    # code = data.get('code')  # Currently unused in mock implementation
 
     # TODO: In production, exchange code for tokens with Google OAuth2
     # This is a simplified mock response
@@ -7175,7 +7181,7 @@ def google_drive_auth():
 def list_drive_files():
     """List files from Google Drive folder"""
     data = request.json
-    access_token = data.get('access_token')
+    # access_token = data.get('access_token')  # Currently unused in mock implementation
     folder_id = data.get('folder_id', 'root')
 
     # TODO: In production, use Google Drive API to list files
@@ -7233,11 +7239,11 @@ def list_drive_files():
     for i in range(5):
         mock_files.append({
             'id': str(uuid.uuid4()),
-            'name': f'Image_{i+1}.png',
+            'name': f'Image_{i + 1}.png',
             'mimeType': 'image/png',
             'type': 'file',
             'size': str(random.randint(500000, 3000000)),
-            'createdTime': f'2026-01-0{i+1}T15:00:00Z',
+            'createdTime': f'2026-01-0{i + 1}T15:00:00Z',
             'thumbnailLink': 'https://via.placeholder.com/150',
             'webViewLink': 'https://drive.google.com/file/d/sample'
         })
@@ -7565,7 +7571,7 @@ def suggest_response():
     # If no specific match, return general templates
     if not matching_templates:
         matching_templates = [t for t in response_templates.values()
-                            if t['category'] == 'general' and platform in t['platforms']]
+                              if t['category'] == 'general' and platform in t['platforms']]
 
     # Return top 3 suggestions
     suggestions = matching_templates[:3]

@@ -48,6 +48,7 @@ logger = logging.getLogger(__name__)
 
 # ==================== 1. DATABASE INTEGRATION ====================
 
+
 class DatabaseManager:
     """Manages database operations replacing in-memory storage"""
 
@@ -341,6 +342,7 @@ _user_cache = {}
 _cache_lock = threading.RLock()
 _cache_ttl = 300  # 5 minutes
 
+
 def _get_cached_user(user_id: str) -> Optional[Dict]:
     """Get user from cache if available and not expired (thread-safe)"""
     with _cache_lock:
@@ -353,10 +355,12 @@ def _get_cached_user(user_id: str) -> Optional[Dict]:
                 del _user_cache[user_id]
     return None
 
+
 def _cache_user(user_id: str, user_data: Dict):
     """Cache user data with timestamp (thread-safe)"""
     with _cache_lock:
         _user_cache[user_id] = (user_data, time.time())
+
 
 def get_current_user() -> Optional[Dict]:
     """Get current authenticated user from request with caching"""

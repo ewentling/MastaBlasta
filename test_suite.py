@@ -10,11 +10,11 @@ import sys
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import app as flask_app
-from models import Base, User, Account, Post, Media
-from database import engine, Session
-from auth import hash_password, verify_password, create_access_token, encrypt_token, decrypt_token
-from security_enhancements import (
+from app import app as flask_app  # noqa: E402
+from models import Base, User, Account, Post, Media  # noqa: E402
+from database import engine, Session  # noqa: E402
+from auth import hash_password, verify_password, create_access_token, encrypt_token, decrypt_token  # noqa: E402
+from security_enhancements import (  # noqa: E402
     PasswordPolicy, AccountSecurity, RateLimiter, WebhookSecurity,
     InputSanitizer, RefreshTokenRotation
 )
