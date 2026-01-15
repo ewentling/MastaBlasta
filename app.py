@@ -6438,6 +6438,242 @@ def refresh_monitor(monitor_id):
     })
 
 
+# ==================== VIDEO CLIPPING WITH GEMINI AI ====================
+
+from video_clipper import video_clipper
+
+@app.route('/api/clips/status', methods=['GET'])
+def clips_status():
+    """Check if video clipping service is available"""
+    return jsonify({
+        'success': True,
+        'enabled': video_clipper.is_enabled(),
+        'service': 'Video Clipping with Gemini AI',
+        'features': [
+            'Video URL analysis',
+            'Automatic viral clip detection',
+            'Gemini AI-powered insights',
+            'Multi-platform optimization',
+            'Metadata generation'
+        ]
+    })
+
+
+@app.route('/api/clips/analyze', methods=['POST'])
+def clips_analyze():
+    """
+    Analyze a video and get viral clip suggestions
+    
+    Request body:
+    {
+        "video_url": "https://youtube.com/watch?v=...",
+        "num_clips": 3
+    }
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_url = data.get('video_url', '').strip()
+    num_clips = data.get('num_clips', 3)
+    
+    if not video_url:
+        return jsonify({'error': 'video_url is required'}), 400
+    
+    if num_clips < 1 or num_clips > 10:
+        return jsonify({'error': 'num_clips must be between 1 and 10'}), 400
+    
+    # Analyze video
+    result = video_clipper.analyze_video(video_url, num_clips)
+    
+    if not result.get('success'):
+        status_code = 503 if 'not enabled' in result.get('error', '') else 400
+        return jsonify(result), status_code
+    
+    return jsonify(result)
+
+
+@app.route('/api/clips/video-info', methods=['POST'])
+def clips_video_info():
+    """
+    Get video information from URL
+    
+    Request body:
+    {
+        "video_url": "https://youtube.com/watch?v=..."
+    }
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_url = data.get('video_url', '').strip()
+    
+    if not video_url:
+        return jsonify({'error': 'video_url is required'}), 400
+    
+    result = video_clipper.get_video_info(video_url)
+    
+    if not result.get('success'):
+        return jsonify(result), 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/clips/metadata', methods=['POST'])
+def clips_generate_metadata():
+    """
+    Generate optimized metadata for a clip
+    
+    Request body:
+    {
+        "clip": {
+            "title": "...",
+            "hook": "...",
+            "duration": 30,
+            "viral_reason": "..."
+        },
+        "platform": "instagram"
+    }
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    clip = data.get('clip', {})
+    platform = data.get('platform', 'instagram')
+    
+    if not clip:
+        return jsonify({'error': 'clip data is required'}), 400
+    
+    result = video_clipper.generate_clip_metadata(clip, platform)
+    
+    if not result.get('success'):
+        status_code = 503 if 'not enabled' in result.get('error', '') else 400
+        return jsonify(result), status_code
+    
+    return jsonify(result)
+
+
+@app.route('/api/clips/download-info', methods=['POST'])
+def clips_download_info():
+    """
+    Get download instructions for a specific clip
+    
+    Request body:
+    {
+        "video_url": "https://youtube.com/watch?v=...",
+        "start_time": 45,
+        "end_time": 75
+    }
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_url = data.get('video_url', '').strip()
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+    
+    if not video_url:
+        return jsonify({'error': 'video_url is required'}), 400
+    
+    if start_time is None or end_time is None:
+        return jsonify({'error': 'start_time and end_time are required'}), 400
+    
+    result = video_clipper.get_clip_download_info(video_url, start_time, end_time)
+    
+    if not result.get('success'):
+        return jsonify(result), 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/clips/schedule', methods=['POST'])
+def clips_schedule():
+    """
+    Schedule a clip for posting
+    
+    Request body:
+    {
+        "clip": { ... },
+        "metadata": { ... },
+        "account_ids": ["..."],
+        "scheduled_time": "2026-01-20T10:00:00Z"
+    }
+    """
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    clip = data.get('clip', {})
+    metadata = data.get('metadata', {})
+    account_ids = data.get('account_ids', [])
+    scheduled_time = data.get('scheduled_time')
+    
+    if not clip:
+        return jsonify({'error': 'clip data is required'}), 400
+    
+    if not account_ids:
+        return jsonify({'error': 'at least one account_id is required'}), 400
+    
+    # Create post content from clip and metadata
+    content = metadata.get('caption', clip.get('title', ''))
+    
+    # Add hashtags if available
+    hashtags = metadata.get('hashtags', [])
+    if hashtags:
+        content += '\n\n' + ' '.join(hashtags)
+    
+    # Create scheduled post
+    post_data = {
+        'content': content,
+        'account_ids': account_ids,
+        'media': [],  # Note: User needs to download/upload the actual clip
+        'clip_info': {
+            'video_url': clip.get('video_url'),
+            'start_time': clip.get('start_time'),
+            'end_time': clip.get('end_time'),
+            'duration': clip.get('duration'),
+            'title': clip.get('title'),
+            'engagement_score': clip.get('engagement_score'),
+        }
+    }
+    
+    if scheduled_time:
+        post_data['scheduled_time'] = scheduled_time
+    
+    try:
+        # Use existing scheduling logic
+        if scheduled_time:
+            scheduled_post = schedule_post(post_data)
+            return jsonify({
+                'success': True,
+                'message': 'Clip scheduled successfully',
+                'post': scheduled_post,
+                'note': 'Download the clip using the provided ffmpeg command and add it to the scheduled post'
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'message': 'Clip draft created',
+                'post_data': post_data,
+                'note': 'Download the clip using the provided ffmpeg command before posting'
+            })
+    
+    except Exception as e:
+        logger.error(f"Error scheduling clip: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 # ==================== POST ANALYTICS ENDPOINTS ====================
 
 def _simulate_post_analytics(post_id):

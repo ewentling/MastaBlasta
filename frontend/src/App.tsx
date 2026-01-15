@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -14,6 +14,7 @@ import ContentCalendarPage from './pages/ContentCalendarPage';
 import ContentLibraryPage from './pages/ContentLibraryPage';
 import ABTestingPage from './pages/ABTestingPage';
 import ChatbotPage from './pages/ChatbotPage';
+import ClipsPage from './pages/ClipsPage';
 import SettingsModal from './components/SettingsModal';
 import { ThemeProvider } from './ThemeContext';
 import { AIProvider } from './contexts/AIContext';
@@ -116,6 +117,12 @@ function Navigation() {
               <span>AI Assistant</span>
             </Link>
           </li>
+          <li>
+            <Link to="/clips" className={isActive('/clips')}>
+              <Scissors size={20} />
+              <span>Video Clipper</span>
+            </Link>
+          </li>
         </ul>
         <div className="sidebar-footer">
           <button className="settings-button" onClick={() => setShowSettings(true)}>
@@ -151,6 +158,7 @@ function App() {
                   <Route path="/library" element={<ContentLibraryPage />} />
                   <Route path="/ab-testing" element={<ABTestingPage />} />
                   <Route path="/chatbot" element={<ChatbotPage />} />
+                  <Route path="/clips" element={<ClipsPage />} />
                 </Routes>
               </main>
             </div>
