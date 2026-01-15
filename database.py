@@ -14,20 +14,30 @@ logger = logging.getLogger(__name__)
 DATABASE_URL = os.getenv('DATABASE_URL', 'postgresql://localhost/mastablasta')
 
 # Create engine
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,  # Verify connections before using
-    echo=False  # Set to True for SQL debugging
-)
-
-# Create session factory
-Session = scoped_session(sessionmaker(bind=engine))
+try:
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,  # Verify connections before using
+        echo=False  # Set to True for SQL debugging
+    )
+    
+    # Create session factory
+    Session = scoped_session(sessionmaker(bind=engine))
+    DB_CONNECTION_OK = True
+except Exception as e:
+    logger.warning(f"Database connection failed: {e}. Using in-memory storage.")
+    engine = None
+    Session = None
+    DB_CONNECTION_OK = False
 
 
 def init_db():
     """Initialize database - create all tables"""
+    if not DB_CONNECTION_OK:
+        logger.warning("Database not available, skipping init")
+        return False
     try:
         Base.metadata.create_all(engine)
         logger.info("Database initialized successfully")

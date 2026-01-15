@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory, redirect
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.memory import MemoryJobStore
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import uuid
 import os
@@ -11,6 +11,11 @@ import json
 import time
 import re
 from typing import List, Dict, Any, Optional, Tuple
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 try:
     import openai
     from PIL import Image, ImageEnhance, ImageFilter
@@ -24,10 +29,6 @@ try:
 except ImportError:
     AI_ENABLED = False
     logger.warning("AI libraries not installed. AI features will be disabled.")
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
@@ -63,6 +64,17 @@ if PRODUCTION_MODE:
 else:
     logger.info("ℹ Using in-memory storage (development mode)")
     logger.info("  Set DATABASE_URL to enable production features")
+
+# Register advanced features (TTS, Social Listening, AI Training)
+try:
+    from advanced_features import advanced_bp
+    app.register_blueprint(advanced_bp)
+    logger.info("✓ Advanced features registered at /api/advanced/*")
+    logger.info("  - /api/advanced/tts/* - Real TTS provider integrations")
+    logger.info("  - /api/advanced/social-listening/* - Social monitoring dashboard")
+    logger.info("  - /api/advanced/ai-training/* - Custom AI model training")
+except ImportError as e:
+    logger.warning(f"⚠ Advanced features not available: {e}")
 
 # Helper functions
 def use_database():
@@ -488,6 +500,21 @@ class ImageEnhancer:
             logger.error(f"Image optimization error: {str(e)}")
             return {'error': str(e), 'success': False}
     
+    def get_platform_dimensions(self, platform: str) -> Dict[str, int]:
+        """Get optimal dimensions for a specific platform"""
+        dimensions = {
+            'twitter': {'width': 1200, 'height': 675},
+            'instagram': {'width': 1080, 'height': 1080},
+            'facebook': {'width': 1200, 'height': 630},
+            'linkedin': {'width': 1200, 'height': 627},
+            'threads': {'width': 1080, 'height': 1080},
+            'bluesky': {'width': 1200, 'height': 675},
+            'youtube': {'width': 1280, 'height': 720},
+            'pinterest': {'width': 1000, 'height': 1500},
+            'tiktok': {'width': 1080, 'height': 1920}
+        }
+        return dimensions.get(platform, {'width': 1200, 'height': 675})
+    
     def enhance_quality(self, image_data: str, enhancement_level: str = 'medium') -> Dict[str, Any]:
         """Enhance image quality (brightness, contrast, sharpness)"""
         if not self.enabled:
@@ -552,6 +579,257 @@ class ImageEnhancer:
             'note': 'Integrate OpenAI Vision API or similar for automatic alt text generation',
             'manual_recommended': True
         }
+
+
+class AIImageGenerator:
+    """AI-powered image generation for posts, video thumbnails, and video content"""
+    
+    def __init__(self):
+        self.api_key = os.getenv('OPENAI_API_KEY', '')
+        self.enabled = AI_ENABLED and bool(self.api_key)
+        if self.enabled:
+            openai.api_key = self.api_key
+        
+        # Image generation presets
+        self.IMAGE_STYLES = {
+            'photorealistic': 'Photorealistic, high quality, professional photography',
+            'illustration': 'Digital illustration, vibrant colors, artistic style',
+            'minimalist': 'Minimalist design, clean lines, simple composition',
+            'abstract': 'Abstract art, creative, modern design',
+            'cinematic': 'Cinematic style, dramatic lighting, movie poster aesthetic',
+            'vintage': 'Vintage style, retro aesthetic, nostalgic feel',
+            'modern': 'Modern design, contemporary aesthetic, sleek and professional',
+            'cartoon': 'Cartoon style, playful, colorful and fun',
+            'corporate': 'Professional corporate style, business appropriate, clean design'
+        }
+        
+        # Thumbnail templates for different video types
+        self.THUMBNAIL_TEMPLATES = {
+            'product_showcase': 'Eye-catching product photo with dramatic lighting',
+            'tutorial': 'Clear step-by-step visual with numbered elements',
+            'testimonial': 'Friendly portrait with quote overlay space',
+            'announcement': 'Bold text-ready background with exciting colors',
+            'behind_the_scenes': 'Candid workplace or process scene',
+            'story': 'Cinematic scene with narrative visual elements'
+        }
+    
+    def generate_image(self, prompt: str, style: str = 'photorealistic', 
+                      size: str = '1024x1024', platform: str = None) -> Dict[str, Any]:
+        """Generate an AI image using DALL-E"""
+        if not self.enabled:
+            return {'error': 'AI image generation not enabled', 'enabled': False}
+        
+        try:
+            # Add style to prompt
+            style_desc = self.IMAGE_STYLES.get(style, self.IMAGE_STYLES['photorealistic'])
+            enhanced_prompt = f"{prompt}. Style: {style_desc}"
+            
+            # Platform-specific size adjustments
+            if platform:
+                if platform in ['instagram', 'facebook', 'threads']:
+                    size = '1024x1024'  # Square
+                elif platform in ['twitter', 'linkedin']:
+                    size = '1792x1024'  # Landscape
+                elif platform in ['tiktok', 'pinterest']:
+                    size = '1024x1792'  # Portrait
+            
+            # Generate image with DALL-E
+            response = openai.images.generate(
+                model="dall-e-3",
+                prompt=enhanced_prompt,
+                size=size,
+                quality="standard",
+                n=1
+            )
+            
+            image_url = response.data[0].url
+            revised_prompt = response.data[0].revised_prompt
+            
+            # Download image and convert to base64
+            import requests
+            img_response = requests.get(image_url, timeout=30)
+            img_data = base64.b64encode(img_response.content).decode()
+            
+            return {
+                'success': True,
+                'image_url': image_url,
+                'image_data': f'data:image/png;base64,{img_data}',
+                'size': size,
+                'style': style,
+                'platform': platform,
+                'original_prompt': prompt,
+                'revised_prompt': revised_prompt
+            }
+        except Exception as e:
+            logger.error(f"Image generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_video_thumbnail(self, video_topic: str, video_type: str = 'product_showcase',
+                                 platform: str = 'youtube', style: str = 'cinematic') -> Dict[str, Any]:
+        """Generate a thumbnail image for video content"""
+        if not self.enabled:
+            return {'error': 'AI thumbnail generation not enabled', 'enabled': False}
+        
+        # Get template description
+        template_desc = self.THUMBNAIL_TEMPLATES.get(video_type, 'Engaging video thumbnail')
+        
+        # Build thumbnail prompt
+        prompt = f"Create a compelling video thumbnail for: {video_topic}. {template_desc}. Include bold text overlay space. High contrast, eye-catching, professional quality."
+        
+        # Determine size based on platform
+        size_map = {
+            'youtube': '1792x1024',  # 16:9
+            'instagram': '1024x1024',  # 1:1
+            'tiktok': '1024x1792',  # 9:16
+            'facebook': '1792x1024',  # 16:9
+            'twitter': '1792x1024'  # 16:9
+        }
+        size = size_map.get(platform, '1792x1024')
+        
+        result = self.generate_image(prompt, style, size, platform)
+        
+        if result.get('success'):
+            result['thumbnail_type'] = video_type
+            result['optimized_for'] = f'{platform} video thumbnail'
+        
+        return result
+    
+    def generate_images_for_video(self, video_script: str, num_images: int = 4,
+                                  style: str = 'cinematic', platform: str = 'instagram') -> Dict[str, Any]:
+        """Generate multiple images for video creation based on script"""
+        if not self.enabled:
+            return {'error': 'AI image generation not enabled', 'enabled': False}
+        
+        try:
+            # Parse scenes from script or split into segments
+            scenes = []
+            script_lines = video_script.split('\n')
+            
+            for line in script_lines:
+                if line.strip() and any(word in line.lower() for word in ['scene', 'shot', 'visual', ':']):
+                    scenes.append(line.strip())
+            
+            # If no clear scenes, split script into segments
+            if not scenes:
+                words = video_script.split()
+                chunk_size = max(len(words) // num_images, 10)
+                for i in range(0, len(words), chunk_size):
+                    chunk = ' '.join(words[i:i+chunk_size])
+                    if chunk:
+                        scenes.append(chunk)
+            
+            # Limit to requested number
+            scenes = scenes[:num_images]
+            
+            # Generate image for each scene
+            generated_images = []
+            for i, scene in enumerate(scenes, 1):
+                # Extract visual description
+                visual_prompt = scene
+                if ':' in scene:
+                    visual_prompt = scene.split(':', 1)[1].strip()
+                
+                prompt = f"Scene {i}: {visual_prompt}. Consistent style, high quality."
+                
+                result = self.generate_image(
+                    prompt,
+                    style=style,
+                    size='1024x1024' if platform == 'instagram' else '1024x1792',
+                    platform=platform
+                )
+                
+                if result.get('success'):
+                    generated_images.append({
+                        'scene_number': i,
+                        'scene_description': scene,
+                        'image_url': result['image_url'],
+                        'image_data': result['image_data'],
+                        'prompt': result['original_prompt']
+                    })
+                else:
+                    logger.warning(f"Failed to generate image for scene {i}: {result.get('error')}")
+            
+            return {
+                'success': True,
+                'images': generated_images,
+                'count': len(generated_images),
+                'style': style,
+                'platform': platform,
+                'video_ready': True
+            }
+        except Exception as e:
+            logger.error(f"Video image generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_post_image(self, post_content: str, platform: str = 'instagram',
+                           style: str = 'modern', include_text_space: bool = True) -> Dict[str, Any]:
+        """Generate an image optimized for social media post"""
+        if not self.enabled:
+            return {'error': 'AI image generation not enabled', 'enabled': False}
+        
+        # Build prompt based on post content
+        text_space_note = "with space for text overlay" if include_text_space else ""
+        prompt = f"Create a social media image for this post: '{post_content}'. Platform: {platform}. Professional, engaging, {text_space_note}"
+        
+        result = self.generate_image(prompt, style, platform=platform)
+        
+        if result.get('success'):
+            result['post_optimized'] = True
+            result['text_overlay_ready'] = include_text_space
+        
+        return result
+    
+    def create_image_variations(self, image_data: str, num_variations: int = 3) -> Dict[str, Any]:
+        """Create variations of an existing image"""
+        if not self.enabled:
+            return {'error': 'AI image generation not enabled', 'enabled': False}
+        
+        try:
+            # Decode base64 image
+            if image_data.startswith('data:image'):
+                image_data = image_data.split(',')[1]
+            
+            image_bytes = base64.b64decode(image_data)
+            
+            # Save to temporary file
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
+                tmp_file.write(image_bytes)
+                tmp_path = tmp_file.name
+            
+            try:
+                # Create variations using DALL-E
+                with open(tmp_path, 'rb') as image_file:
+                    response = openai.images.create_variation(
+                        image=image_file,
+                        n=min(num_variations, 3),  # DALL-E limit
+                        size="1024x1024"
+                    )
+                
+                variations = []
+                for img in response.data:
+                    # Download variation
+                    import requests
+                    img_response = requests.get(img.url, timeout=30)
+                    var_data = base64.b64encode(img_response.content).decode()
+                    
+                    variations.append({
+                        'image_url': img.url,
+                        'image_data': f'data:image/png;base64,{var_data}'
+                    })
+                
+                return {
+                    'success': True,
+                    'variations': variations,
+                    'count': len(variations)
+                }
+            finally:
+                # Clean up temp file
+                os.unlink(tmp_path)
+        
+        except Exception as e:
+            logger.error(f"Image variation error: {str(e)}")
+            return {'error': str(e), 'success': False}
 
 
 class EngagementPredictor:
@@ -708,11 +986,2021 @@ class EngagementPredictor:
         }
 
 
+class ViralContentIntelligence:
+    """Viral content intelligence engine for trending topics and content analysis"""
+    
+    def __init__(self):
+        self.api_key = os.getenv('OPENAI_API_KEY', '')
+        self.enabled = AI_ENABLED and bool(self.api_key)
+        if self.enabled:
+            openai.api_key = self.api_key
+        
+        # Viral hooks library
+        self.VIRAL_HOOKS = {
+            'curiosity': [
+                "You won't believe what happened when...",
+                "The secret nobody tells you about...",
+                "What they don't want you to know about...",
+                "I discovered something shocking about...",
+                "This changes everything about..."
+            ],
+            'urgency': [
+                "Stop doing this immediately if you...",
+                "You have 24 hours to...",
+                "Last chance to...",
+                "Don't miss out on...",
+                "Time is running out for..."
+            ],
+            'controversy': [
+                "Unpopular opinion:",
+                "Hot take:",
+                "Let's talk about the elephant in the room:",
+                "Nobody wants to admit this, but...",
+                "I'm going to say what everyone's thinking:"
+            ],
+            'storytelling': [
+                "Here's what happened when I...",
+                "Let me tell you a story about...",
+                "It all started when...",
+                "I'll never forget the day...",
+                "This is how I went from X to Y:"
+            ],
+            'value': [
+                "Here's exactly how to...",
+                "The complete guide to...",
+                "5 steps to...",
+                "Everything you need to know about...",
+                "Master this in 10 minutes:"
+            ]
+        }
+        
+        # Platform-specific viral patterns
+        self.VIRAL_PATTERNS = {
+            'twitter': {
+                'thread_starter': 'A thread 🧵',
+                'optimal_length': '100-280 characters',
+                'best_time': 'Morning (8-10 AM)',
+                'engagement_triggers': ['questions', 'threads', 'controversial takes']
+            },
+            'instagram': {
+                'caption_style': 'Story-driven with line breaks',
+                'optimal_hashtags': '10-15',
+                'best_time': 'Lunch (11 AM-1 PM) or Evening (7-9 PM)',
+                'engagement_triggers': ['carousels', 'reels', 'behind-the-scenes']
+            },
+            'tiktok': {
+                'hook_duration': 'First 3 seconds',
+                'optimal_length': '15-30 seconds',
+                'best_time': 'Evening (6-10 PM)',
+                'engagement_triggers': ['trending sounds', 'duets', 'challenges']
+            },
+            'linkedin': {
+                'post_style': 'Professional storytelling',
+                'optimal_length': '1,300-1,500 characters',
+                'best_time': 'Business hours (9 AM-5 PM)',
+                'engagement_triggers': ['personal stories', 'industry insights', 'data-driven']
+            }
+        }
+    
+    def get_viral_hooks(self, category: str = None, count: int = 5) -> Dict[str, Any]:
+        """Get viral hooks from library"""
+        if category and category not in self.VIRAL_HOOKS:
+            return {
+                'error': f'Category {category} not found',
+                'success': False,
+                'available_categories': list(self.VIRAL_HOOKS.keys())
+            }
+        
+        if category:
+            hooks = self.VIRAL_HOOKS[category][:count]
+            return {
+                'success': True,
+                'category': category,
+                'hooks': hooks,
+                'count': len(hooks)
+            }
+        
+        # Return all categories
+        all_hooks = {}
+        for cat, hooks_list in self.VIRAL_HOOKS.items():
+            all_hooks[cat] = hooks_list[:count]
+        
+        return {
+            'success': True,
+            'hooks_by_category': all_hooks,
+            'total_categories': len(all_hooks)
+        }
+    
+    def predict_virality_score(self, content: str, platform: str) -> Dict[str, Any]:
+        """Predict viral potential of content (0-100 score)"""
+        score = 50  # Base score
+        factors = []
+        
+        # Length analysis
+        content_length = len(content)
+        optimal_ranges = {
+            'twitter': (100, 280),
+            'instagram': (500, 2200),
+            'tiktok': (50, 300),
+            'linkedin': (1300, 1500),
+            'facebook': (100, 250)
+        }
+        
+        optimal = optimal_ranges.get(platform, (100, 500))
+        if optimal[0] <= content_length <= optimal[1]:
+            score += 15
+            factors.append("Optimal length")
+        elif content_length < optimal[0]:
+            score -= 10
+            factors.append("Too short")
+        else:
+            score -= 5
+            factors.append("Too long")
+        
+        # Hook analysis
+        first_line = content.split('\n')[0] if '\n' in content else content[:100]
+        for category, hooks in self.VIRAL_HOOKS.items():
+            if any(hook.lower()[:20] in first_line.lower() for hook in hooks):
+                score += 20
+                factors.append(f"Strong {category} hook")
+                break
+        
+        # Emoji analysis
+        emoji_count = len(re.findall(r'[\U0001F300-\U0001F9FF]', content))
+        if 2 <= emoji_count <= 5:
+            score += 10
+            factors.append("Good emoji usage")
+        elif emoji_count > 10:
+            score -= 5
+            factors.append("Too many emojis")
+        
+        # Question marks (engagement trigger)
+        if '?' in content:
+            score += 10
+            factors.append("Includes question (engagement)")
+        
+        # Hashtags
+        hashtag_count = len(re.findall(r'#[a-zA-Z0-9_]+', content))
+        if platform == 'instagram' and 10 <= hashtag_count <= 15:
+            score += 10
+            factors.append("Optimal hashtags")
+        elif platform in ['twitter', 'linkedin'] and 1 <= hashtag_count <= 3:
+            score += 10
+            factors.append("Good hashtag usage")
+        
+        # Cap score
+        score = max(0, min(100, score))
+        
+        # Determine rating
+        if score >= 80:
+            rating = "Highly Viral Potential"
+        elif score >= 60:
+            rating = "Good Viral Potential"
+        elif score >= 40:
+            rating = "Moderate Potential"
+        else:
+            rating = "Low Viral Potential"
+        
+        return {
+            'success': True,
+            'virality_score': score,
+            'rating': rating,
+            'platform': platform,
+            'factors': factors,
+            'recommendations': self._get_viral_recommendations(score, platform, content)
+        }
+    
+    def _get_viral_recommendations(self, score: int, platform: str, content: str) -> List[str]:
+        """Get recommendations to improve virality"""
+        recommendations = []
+        
+        if score < 60:
+            recommendations.append("Add a stronger hook in the first line")
+        
+        if '?' not in content:
+            recommendations.append("Include a question to boost engagement")
+        
+        emoji_count = len(re.findall(r'[\U0001F300-\U0001F9FF]', content))
+        if emoji_count == 0:
+            recommendations.append("Add 2-3 relevant emojis")
+        
+        if platform == 'instagram' and len(re.findall(r'#[a-zA-Z0-9_]+', content)) < 10:
+            recommendations.append("Add more hashtags (10-15 optimal for Instagram)")
+        
+        if len(content) < 100:
+            recommendations.append("Expand your content for better context")
+        
+        return recommendations if recommendations else ["Content looks great!"]
+    
+    def get_platform_best_practices(self, platform: str) -> Dict[str, Any]:
+        """Get viral best practices for a platform"""
+        if platform not in self.VIRAL_PATTERNS:
+            return {
+                'error': f'Platform {platform} not found',
+                'success': False,
+                'available_platforms': list(self.VIRAL_PATTERNS.keys())
+            }
+        
+        return {
+            'success': True,
+            'platform': platform,
+            'best_practices': self.VIRAL_PATTERNS[platform]
+        }
+
+
+class ContentMultiplier:
+    """Transform one piece of content into multiple platform-specific formats"""
+    
+    def __init__(self):
+        self.api_key = os.getenv('OPENAI_API_KEY', '')
+        self.enabled = AI_ENABLED and bool(self.api_key)
+        if self.enabled:
+            openai.api_key = self.api_key
+    
+    def multiply_content(self, source_content: str, source_type: str, target_platforms: List[str], 
+                        brand_voice: str = 'professional') -> Dict[str, Any]:
+        """Convert one piece of content into multiple platform-specific posts"""
+        if not self.enabled:
+            return {'error': 'Content multiplier not enabled', 'enabled': False}
+        
+        try:
+            outputs = {}
+            
+            for platform in target_platforms:
+                # Generate platform-specific content
+                prompt = f"""Transform this {source_type} into an engaging {platform} post:
+
+Source content: "{source_content}"
+
+Requirements:
+- Platform: {platform}
+- Brand voice: {brand_voice}
+- Optimize for {platform}'s audience and format
+- Maintain key messages
+- Include relevant emojis and hashtags for {platform}
+- Make it native to the platform
+
+Return only the {platform} post, no explanations."""
+
+                response = openai.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": f"You are a social media expert specializing in {platform} content."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=500,
+                    temperature=0.7
+                )
+                
+                platform_content = response.choices[0].message.content.strip()
+                
+                outputs[platform] = {
+                    'content': platform_content,
+                    'character_count': len(platform_content),
+                    'hashtags': re.findall(r'#[a-zA-Z0-9_]+', platform_content),
+                    'platform': platform
+                }
+            
+            return {
+                'success': True,
+                'source_type': source_type,
+                'outputs': outputs,
+                'platforms_generated': len(outputs),
+                'brand_voice': brand_voice
+            }
+        
+        except Exception as e:
+            logger.error(f"Content multiplication error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_content_variations(self, content: str, num_variations: int = 3, 
+                                   platform: str = 'twitter') -> Dict[str, Any]:
+        """Generate multiple variations of the same content for A/B testing"""
+        if not self.enabled:
+            return {'error': 'Content multiplier not enabled', 'enabled': False}
+        
+        try:
+            variations = []
+            
+            for i in range(num_variations):
+                prompt = f"""Create variation #{i+1} of this {platform} post with a different angle:
+
+Original: "{content}"
+
+Requirements:
+- Keep the core message
+- Use a different hook or approach
+- Maintain platform style
+- Make it equally engaging
+- Add relevant emojis
+
+Return only the variation, no explanations."""
+
+                response = openai.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[
+                        {"role": "system", "content": "You are a social media copywriter."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=300,
+                    temperature=0.8
+                )
+                
+                variation = response.choices[0].message.content.strip()
+                
+                variations.append({
+                    'variation_number': i + 1,
+                    'content': variation,
+                    'character_count': len(variation),
+                    'hashtags': re.findall(r'#[a-zA-Z0-9_]+', variation)
+                })
+            
+            return {
+                'success': True,
+                'original': content,
+                'variations': variations,
+                'count': len(variations),
+                'platform': platform
+            }
+        
+        except Exception as e:
+            logger.error(f"Variation generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+
+
+class AIVideoGenerator:
+    """AI-powered video generation and editing service"""
+    
+    # Video encoding constants
+    HIGH_RESOLUTION_THRESHOLD = 1920
+    HIGH_BITRATE = '5000k'
+    STANDARD_BITRATE = '3000k'
+    AUDIO_CODEC = 'aac'
+    AUDIO_BITRATE = '192k'
+    
+    # Video template library
+    VIDEO_TEMPLATES = {
+        'product_showcase': {
+            'name': 'Product Showcase',
+            'description': 'Professional product demonstration',
+            'scenes': 4,
+            'duration': 30,
+            'style': 'professional',
+            'transitions': ['fade', 'slide'],
+            'script_template': 'Scene 1: Product intro\nScene 2: Key features\nScene 3: Benefits\nScene 4: Call to action'
+        },
+        'behind_the_scenes': {
+            'name': 'Behind the Scenes',
+            'description': 'Show your process and team',
+            'scenes': 3,
+            'duration': 20,
+            'style': 'casual',
+            'transitions': ['fade', 'crossfade'],
+            'script_template': 'Scene 1: Setting the stage\nScene 2: The process\nScene 3: Final result'
+        },
+        'tutorial': {
+            'name': 'Tutorial',
+            'description': 'Step-by-step instructional video',
+            'scenes': 5,
+            'duration': 45,
+            'style': 'educational',
+            'transitions': ['slide', 'wipe'],
+            'script_template': 'Scene 1: Introduction\nScene 2: Step 1\nScene 3: Step 2\nScene 4: Step 3\nScene 5: Summary'
+        },
+        'testimonial': {
+            'name': 'Testimonial',
+            'description': 'Customer success story',
+            'scenes': 3,
+            'duration': 25,
+            'style': 'emotional',
+            'transitions': ['fade', 'dissolve'],
+            'script_template': 'Scene 1: The problem\nScene 2: The solution\nScene 3: The results'
+        },
+        'announcement': {
+            'name': 'Announcement',
+            'description': 'Quick exciting news or update',
+            'scenes': 2,
+            'duration': 15,
+            'style': 'energetic',
+            'transitions': ['zoom', 'fade'],
+            'script_template': 'Scene 1: The big reveal\nScene 2: What it means'
+        },
+        'story': {
+            'name': 'Story',
+            'description': 'Narrative-driven content',
+            'scenes': 4,
+            'duration': 40,
+            'style': 'cinematic',
+            'transitions': ['fade', 'crossfade', 'slide'],
+            'script_template': 'Scene 1: Setup\nScene 2: Conflict\nScene 3: Resolution\nScene 4: Conclusion'
+        }
+    }
+    
+    def __init__(self):
+        self.api_key = os.getenv('OPENAI_API_KEY', '')
+        self.enabled = AI_ENABLED and bool(self.api_key)
+        if self.enabled:
+            openai.api_key = self.api_key
+        
+        # Platform-specific video requirements
+        self.platform_specs = {
+            'instagram': {
+                'reel': {'aspect_ratio': '9:16', 'min_duration': 3, 'max_duration': 90, 'width': 1080, 'height': 1920},
+                'story': {'aspect_ratio': '9:16', 'min_duration': 1, 'max_duration': 60, 'width': 1080, 'height': 1920},
+                'feed': {'aspect_ratio': '1:1', 'min_duration': 3, 'max_duration': 60, 'width': 1080, 'height': 1080}
+            },
+            'youtube': {
+                'short': {'aspect_ratio': '9:16', 'min_duration': 1, 'max_duration': 60, 'width': 1080, 'height': 1920},
+                'video': {'aspect_ratio': '16:9', 'min_duration': 1, 'max_duration': 43200, 'width': 1920, 'height': 1080}
+            },
+            'tiktok': {
+                'video': {'aspect_ratio': '9:16', 'min_duration': 3, 'max_duration': 600, 'width': 1080, 'height': 1920}
+            },
+            'facebook': {
+                'reel': {'aspect_ratio': '9:16', 'min_duration': 3, 'max_duration': 90, 'width': 1080, 'height': 1920},
+                'feed': {'aspect_ratio': '16:9', 'min_duration': 1, 'max_duration': 240, 'width': 1280, 'height': 720}
+            },
+            'pinterest': {
+                'video_pin': {'aspect_ratio': '2:3', 'min_duration': 4, 'max_duration': 900, 'width': 1000, 'height': 1500}
+            },
+            'twitter': {
+                'video': {'aspect_ratio': '16:9', 'min_duration': 0.5, 'max_duration': 140, 'width': 1280, 'height': 720}
+            }
+        }
+    
+    def generate_video_script(self, topic: str, platform: str, duration: int, style: str = 'engaging') -> Dict[str, Any]:
+        """Generate a video script optimized for the platform and duration"""
+        if not self.enabled:
+            return {'error': 'AI video script generation not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Create a compelling {duration}-second video script for {platform} about: {topic}
+
+Style: {style}
+Platform: {platform}
+Duration: {duration} seconds
+
+Requirements:
+- Break down into scenes with timing
+- Include visual descriptions
+- Add text overlay suggestions
+- Include hook in first 3 seconds
+- Call-to-action at the end
+- Platform-optimized pacing
+
+Format the response as:
+Scene 1 (0-X seconds): [Visual description] | Text: [text overlay]
+Scene 2 (X-Y seconds): [Visual description] | Text: [text overlay]
+..."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional video script writer specializing in social media content."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.7
+            )
+            
+            script = response.choices[0].message.content.strip()
+            
+            # Parse scenes
+            scenes = []
+            for line in script.split('\n'):
+                if line.strip() and ('Scene' in line or 'scene' in line):
+                    scenes.append(line.strip())
+            
+            return {
+                'success': True,
+                'script': script,
+                'scenes': scenes,
+                'platform': platform,
+                'duration': duration,
+                'style': style,
+                'scene_count': len(scenes)
+            }
+        except Exception as e:
+            logger.error(f"Video script generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def create_slideshow_video(self, images: List[str], duration_per_image: float, platform: str, 
+                               post_type: str = 'video', transition: str = 'fade') -> Dict[str, Any]:
+        """Create a slideshow video from images with transitions"""
+        if not self.enabled:
+            return {'error': 'Video generation not enabled', 'enabled': False}
+        
+        if not images or len(images) == 0:
+            return {'error': 'At least one image is required', 'success': False}
+        
+        try:
+            # Get platform specs
+            specs = self.platform_specs.get(platform, {}).get(post_type, {
+                'aspect_ratio': '16:9', 'width': 1280, 'height': 720
+            })
+            
+            total_duration = len(images) * duration_per_image
+            
+            # Validate against platform requirements
+            min_dur = specs.get('min_duration', 0)
+            max_dur = specs.get('max_duration', 600)
+            
+            if total_duration < min_dur:
+                return {
+                    'error': f'Video too short. Minimum {min_dur} seconds required for {platform}',
+                    'success': False
+                }
+            
+            if total_duration > max_dur:
+                return {
+                    'error': f'Video too long. Maximum {max_dur} seconds allowed for {platform}',
+                    'success': False
+                }
+            
+            # Video generation metadata (actual video generation would require ffmpeg)
+            video_metadata = {
+                'success': True,
+                'format': 'slideshow',
+                'image_count': len(images),
+                'duration_per_image': duration_per_image,
+                'total_duration': total_duration,
+                'transition': transition,
+                'platform': platform,
+                'post_type': post_type,
+                'dimensions': {
+                    'width': specs.get('width'),
+                    'height': specs.get('height'),
+                    'aspect_ratio': specs.get('aspect_ratio')
+                },
+                'status': 'ready_for_generation',
+                'note': 'Video will be generated using ffmpeg with specified parameters',
+                'ffmpeg_command_template': f"ffmpeg -framerate 1/{duration_per_image} -pattern_type glob -i 'image*.jpg' -vf scale={specs.get('width')}:{specs.get('height')} -c:v libx264 -pix_fmt yuv420p output.mp4"
+            }
+            
+            return video_metadata
+            
+        except Exception as e:
+            logger.error(f"Slideshow video creation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_text_to_video_prompt(self, text: str, platform: str, post_type: str = 'video', 
+                                      style: str = 'professional') -> Dict[str, Any]:
+        """Generate optimized prompts for text-to-video AI models (like Runway, Pika, etc.)"""
+        if not self.enabled:
+            return {'error': 'AI prompt generation not enabled', 'enabled': False}
+        
+        try:
+            specs = self.platform_specs.get(platform, {}).get(post_type, {})
+            aspect_ratio = specs.get('aspect_ratio', '16:9')
+            duration = specs.get('max_duration', 30)
+            
+            prompt = f"""Create a detailed video generation prompt for text-to-video AI models based on this content:
+
+"{text}"
+
+Requirements:
+- Platform: {platform}
+- Aspect ratio: {aspect_ratio}
+- Style: {style}
+- Duration: {min(duration, 30)} seconds
+
+Generate a clear, detailed prompt that includes:
+1. Visual style and aesthetics
+2. Camera movements
+3. Scene composition
+4. Color palette
+5. Mood and atmosphere
+6. Key visual elements
+
+Make it suitable for AI video generators like Runway, Pika, or Stable Video."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are an expert at creating prompts for AI video generation models."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=400,
+                temperature=0.7
+            )
+            
+            video_prompt = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'original_text': text,
+                'video_prompt': video_prompt,
+                'platform': platform,
+                'post_type': post_type,
+                'aspect_ratio': aspect_ratio,
+                'recommended_duration': min(duration, 30),
+                'style': style,
+                'note': 'Use this prompt with AI video generation tools like Runway ML, Pika Labs, or Stable Video Diffusion'
+            }
+        except Exception as e:
+            logger.error(f"Text-to-video prompt generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_video_captions(self, video_content: str, platform: str, language: str = 'en') -> Dict[str, Any]:
+        """Generate optimized captions/subtitles for video content"""
+        if not self.enabled:
+            return {'error': 'AI caption generation not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Generate optimized video captions for {platform}:
+
+Content: "{video_content}"
+
+Create:
+1. Main caption (description)
+2. Hashtags (3-5 relevant)
+3. Call-to-action
+4. Accessibility description
+
+Make it engaging and platform-optimized."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a social media caption expert."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=300,
+                temperature=0.7
+            )
+            
+            caption_text = response.choices[0].message.content.strip()
+            
+            # Parse hashtags - support alphanumeric and underscores
+            hashtags = re.findall(r'#[a-zA-Z0-9_]+', caption_text)
+            
+            return {
+                'success': True,
+                'caption': caption_text,
+                'hashtags': hashtags,
+                'platform': platform,
+                'language': language,
+                'character_count': len(caption_text)
+            }
+        except Exception as e:
+            logger.error(f"Video caption generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def optimize_video_for_platform(self, video_path: str, platform: str, post_type: str = 'video') -> Dict[str, Any]:
+        """Provide optimization specifications for video based on platform requirements"""
+        if not self.enabled:
+            return {'error': 'Video optimization not enabled', 'enabled': False}
+        
+        specs = self.platform_specs.get(platform, {}).get(post_type)
+        
+        if not specs:
+            return {
+                'error': f'Unknown platform/post type combination: {platform}/{post_type}',
+                'success': False
+            }
+        
+        return {
+            'success': True,
+            'platform': platform,
+            'post_type': post_type,
+            'specifications': specs,
+            'optimization_settings': {
+                'resolution': f"{specs['width']}x{specs['height']}",
+                'aspect_ratio': specs['aspect_ratio'],
+                'duration_range': f"{specs['min_duration']}-{specs['max_duration']} seconds",
+                'recommended_format': 'mp4',
+                'recommended_codec': 'h264',
+                'recommended_bitrate': self.HIGH_BITRATE if specs['width'] >= self.HIGH_RESOLUTION_THRESHOLD else self.STANDARD_BITRATE,
+                'audio_codec': self.AUDIO_CODEC,
+                'audio_bitrate': self.AUDIO_BITRATE
+            },
+            'ffmpeg_command': self._generate_ffmpeg_command(specs, video_path)
+        }
+    
+    def _generate_ffmpeg_command(self, specs: Dict, input_path: str) -> str:
+        """Generate ffmpeg command for video optimization"""
+        return (
+            f"ffmpeg -i {input_path} "
+            f"-vf \"scale={specs['width']}:{specs['height']}:force_original_aspect_ratio=decrease,pad={specs['width']}:{specs['height']}:(ow-iw)/2:(oh-ih)/2\" "
+            f"-c:v libx264 -preset medium -crf 23 "
+            f"-c:a aac -b:a 192k "
+            f"-movflags +faststart "
+            f"-t {specs['max_duration']} "
+            f"output.mp4"
+        )
+    
+    def get_video_templates(self) -> Dict[str, Any]:
+        """Get all available video templates"""
+        return {
+            'success': True,
+            'templates': self.VIDEO_TEMPLATES,
+            'count': len(self.VIDEO_TEMPLATES)
+        }
+    
+    def get_template(self, template_id: str) -> Dict[str, Any]:
+        """Get a specific video template"""
+        template = self.VIDEO_TEMPLATES.get(template_id)
+        
+        if not template:
+            return {
+                'error': f'Template {template_id} not found',
+                'success': False,
+                'available_templates': list(self.VIDEO_TEMPLATES.keys())
+            }
+        
+        return {
+            'success': True,
+            'template_id': template_id,
+            'template': template
+        }
+    
+    def generate_from_template(self, template_id: str, topic: str, platform: str) -> Dict[str, Any]:
+        """Generate video script using a template"""
+        if not self.enabled:
+            return {'error': 'AI video generation not enabled', 'enabled': False}
+        
+        template = self.VIDEO_TEMPLATES.get(template_id)
+        if not template:
+            return {
+                'error': f'Template {template_id} not found',
+                'success': False,
+                'available_templates': list(self.VIDEO_TEMPLATES.keys())
+            }
+        
+        try:
+            prompt = f"""Create a {template['duration']}-second {template['style']} video script for {platform} about: {topic}
+
+Use this template structure:
+{template['script_template']}
+
+Requirements:
+- {template['scenes']} scenes total
+- Duration: {template['duration']} seconds
+- Style: {template['style']}
+- Transitions: {', '.join(template['transitions'])}
+- Include timing for each scene
+- Add visual descriptions
+- Platform: {platform}
+
+Return a detailed scene-by-scene breakdown."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": f"You are a professional video script writer specializing in {template['style']} content."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.7
+            )
+            
+            script = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'template_id': template_id,
+                'template_name': template['name'],
+                'script': script,
+                'platform': platform,
+                'duration': template['duration'],
+                'style': template['style'],
+                'scenes': template['scenes'],
+                'transitions': template['transitions']
+            }
+        except Exception as e:
+            logger.error(f"Template-based script generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def render_slideshow_with_ffmpeg(self, images: List[str], duration_per_image: float, 
+                                    output_path: str, specs: Dict, transition: str = 'fade') -> Dict[str, Any]:
+        """Actually render video using FFmpeg (requires ffmpeg installed)"""
+        if not images:
+            return {'error': 'At least one image is required', 'success': False}
+        
+        try:
+            import subprocess
+            import tempfile
+            
+            # Create temporary directory for processing
+            with tempfile.TemporaryDirectory() as temp_dir:
+                # Create input file list for FFmpeg
+                input_list_path = os.path.join(temp_dir, 'inputs.txt')
+                with open(input_list_path, 'w') as f:
+                    for img in images:
+                        f.write(f"file '{img}'\n")
+                        f.write(f"duration {duration_per_image}\n")
+                    # Add last image one more time for proper ending
+                    if images:
+                        f.write(f"file '{images[-1]}'\n")
+                
+                # Build FFmpeg command
+                width = specs['width']
+                height = specs['height']
+                
+                cmd = [
+                    'ffmpeg',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', input_list_path,
+                    '-vf', f"scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2",
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',
+                    '-y',  # Overwrite output
+                    output_path
+                ]
+                
+                # Execute FFmpeg
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout
+                )
+                
+                if result.returncode == 0:
+                    # Get video file size
+                    file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0
+                    
+                    return {
+                        'success': True,
+                        'output_path': output_path,
+                        'file_size': file_size,
+                        'dimensions': {'width': width, 'height': height},
+                        'duration': len(images) * duration_per_image,
+                        'image_count': len(images),
+                        'format': 'mp4',
+                        'codec': 'h264'
+                    }
+                else:
+                    return {
+                        'error': 'FFmpeg rendering failed',
+                        'success': False,
+                        'stderr': result.stderr[:500]  # First 500 chars of error
+                    }
+        
+        except subprocess.TimeoutExpired:
+            return {'error': 'Video rendering timeout (exceeded 5 minutes)', 'success': False}
+        except FileNotFoundError:
+            return {
+                'error': 'FFmpeg not installed. Install with: apt-get install ffmpeg',
+                'success': False,
+                'fallback': 'Use create_slideshow_video for command generation'
+            }
+        except Exception as e:
+            logger.error(f"Video rendering error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def get_platform_video_specs(self, platform: str) -> Dict[str, Any]:
+        """Get all video specifications for a platform"""
+        specs = self.platform_specs.get(platform, {})
+        
+        if not specs:
+            return {
+                'error': f'Platform {platform} not found or does not support video',
+                'success': False
+            }
+        
+        return {
+            'success': True,
+            'platform': platform,
+            'video_types': list(specs.keys()),
+            'specifications': specs
+        }
+    
+    def generate_subtitle_file(self, script: str, duration: int, output_format: str = 'srt') -> Dict[str, Any]:
+        """Generate subtitle file from script with timestamps (Improvement #1: Auto-subtitle generation)"""
+        if not self.enabled:
+            return {'error': 'Subtitle generation not enabled', 'enabled': False}
+        
+        try:
+            # Split script into segments
+            lines = [line.strip() for line in script.split('\n') if line.strip()]
+            
+            # Calculate timing for each line
+            time_per_line = duration / max(len(lines), 1)
+            
+            subtitles = []
+            for i, line in enumerate(lines):
+                start_time = i * time_per_line
+                end_time = (i + 1) * time_per_line
+                
+                # Format timestamps
+                start_formatted = self._format_srt_time(start_time)
+                end_formatted = self._format_srt_time(end_time)
+                
+                subtitles.append({
+                    'index': i + 1,
+                    'start': start_formatted,
+                    'end': end_formatted,
+                    'text': line
+                })
+            
+            # Generate SRT or VTT content
+            if output_format.lower() == 'srt':
+                content = self._generate_srt_content(subtitles)
+            elif output_format.lower() == 'vtt':
+                content = self._generate_vtt_content(subtitles)
+            else:
+                return {'error': f'Unsupported format: {output_format}', 'success': False}
+            
+            return {
+                'success': True,
+                'format': output_format,
+                'subtitle_count': len(subtitles),
+                'duration': duration,
+                'content': content,
+                'subtitles': subtitles
+            }
+        except Exception as e:
+            logger.error(f"Subtitle generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def _format_srt_time(self, seconds: float) -> str:
+        """Format time for SRT format (HH:MM:SS,mmm)"""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        millisecs = int((seconds % 1) * 1000)
+        return f"{hours:02d}:{minutes:02d}:{secs:02d},{millisecs:03d}"
+    
+    def _generate_srt_content(self, subtitles: List[Dict]) -> str:
+        """Generate SRT file content"""
+        lines = []
+        for sub in subtitles:
+            lines.append(str(sub['index']))
+            lines.append(f"{sub['start']} --> {sub['end']}")
+            lines.append(sub['text'])
+            lines.append('')  # Empty line between subtitles
+        return '\n'.join(lines)
+    
+    def _generate_vtt_content(self, subtitles: List[Dict]) -> str:
+        """Generate WebVTT file content"""
+        lines = ['WEBVTT', '']
+        for sub in subtitles:
+            # VTT uses dots instead of commas for milliseconds
+            start = sub['start'].replace(',', '.')
+            end = sub['end'].replace(',', '.')
+            lines.append(f"{start} --> {end}")
+            lines.append(sub['text'])
+            lines.append('')
+        return '\n'.join(lines)
+    
+    def convert_aspect_ratio(self, input_specs: Dict, target_ratio: str) -> Dict[str, Any]:
+        """Convert video aspect ratio specifications (Improvement #2: Automatic aspect ratio conversion)"""
+        ratio_specs = {
+            '16:9': {'width': 1920, 'height': 1080, 'description': 'Landscape (YouTube, Facebook)'},
+            '9:16': {'width': 1080, 'height': 1920, 'description': 'Portrait (Instagram Reels, TikTok, Stories)'},
+            '1:1': {'width': 1080, 'height': 1080, 'description': 'Square (Instagram Feed)'},
+            '4:5': {'width': 1080, 'height': 1350, 'description': 'Portrait (Instagram Feed)'},
+            '2:3': {'width': 1000, 'height': 1500, 'description': 'Vertical (Pinterest)'}
+        }
+        
+        if target_ratio not in ratio_specs:
+            return {
+                'error': f'Unsupported aspect ratio: {target_ratio}',
+                'success': False,
+                'supported_ratios': list(ratio_specs.keys())
+            }
+        
+        target = ratio_specs[target_ratio]
+        
+        # Generate FFmpeg command for conversion
+        ffmpeg_cmd = (
+            f"ffmpeg -i input.mp4 "
+            f"-vf \"scale={target['width']}:{target['height']}:force_original_aspect_ratio=decrease,"
+            f"pad={target['width']}:{target['height']}:(ow-iw)/2:(oh-ih)/2:black\" "
+            f"-c:v libx264 -preset medium -crf 23 "
+            f"-c:a copy "
+            f"output_{target_ratio.replace(':', 'x')}.mp4"
+        )
+        
+        return {
+            'success': True,
+            'target_ratio': target_ratio,
+            'target_dimensions': {'width': target['width'], 'height': target['height']},
+            'description': target['description'],
+            'ffmpeg_command': ffmpeg_cmd,
+            'all_ratios': ratio_specs
+        }
+    
+    def generate_voiceover_script(self, script: str, language: str = 'en', voice_style: str = 'professional') -> Dict[str, Any]:
+        """Generate voiceover-ready script with timing and emphasis (Improvement #3: AI voiceover preparation)"""
+        if not self.enabled:
+            return {'error': 'Voiceover script generation not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Convert this script into a voiceover-ready format with timing markers and emphasis:
+
+Script: {script}
+Language: {language}
+Voice Style: {voice_style}
+
+Requirements:
+- Add [PAUSE] markers for natural breaks
+- Mark [EMPHASIS] on key words
+- Include [SLOW] for important points
+- Add timing suggestions in seconds
+- Optimize for {voice_style} delivery
+- Make it sound natural and engaging
+
+Return formatted voiceover script."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional voiceover script writer."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.7
+            )
+            
+            voiceover_script = response.choices[0].message.content.strip()
+            
+            # Parse timing markers
+            pause_count = voiceover_script.count('[PAUSE]')
+            emphasis_count = voiceover_script.count('[EMPHASIS]')
+            
+            return {
+                'success': True,
+                'voiceover_script': voiceover_script,
+                'language': language,
+                'voice_style': voice_style,
+                'markers': {
+                    'pauses': pause_count,
+                    'emphasis': emphasis_count
+                },
+                'note': 'Use with ElevenLabs, Azure TTS, or Google Cloud Text-to-Speech'
+            }
+        except Exception as e:
+            logger.error(f"Voiceover script generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    # ===== AI VOICEOVER IMPROVEMENTS (10 Features) =====
+    
+    def get_supported_languages(self) -> Dict[str, Any]:
+        """Get list of 60 supported languages for voiceover (Voiceover Improvement #1)"""
+        languages = {
+            # Major World Languages
+            'en': {'name': 'English', 'region': 'Global', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'es': {'name': 'Spanish', 'region': 'Europe/Americas', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'fr': {'name': 'French', 'region': 'Europe/Africa', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'de': {'name': 'German', 'region': 'Europe', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'it': {'name': 'Italian', 'region': 'Europe', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'pt': {'name': 'Portuguese', 'region': 'Europe/Americas/Africa', 'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']},
+            'ru': {'name': 'Russian', 'region': 'Europe/Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'ja': {'name': 'Japanese', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'ko': {'name': 'Korean', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'zh': {'name': 'Chinese (Mandarin)', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            
+            # European Languages
+            'nl': {'name': 'Dutch', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'pl': {'name': 'Polish', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'sv': {'name': 'Swedish', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'no': {'name': 'Norwegian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'da': {'name': 'Danish', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'fi': {'name': 'Finnish', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'cs': {'name': 'Czech', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'ro': {'name': 'Romanian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'hu': {'name': 'Hungarian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'el': {'name': 'Greek', 'region': 'Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            
+            # Middle Eastern & African Languages
+            'ar': {'name': 'Arabic', 'region': 'Middle East/Africa', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'he': {'name': 'Hebrew', 'region': 'Middle East', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'tr': {'name': 'Turkish', 'region': 'Middle East/Europe', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'fa': {'name': 'Persian (Farsi)', 'region': 'Middle East', 'tts_providers': ['Google', 'Amazon']},
+            'sw': {'name': 'Swahili', 'region': 'Africa', 'tts_providers': ['Google', 'Amazon']},
+            'zu': {'name': 'Zulu', 'region': 'Africa', 'tts_providers': ['Google']},
+            'am': {'name': 'Amharic', 'region': 'Africa', 'tts_providers': ['Google']},
+            
+            # Asian Languages
+            'hi': {'name': 'Hindi', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'bn': {'name': 'Bengali', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'ur': {'name': 'Urdu', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'th': {'name': 'Thai', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'vi': {'name': 'Vietnamese', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'id': {'name': 'Indonesian', 'region': 'Asia', 'tts_providers': ['Azure', 'Google', 'Amazon']},
+            'ms': {'name': 'Malay', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'tl': {'name': 'Filipino (Tagalog)', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'ta': {'name': 'Tamil', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'te': {'name': 'Telugu', 'region': 'Asia', 'tts_providers': ['Google', 'Amazon']},
+            'ml': {'name': 'Malayalam', 'region': 'Asia', 'tts_providers': ['Google']},
+            'kn': {'name': 'Kannada', 'region': 'Asia', 'tts_providers': ['Google']},
+            'mr': {'name': 'Marathi', 'region': 'Asia', 'tts_providers': ['Google']},
+            'gu': {'name': 'Gujarati', 'region': 'Asia', 'tts_providers': ['Google']},
+            
+            # More European Languages
+            'uk': {'name': 'Ukrainian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'bg': {'name': 'Bulgarian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'sk': {'name': 'Slovak', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'hr': {'name': 'Croatian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'sr': {'name': 'Serbian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'sl': {'name': 'Slovenian', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'lt': {'name': 'Lithuanian', 'region': 'Europe', 'tts_providers': ['Google']},
+            'lv': {'name': 'Latvian', 'region': 'Europe', 'tts_providers': ['Google']},
+            'et': {'name': 'Estonian', 'region': 'Europe', 'tts_providers': ['Google']},
+            'is': {'name': 'Icelandic', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            
+            # Additional Languages
+            'ca': {'name': 'Catalan', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'gl': {'name': 'Galician', 'region': 'Europe', 'tts_providers': ['Google']},
+            'eu': {'name': 'Basque', 'region': 'Europe', 'tts_providers': ['Google']},
+            'cy': {'name': 'Welsh', 'region': 'Europe', 'tts_providers': ['Azure', 'Google']},
+            'ga': {'name': 'Irish', 'region': 'Europe', 'tts_providers': ['Google']},
+            'mt': {'name': 'Maltese', 'region': 'Europe', 'tts_providers': ['Google']},
+            'sq': {'name': 'Albanian', 'region': 'Europe', 'tts_providers': ['Google']},
+            'mk': {'name': 'Macedonian', 'region': 'Europe', 'tts_providers': ['Google']},
+            'af': {'name': 'Afrikaans', 'region': 'Africa', 'tts_providers': ['Azure', 'Google']},
+            'ne': {'name': 'Nepali', 'region': 'Asia', 'tts_providers': ['Google']},
+            'si': {'name': 'Sinhala', 'region': 'Asia', 'tts_providers': ['Google']},
+        }
+        
+        return {
+            'success': True,
+            'total_languages': len(languages),
+            'languages': languages,
+            'regions': ['Europe', 'Asia', 'Americas', 'Middle East', 'Africa', 'Global'],
+            'tts_providers': ['ElevenLabs', 'Azure', 'Google', 'Amazon']
+        }
+    
+    def generate_pronunciation_guide(self, script: str, language: str = 'en') -> Dict[str, Any]:
+        """Generate pronunciation guide for difficult words (Voiceover Improvement #2)"""
+        if not self.enabled:
+            return {'error': 'Pronunciation guide not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Analyze this script and provide pronunciation guidance for difficult or ambiguous words:
+
+Script: {script}
+Language: {language}
+
+Identify:
+1. Technical terms that need pronunciation guidance
+2. Proper nouns (names, brands, places)
+3. Acronyms and how to pronounce them
+4. Words with multiple pronunciations
+5. Foreign words or phrases
+
+For each word, provide:
+- The word
+- Phonetic spelling
+- Audio guidance (e.g., "sounds like...")
+- Context notes
+
+Return as structured pronunciation guide."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional pronunciation coach and linguist."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=600,
+                temperature=0.5
+            )
+            
+            guide = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'pronunciation_guide': guide,
+                'language': language,
+                'script_length': len(script),
+                'note': 'Use this guide with voice actors or TTS systems for accurate pronunciation'
+            }
+        except Exception as e:
+            logger.error(f"Pronunciation guide error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_emotion_markers(self, script: str, video_type: str = 'general') -> Dict[str, Any]:
+        """Add emotion and tone markers to script (Voiceover Improvement #3)"""
+        if not self.enabled:
+            return {'error': 'Emotion markers not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Add detailed emotion and tone markers to this voiceover script:
+
+Script: {script}
+Video Type: {video_type}
+
+Add markers for:
+- [EXCITED] - High energy, enthusiastic
+- [CALM] - Peaceful, soothing tone
+- [SERIOUS] - Formal, authoritative
+- [FRIENDLY] - Warm, conversational
+- [URGENT] - Quick, pressing tone
+- [QUESTIONING] - Curious, inquisitive
+- [CONFIDENT] - Strong, assured
+- [EMPATHETIC] - Understanding, compassionate
+
+Also add:
+- [SMILE] - Voice should sound like smiling
+- [WHISPER] - Soft, intimate delivery
+- Volume markers: [LOUDER] [SOFTER]
+- Pace markers: [FASTER] [SLOWER]
+
+Return the script with emotion markers inserted naturally."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a voice direction expert for professional voiceover work."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.7
+            )
+            
+            marked_script = response.choices[0].message.content.strip()
+            
+            # Count emotion markers
+            emotion_types = ['EXCITED', 'CALM', 'SERIOUS', 'FRIENDLY', 'URGENT', 'QUESTIONING', 'CONFIDENT', 'EMPATHETIC']
+            emotion_counts = {emotion: marked_script.count(f'[{emotion}]') for emotion in emotion_types}
+            
+            return {
+                'success': True,
+                'marked_script': marked_script,
+                'video_type': video_type,
+                'emotion_markers': emotion_counts,
+                'total_markers': sum(emotion_counts.values()),
+                'note': 'Use with emotion-capable TTS or provide to voice actors'
+            }
+        except Exception as e:
+            logger.error(f"Emotion markers error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_multi_voice_script(self, script: str, num_voices: int = 2) -> Dict[str, Any]:
+        """Split script for multiple voice actors/personas (Voiceover Improvement #4)"""
+        if not self.enabled:
+            return {'error': 'Multi-voice script not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Convert this script into a multi-voice conversation or narration:
+
+Script: {script}
+Number of Voices: {num_voices}
+
+Create a natural dialogue or narration that uses {num_voices} distinct voices:
+- Voice 1: [V1] tags
+- Voice 2: [V2] tags
+- Voice 3: [V3] tags (if applicable)
+
+For each voice, suggest:
+- Character/persona (e.g., narrator, expert, customer, host)
+- Voice characteristics (age, gender, tone)
+- Accent/dialect suggestions
+
+Make the conversation natural and engaging. Return formatted multi-voice script."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional scriptwriter specializing in dialogue and voice direction."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=900,
+                temperature=0.8
+            )
+            
+            multi_voice_script = response.choices[0].message.content.strip()
+            
+            # Count voice tags
+            voice_tags = {f'V{i+1}': multi_voice_script.count(f'[V{i+1}]') for i in range(num_voices)}
+            
+            return {
+                'success': True,
+                'multi_voice_script': multi_voice_script,
+                'num_voices': num_voices,
+                'voice_line_counts': voice_tags,
+                'note': 'Assign different voice actors or TTS voices to each [V#] tag'
+            }
+        except Exception as e:
+            logger.error(f"Multi-voice script error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_breath_marks(self, script: str, style: str = 'natural') -> Dict[str, Any]:
+        """Add breath marks and pacing guidance (Voiceover Improvement #5)"""
+        if not self.enabled:
+            return {'error': 'Breath marks not enabled', 'enabled': False}
+        
+        try:
+            breath_styles = {
+                'natural': 'Natural breathing patterns, breath every 8-12 words',
+                'fast_paced': 'Quick delivery, shorter breath intervals',
+                'dramatic': 'Strategic pauses for dramatic effect',
+                'conversational': 'Casual, frequent breaths like normal speech'
+            }
+            
+            style_guide = breath_styles.get(style, breath_styles['natural'])
+            
+            prompt = f"""Add breath marks and pacing guidance to this voiceover script:
+
+Script: {script}
+Style: {style} - {style_guide}
+
+Add markers:
+- [BREATH] - Take a breath
+- [SHORT_PAUSE] - 0.5 second pause
+- [MEDIUM_PAUSE] - 1 second pause
+- [LONG_PAUSE] - 2+ second pause
+- [NO_BREATH] - Continue without breath (for impact)
+
+Consider:
+- Sentence structure and natural breaks
+- Punctuation cues
+- Emotional beats
+- Narrative flow
+
+Return script with breathing and pacing markers."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional voice coach specializing in breath control and pacing."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.6
+            )
+            
+            marked_script = response.choices[0].message.content.strip()
+            
+            # Count markers
+            breath_count = marked_script.count('[BREATH]')
+            pause_count = marked_script.count('PAUSE')
+            
+            return {
+                'success': True,
+                'marked_script': marked_script,
+                'style': style,
+                'breath_marks': breath_count,
+                'pause_marks': pause_count,
+                'note': 'Follow breath marks for natural, professional delivery'
+            }
+        except Exception as e:
+            logger.error(f"Breath marks error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def estimate_voiceover_duration(self, script: str, language: str = 'en', speech_rate: str = 'normal') -> Dict[str, Any]:
+        """Estimate voiceover duration with timing breakdown (Voiceover Improvement #6)"""
+        
+        speech_rates = {
+            'slow': 100,      # words per minute
+            'normal': 150,    # words per minute
+            'fast': 180,      # words per minute
+            'very_fast': 200  # words per minute
+        }
+        
+        wpm = speech_rates.get(speech_rate, 150)
+        
+        # Count words
+        words = len(script.split())
+        
+        # Base duration in seconds
+        base_duration = (words / wpm) * 60
+        
+        # Add pause time (estimate 0.5s per sentence)
+        sentences = script.count('.') + script.count('!') + script.count('?')
+        pause_time = sentences * 0.5
+        
+        # Total duration
+        total_duration = base_duration + pause_time
+        
+        # Calculate per-segment timing if script has line breaks
+        segments = script.split('\n')
+        segment_timings = []
+        cumulative_time = 0
+        
+        for i, segment in enumerate(segments):
+            if segment.strip():
+                seg_words = len(segment.split())
+                seg_duration = (seg_words / wpm) * 60 + 0.5
+                segment_timings.append({
+                    'segment': i + 1,
+                    'text': segment[:50] + '...' if len(segment) > 50 else segment,
+                    'duration': round(seg_duration, 2),
+                    'start_time': round(cumulative_time, 2),
+                    'end_time': round(cumulative_time + seg_duration, 2)
+                })
+                cumulative_time += seg_duration
+        
+        return {
+            'success': True,
+            'total_duration_seconds': round(total_duration, 2),
+            'total_duration_minutes': round(total_duration / 60, 2),
+            'word_count': words,
+            'speech_rate': speech_rate,
+            'words_per_minute': wpm,
+            'estimated_pauses': sentences,
+            'segment_count': len([s for s in segments if s.strip()]),
+            'segment_timings': segment_timings,
+            'language': language,
+            'note': 'Actual duration may vary by ±15% based on delivery style'
+        }
+    
+    def generate_accent_guidance(self, script: str, target_accent: str = 'neutral') -> Dict[str, Any]:
+        """Generate accent and dialect guidance (Voiceover Improvement #7)"""
+        if not self.enabled:
+            return {'error': 'Accent guidance not enabled', 'enabled': False}
+        
+        try:
+            accents = {
+                'neutral': 'Standard neutral accent, clear and universally understood',
+                'american': 'General American English (TV/radio standard)',
+                'british': 'Received Pronunciation (BBC English)',
+                'australian': 'General Australian English',
+                'scottish': 'Scottish English accent',
+                'irish': 'Irish English accent',
+                'southern': 'Southern US accent',
+                'new_york': 'New York City accent',
+                'california': 'California/West Coast accent',
+                'canadian': 'Canadian English accent'
+            }
+            
+            accent_info = accents.get(target_accent, accents['neutral'])
+            
+            prompt = f"""Provide accent and dialect guidance for this voiceover script:
+
+Script: {script}
+Target Accent: {target_accent} - {accent_info}
+
+Provide guidance on:
+1. Key vowel sounds specific to this accent
+2. Consonant pronunciations that differ
+3. Intonation patterns
+4. Stress patterns
+5. Common phrases that need special attention
+6. Words to avoid or replace for this accent
+7. Rhythm and cadence notes
+
+Make it practical and easy to follow for voice actors."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a dialect coach with expertise in accents and regional speech patterns."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=700,
+                temperature=0.6
+            )
+            
+            guidance = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'accent_guidance': guidance,
+                'target_accent': target_accent,
+                'accent_description': accent_info,
+                'available_accents': list(accents.keys()),
+                'note': 'Use with professional voice actors familiar with the target accent'
+            }
+        except Exception as e:
+            logger.error(f"Accent guidance error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_tts_config(self, script: str, language: str = 'en', provider: str = 'elevenlabs') -> Dict[str, Any]:
+        """Generate TTS provider-specific configuration (Voiceover Improvement #8)"""
+        
+        # TTS provider configurations
+        configs = {
+            'elevenlabs': {
+                'api_endpoint': 'https://api.elevenlabs.io/v1/text-to-speech',
+                'recommended_voices': {
+                    'male': ['Adam', 'Antoni', 'Arnold', 'Callum', 'Charlie'],
+                    'female': ['Bella', 'Domi', 'Elli', 'Emily', 'Rachel']
+                },
+                'parameters': {
+                    'stability': 0.75,
+                    'similarity_boost': 0.75,
+                    'model_id': 'eleven_monolingual_v1'
+                },
+                'features': ['Voice cloning', 'Emotion control', 'Multi-lingual', '60+ languages'],
+                'pricing': 'Starts at $5/month for 30,000 characters'
+            },
+            'azure': {
+                'api_endpoint': 'https://[region].tts.speech.microsoft.com/cognitiveservices/v1',
+                'recommended_voices': {
+                    'male': ['en-US-GuyNeural', 'en-US-DavisNeural', 'en-GB-RyanNeural'],
+                    'female': ['en-US-JennyNeural', 'en-US-AriaNeural', 'en-GB-SoniaNeural']
+                },
+                'parameters': {
+                    'rate': '0%',
+                    'pitch': '0%',
+                    'volume': '0%'
+                },
+                'ssml_support': True,
+                'features': ['Neural voices', '110+ languages', 'SSML tags', 'Custom neural voice'],
+                'pricing': 'Pay-as-you-go, $15 per 1M characters'
+            },
+            'google': {
+                'api_endpoint': 'https://texttospeech.googleapis.com/v1/text:synthesize',
+                'recommended_voices': {
+                    'male': ['en-US-Neural2-D', 'en-US-Neural2-A', 'en-GB-Neural2-B'],
+                    'female': ['en-US-Neural2-C', 'en-US-Neural2-E', 'en-US-Neural2-F']
+                },
+                'parameters': {
+                    'speakingRate': 1.0,
+                    'pitch': 0.0,
+                    'volumeGainDb': 0.0
+                },
+                'ssml_support': True,
+                'features': ['WaveNet voices', '40+ languages', 'SSML support', 'Custom voice'],
+                'pricing': 'Free tier: 1M characters/month, then $4 per 1M'
+            },
+            'amazon': {
+                'api_endpoint': 'Amazon Polly API',
+                'recommended_voices': {
+                    'male': ['Matthew', 'Joey', 'Justin', 'Kevin'],
+                    'female': ['Joanna', 'Kendra', 'Kimberly', 'Salli']
+                },
+                'parameters': {
+                    'Engine': 'neural',
+                    'SampleRate': '24000',
+                    'OutputFormat': 'mp3'
+                },
+                'ssml_support': True,
+                'features': ['Neural voices', '60+ languages', 'Newscaster style', 'Conversational style'],
+                'pricing': 'Free tier: 5M characters/month (12 months), then $16 per 1M'
+            }
+        }
+        
+        config = configs.get(provider, configs['elevenlabs'])
+        
+        # Calculate character count and estimate cost
+        char_count = len(script)
+        
+        # Estimate cost per provider (simplified)
+        cost_estimates = {
+            'elevenlabs': (char_count / 30000) * 5,  # Rough monthly cost
+            'azure': (char_count / 1000000) * 15,
+            'google': max(0, (char_count / 1000000 - 1) * 4),  # Free tier included
+            'amazon': max(0, (char_count / 1000000) * 16)
+        }
+        
+        return {
+            'success': True,
+            'provider': provider,
+            'language': language,
+            'character_count': char_count,
+            'estimated_cost_usd': round(cost_estimates.get(provider, 0), 2),
+            'configuration': config,
+            'ssml_enabled': config.get('ssml_support', False),
+            'all_providers': list(configs.keys()),
+            'note': 'Configure API keys in your environment before use'
+        }
+    
+    def generate_background_music_sync(self, script: str, music_style: str = 'corporate') -> Dict[str, Any]:
+        """Generate background music sync points (Voiceover Improvement #9)"""
+        if not self.enabled:
+            return {'error': 'Music sync not enabled', 'enabled': False}
+        
+        try:
+            music_styles = {
+                'corporate': 'Professional, uplifting, motivational',
+                'energetic': 'Fast-paced, exciting, high-energy',
+                'calm': 'Peaceful, soothing, ambient',
+                'dramatic': 'Intense, suspenseful, emotional',
+                'upbeat': 'Happy, cheerful, positive',
+                'cinematic': 'Epic, orchestral, grand'
+            }
+            
+            style_desc = music_styles.get(music_style, music_styles['corporate'])
+            
+            prompt = f"""Analyze this voiceover script and suggest background music sync points:
+
+Script: {script}
+Music Style: {music_style} - {style_desc}
+
+Provide:
+1. Music cue points (when to start, stop, fade in/out)
+2. Volume levels relative to voice (e.g., -20dB, -15dB)
+3. Music change suggestions for different sections
+4. Emotional sync points where music should match content
+5. Silence points where music should drop out
+6. Build/crescendo points
+
+Format as timestamp-based music direction."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are an audio engineer specializing in music and voiceover mixing."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=700,
+                temperature=0.7
+            )
+            
+            music_sync = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'music_sync_guide': music_sync,
+                'music_style': music_style,
+                'style_description': style_desc,
+                'available_styles': list(music_styles.keys()),
+                'note': 'Adjust music volume to ensure voiceover remains clear (-15dB to -20dB is typical)'
+            }
+        except Exception as e:
+            logger.error(f"Music sync error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_voiceover_quality_check(self, script: str, language: str = 'en') -> Dict[str, Any]:
+        """Analyze script for voiceover quality issues (Voiceover Improvement #10)"""
+        if not self.enabled:
+            return {'error': 'Quality check not enabled', 'enabled': False}
+        
+        try:
+            # Automated checks
+            quality_issues = []
+            warnings = []
+            suggestions = []
+            
+            # Check 1: Script length
+            word_count = len(script.split())
+            if word_count < 20:
+                warnings.append('Script is very short (< 20 words). Consider expanding.')
+            elif word_count > 500:
+                warnings.append('Script is very long (> 500 words). Consider breaking into segments.')
+            
+            # Check 2: Sentence length
+            sentences = [s.strip() for s in script.replace('!', '.').replace('?', '.').split('.') if s.strip()]
+            avg_sentence_length = sum(len(s.split()) for s in sentences) / max(len(sentences), 1)
+            if avg_sentence_length > 25:
+                quality_issues.append('Sentences are too long (avg > 25 words). Voice actors may struggle with breath control.')
+            
+            # Check 3: Difficult consonant clusters
+            difficult_patterns = ['str', 'spr', 'thr', 'scr', 'spl']
+            difficult_words = [word for word in script.split() if any(pattern in word.lower() for pattern in difficult_patterns)]
+            if len(difficult_words) > 10:
+                warnings.append(f'Script contains many words with difficult consonant clusters: {", ".join(difficult_words[:5])}...')
+            
+            # Check 4: Punctuation
+            if script.count(',') + script.count('.') + script.count('!') + script.count('?') < word_count / 20:
+                quality_issues.append('Insufficient punctuation. Add commas and periods for natural pacing.')
+            
+            # Check 5: Acronyms without periods
+            import re
+            acronyms = re.findall(r'\b[A-Z]{2,}\b', script)
+            if acronyms:
+                suggestions.append(f'Found acronyms: {", ".join(set(acronyms))}. Clarify pronunciation in notes.')
+            
+            # AI-powered analysis
+            prompt = f"""Analyze this voiceover script for quality and readability:
+
+Script: {script}
+Language: {language}
+
+Check for:
+1. Tongue twisters or difficult phrases
+2. Ambiguous pronunciations
+3. Awkward phrasing that sounds unnatural when spoken
+4. Missing punctuation that affects pacing
+5. Words that might be misread
+6. Overall flow and rhythm
+
+Provide specific, actionable feedback."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a voiceover director with expertise in script quality assurance."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=600,
+                temperature=0.5
+            )
+            
+            ai_analysis = response.choices[0].message.content.strip()
+            
+            # Calculate quality score
+            quality_score = 100
+            quality_score -= len(quality_issues) * 15
+            quality_score -= len(warnings) * 5
+            quality_score = max(0, quality_score)
+            
+            return {
+                'success': True,
+                'quality_score': quality_score,
+                'quality_rating': 'Excellent' if quality_score >= 90 else 'Good' if quality_score >= 70 else 'Fair' if quality_score >= 50 else 'Needs Improvement',
+                'quality_issues': quality_issues,
+                'warnings': warnings,
+                'suggestions': suggestions,
+                'ai_analysis': ai_analysis,
+                'statistics': {
+                    'word_count': word_count,
+                    'sentence_count': len(sentences),
+                    'avg_sentence_length': round(avg_sentence_length, 1),
+                    'difficult_words': len(difficult_words),
+                    'acronyms': len(acronyms)
+                },
+                'language': language,
+                'note': 'Address quality issues before recording for best results'
+            }
+        except Exception as e:
+            logger.error(f"Quality check error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def generate_broll_suggestions(self, script: str, video_type: str) -> Dict[str, Any]:
+        """Generate B-roll footage suggestions (Improvement #4: B-roll integration)"""
+        if not self.enabled:
+            return {'error': 'B-roll suggestions not enabled', 'enabled': False}
+        
+        try:
+            prompt = f"""Suggest B-roll footage for this {video_type} video script:
+
+Script: {script}
+
+For each scene, suggest:
+- Type of B-roll footage needed
+- Keywords for stock footage search
+- Duration recommendation
+- Transition style
+
+Return structured B-roll suggestions."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a professional video editor specializing in B-roll selection."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=600,
+                temperature=0.7
+            )
+            
+            suggestions = response.choices[0].message.content.strip()
+            
+            return {
+                'success': True,
+                'broll_suggestions': suggestions,
+                'video_type': video_type,
+                'stock_sources': ['Pexels', 'Pixabay', 'Unsplash', 'Videvo', 'Coverr'],
+                'note': 'Use suggested keywords to search stock footage libraries'
+            }
+        except Exception as e:
+            logger.error(f"B-roll suggestion error: {str(e)}")
+            return {'error': str(e), 'success': False}
+    
+    def create_batch_videos(self, batch_data: List[Dict], template_id: str, platform: str) -> Dict[str, Any]:
+        """Batch video creation from CSV data (Improvement #5: Batch video creation)"""
+        if not self.enabled:
+            return {'error': 'Batch video creation not enabled', 'enabled': False}
+        
+        results = []
+        successful = 0
+        failed = 0
+        
+        for i, data in enumerate(batch_data):
+            topic = data.get('topic', '')
+            if not topic:
+                failed += 1
+                continue
+            
+            try:
+                # Generate script for each topic
+                result = self.generate_from_template(template_id, topic, platform)
+                
+                if result.get('success'):
+                    results.append({
+                        'index': i + 1,
+                        'topic': topic,
+                        'status': 'success',
+                        'script': result.get('script', '')[:200] + '...'  # Truncate for summary
+                    })
+                    successful += 1
+                else:
+                    results.append({
+                        'index': i + 1,
+                        'topic': topic,
+                        'status': 'failed',
+                        'error': result.get('error', 'Unknown error')
+                    })
+                    failed += 1
+            except Exception as e:
+                results.append({
+                    'index': i + 1,
+                    'topic': topic,
+                    'status': 'failed',
+                    'error': str(e)
+                })
+                failed += 1
+        
+        return {
+            'success': True,
+            'total_processed': len(batch_data),
+            'successful': successful,
+            'failed': failed,
+            'results': results,
+            'template_id': template_id,
+            'platform': platform
+        }
+    
+    def add_brand_watermark(self, video_specs: Dict, watermark_config: Dict) -> Dict[str, Any]:
+        """Add brand watermark/logo to video (Improvement #6: Brand kit integration)"""
+        position = watermark_config.get('position', 'bottom-right')
+        opacity = watermark_config.get('opacity', 0.8)
+        logo_path = watermark_config.get('logo_path', 'logo.png')
+        
+        # Position mappings for FFmpeg
+        positions = {
+            'top-left': '10:10',
+            'top-right': 'W-w-10:10',
+            'bottom-left': '10:H-h-10',
+            'bottom-right': 'W-w-10:H-h-10',
+            'center': '(W-w)/2:(H-h)/2'
+        }
+        
+        overlay_position = positions.get(position, positions['bottom-right'])
+        
+        ffmpeg_cmd = (
+            f"ffmpeg -i input.mp4 -i {logo_path} "
+            f"-filter_complex \"[1:v]format=rgba,colorchannelmixer=aa={opacity}[logo];"
+            f"[0:v][logo]overlay={overlay_position}\" "
+            f"-c:a copy output_branded.mp4"
+        )
+        
+        return {
+            'success': True,
+            'position': position,
+            'opacity': opacity,
+            'logo_path': logo_path,
+            'ffmpeg_command': ffmpeg_cmd,
+            'note': 'Watermark will be added to all frames'
+        }
+    
+    def generate_intro_outro(self, brand_name: str, style: str = 'modern') -> Dict[str, Any]:
+        """Generate intro/outro templates (Improvement #7: Viral hooks, intros, outros)"""
+        if not self.enabled:
+            return {'error': 'Intro/outro generation not enabled', 'enabled': False}
+        
+        intros = {
+            'modern': f"🎬 {brand_name} Presents",
+            'energetic': f"🚀 Welcome to {brand_name}!",
+            'professional': f"Hello and welcome to {brand_name}",
+            'casual': f"Hey there! {brand_name} here 👋",
+            'dramatic': f"Get ready... {brand_name} is about to blow your mind! 🤯"
+        }
+        
+        outros = {
+            'modern': f"Thanks for watching! Subscribe for more from {brand_name}",
+            'energetic': f"🔥 That's it! Hit that subscribe button for more {brand_name} content!",
+            'professional': f"Thank you for watching. Follow {brand_name} for more insights.",
+            'casual': f"See you next time! Don't forget to follow {brand_name} 😊",
+            'dramatic': f"Mind = Blown! 💥 Follow {brand_name} for more game-changers!"
+        }
+        
+        intro_text = intros.get(style, intros['modern'])
+        outro_text = outros.get(style, outros['modern'])
+        
+        return {
+            'success': True,
+            'brand_name': brand_name,
+            'style': style,
+            'intro': {
+                'text': intro_text,
+                'duration': 3,
+                'animation': 'fade-in'
+            },
+            'outro': {
+                'text': outro_text,
+                'duration': 5,
+                'animation': 'fade-out',
+                'cta': 'Subscribe/Follow'
+            },
+            'available_styles': list(intros.keys())
+        }
+    
+    def generate_text_overlay_sequence(self, key_points: List[str], style: str = 'bold') -> Dict[str, Any]:
+        """Generate animated text overlay sequence (Improvement #8: Timeline editor capabilities)"""
+        overlay_styles = {
+            'bold': {'font': 'Arial-Bold', 'size': 48, 'color': 'white', 'background': 'black'},
+            'minimal': {'font': 'Helvetica', 'size': 36, 'color': 'white', 'background': 'transparent'},
+            'colorful': {'font': 'Arial-Bold', 'size': 52, 'color': 'yellow', 'background': 'purple'},
+            'elegant': {'font': 'Georgia', 'size': 40, 'color': 'gold', 'background': 'navy'}
+        }
+        
+        selected_style = overlay_styles.get(style, overlay_styles['bold'])
+        
+        overlays = []
+        for i, point in enumerate(key_points):
+            overlays.append({
+                'index': i + 1,
+                'text': point,
+                'start_time': i * 3,
+                'duration': 3,
+                'style': selected_style,
+                'animation': 'fade-in-out',
+                'position': 'center'
+            })
+        
+        # Generate FFmpeg drawtext filter
+        drawtext_filters = []
+        for overlay in overlays:
+            filter_cmd = (
+                f"drawtext=text='{overlay['text']}':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:"
+                f"fontsize={selected_style['size']}:fontcolor={selected_style['color']}:"
+                f"x=(w-text_w)/2:y=(h-text_h)/2:"
+                f"enable='between(t,{overlay['start_time']},{overlay['start_time'] + overlay['duration']})'"
+            )
+            drawtext_filters.append(filter_cmd)
+        
+        return {
+            'success': True,
+            'overlay_count': len(overlays),
+            'style': style,
+            'overlays': overlays,
+            'ffmpeg_filter': ','.join(drawtext_filters),
+            'available_styles': list(overlay_styles.keys())
+        }
+    
+    def optimize_for_multiple_platforms(self, source_video_specs: Dict) -> Dict[str, Any]:
+        """Generate optimization specs for all platforms (Improvement #9: Multi-platform export)"""
+        optimizations = {}
+        
+        for platform, specs_dict in self.platform_specs.items():
+            platform_outputs = {}
+            for video_type, specs in specs_dict.items():
+                platform_outputs[video_type] = {
+                    'dimensions': f"{specs['width']}x{specs['height']}",
+                    'aspect_ratio': specs['aspect_ratio'],
+                    'duration_range': f"{specs['min_duration']}-{specs['max_duration']}s",
+                    'bitrate': self.HIGH_BITRATE if specs['width'] >= self.HIGH_RESOLUTION_THRESHOLD else self.STANDARD_BITRATE,
+                    'ffmpeg_command': self._generate_ffmpeg_command(specs, 'input.mp4')
+                }
+            optimizations[platform] = platform_outputs
+        
+        return {
+            'success': True,
+            'platforms_count': len(optimizations),
+            'optimizations': optimizations,
+            'note': 'Generate platform-specific versions from single source video'
+        }
+    
+    def generate_video_analytics_metadata(self, script: str, platform: str) -> Dict[str, Any]:
+        """Generate metadata for video analytics (Improvement #10: Analytics integration)"""
+        if not self.enabled:
+            return {'error': 'Analytics metadata generation not enabled', 'enabled': False}
+        
+        try:
+            # Extract key information
+            word_count = len(script.split())
+            scene_count = script.count('Scene')
+            
+            # Estimate engagement metrics
+            hook_present = any(hook in script.lower() for hook in ['you won\'t believe', 'secret', 'discover', 'amazing'])
+            cta_present = any(cta in script.lower() for cta in ['subscribe', 'follow', 'like', 'comment', 'share'])
+            
+            engagement_score = 50
+            if hook_present:
+                engagement_score += 20
+            if cta_present:
+                engagement_score += 15
+            if 100 <= word_count <= 300:
+                engagement_score += 10
+            if scene_count >= 3:
+                engagement_score += 5
+            
+            return {
+                'success': True,
+                'script_analysis': {
+                    'word_count': word_count,
+                    'scene_count': scene_count,
+                    'has_hook': hook_present,
+                    'has_cta': cta_present
+                },
+                'predicted_engagement_score': min(engagement_score, 100),
+                'platform': platform,
+                'recommendations': [
+                    'Add strong hook in first 3 seconds' if not hook_present else 'Strong hook detected ✓',
+                    'Include clear call-to-action' if not cta_present else 'CTA present ✓',
+                    'Optimal script length' if 100 <= word_count <= 300 else 'Consider adjusting script length'
+                ],
+                'metadata_tags': {
+                    'content_type': 'faceless_video',
+                    'script_quality': 'high' if engagement_score >= 70 else 'medium',
+                    'platform_optimized': True
+                }
+            }
+        except Exception as e:
+            logger.error(f"Analytics metadata generation error: {str(e)}")
+            return {'error': str(e), 'success': False}
+
+
 # Initialize AI services
 ai_content_generator = AIContentGenerator()
 intelligent_scheduler = IntelligentScheduler()
 image_enhancer = ImageEnhancer()
+ai_image_generator = AIImageGenerator()
 engagement_predictor = EngagementPredictor()
+viral_intelligence = ViralContentIntelligence()
+content_multiplier = ContentMultiplier()
+ai_video_generator = AIVideoGenerator()
 
 
 class PlatformAdapter:
@@ -1434,7 +3722,7 @@ def publish_to_platforms(post_id, platforms, content, media, credentials_dict, p
     if post_id in posts_db:
         posts_db[post_id]['status'] = 'published'
         posts_db[post_id]['results'] = results
-        posts_db[post_id]['published_at'] = datetime.utcnow().isoformat()
+        posts_db[post_id]['published_at'] = datetime.now(timezone.utc).isoformat()
         posts_db[post_id]['execution_time_seconds'] = round(execution_time, 2)
         posts_db[post_id]['parallel_execution'] = parallel
 
@@ -1446,7 +3734,7 @@ def health_check():
         'status': 'healthy',
         'service': 'MastaBlasta',
         'version': '1.0.0',
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.now(timezone.utc).isoformat()
     })
 
 
@@ -1502,7 +3790,7 @@ def add_account():
         'username': username,
         'credentials': credentials,
         'enabled': True,
-        'created_at': datetime.utcnow().isoformat()
+        'created_at': datetime.now(timezone.utc).isoformat()
     }
     
     accounts_db[account_id] = account_record
@@ -1565,7 +3853,7 @@ def update_account(account_id):
     if 'enabled' in data:
         account['enabled'] = data['enabled']
     
-    account['updated_at'] = datetime.utcnow().isoformat()
+    account['updated_at'] = datetime.now(timezone.utc).isoformat()
     
     return jsonify({
         'success': True,
@@ -2103,6 +4391,10 @@ def ai_status():
     """Get status of AI services"""
     return jsonify({
         'ai_enabled': AI_ENABLED,
+        # Legacy fields for backwards compatibility
+        'openai': AI_ENABLED,
+        'pillow': True,  # PIL/Pillow is always available
+        'sklearn': AI_ENABLED,
         'services': {
             'content_generation': {
                 'enabled': ai_content_generator.enabled,
@@ -2116,15 +4408,863 @@ def ai_status():
                 'enabled': image_enhancer.enabled,
                 'features': ['platform_optimization', 'quality_enhancement', 'alt_text_generation']
             },
+            'image_generation': {
+                'enabled': ai_image_generator.enabled,
+                'features': ['post_images', 'video_thumbnails', 'video_content_images', 'image_variations'],
+                'styles': list(ai_image_generator.IMAGE_STYLES.keys())
+            },
             'predictive_analytics': {
                 'enabled': engagement_predictor.enabled,
                 'trained': engagement_predictor.trained,
                 'features': ['performance_prediction', 'variation_comparison', 'model_training']
+            },
+            'viral_intelligence': {
+                'enabled': viral_intelligence.enabled,
+                'features': ['viral_hooks', 'virality_score', 'platform_best_practices', 'trending_analysis'],
+                'hook_categories': list(viral_intelligence.VIRAL_HOOKS.keys())
+            },
+            'content_multiplier': {
+                'enabled': content_multiplier.enabled,
+                'features': ['multi_platform_generation', 'content_variations', 'brand_voice_adaptation']
+            },
+            'video_generation': {
+                'enabled': ai_video_generator.enabled,
+                'features': ['script_generation', 'slideshow_creation', 'text_to_video_prompts', 'caption_generation', 'platform_optimization', 'template_library', 'ffmpeg_rendering'],
+                'templates': list(ai_video_generator.VIDEO_TEMPLATES.keys())
             }
         },
         'setup_required': not ai_content_generator.enabled and AI_ENABLED,
         'api_key_status': 'configured' if os.getenv('OPENAI_API_KEY') else 'not_configured'
     })
+
+
+@app.route('/api/viral/hooks', methods=['GET'])
+def viral_get_hooks():
+    """Get viral hooks library"""
+    category = request.args.get('category')
+    count = int(request.args.get('count', 5))
+    
+    result = viral_intelligence.get_viral_hooks(category, count)
+    
+    if not result.get('success'):
+        return jsonify(result), 404
+    
+    return jsonify(result)
+
+
+@app.route('/api/viral/predict-score', methods=['POST'])
+def viral_predict_score():
+    """Predict virality score for content"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    content = data.get('content', '')
+    platform = data.get('platform', 'instagram')
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    result = viral_intelligence.predict_virality_score(content, platform)
+    
+    return jsonify(result)
+
+
+@app.route('/api/viral/best-practices/<platform>', methods=['GET'])
+def viral_best_practices(platform):
+    """Get platform-specific viral best practices"""
+    result = viral_intelligence.get_platform_best_practices(platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 404
+    
+    return jsonify(result)
+
+
+@app.route('/api/content/multiply', methods=['POST'])
+def content_multiply():
+    """Multiply content across platforms"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    source_content = data.get('source_content', '')
+    source_type = data.get('source_type', 'text')
+    target_platforms = data.get('target_platforms', ['twitter', 'linkedin', 'instagram'])
+    brand_voice = data.get('brand_voice', 'professional')
+    
+    if not source_content:
+        return jsonify({'error': 'Source content is required'}), 400
+    
+    result = content_multiplier.multiply_content(source_content, source_type, target_platforms, brand_voice)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/content/variations', methods=['POST'])
+def content_variations():
+    """Generate content variations for A/B testing"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    content = data.get('content', '')
+    num_variations = data.get('num_variations', 3)
+    platform = data.get('platform', 'twitter')
+    
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+    
+    result = content_multiplier.generate_content_variations(content, num_variations, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-image', methods=['POST'])
+def ai_generate_image():
+    """Generate an AI image using DALL-E"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    prompt = data.get('prompt', '')
+    style = data.get('style', 'photorealistic')
+    size = data.get('size', '1024x1024')
+    platform = data.get('platform')
+    
+    if not prompt:
+        return jsonify({'error': 'Prompt is required'}), 400
+    
+    result = ai_image_generator.generate_image(prompt, style, size, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-post-image', methods=['POST'])
+def ai_generate_post_image():
+    """Generate an image optimized for social media post"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    post_content = data.get('content', '')
+    platform = data.get('platform', 'instagram')
+    style = data.get('style', 'modern')
+    include_text_space = data.get('include_text_space', True)
+    
+    if not post_content:
+        return jsonify({'error': 'Post content is required'}), 400
+    
+    result = ai_image_generator.generate_post_image(post_content, platform, style, include_text_space)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-video-thumbnail', methods=['POST'])
+def ai_generate_video_thumbnail():
+    """Generate a thumbnail image for video content"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_topic = data.get('topic', '')
+    video_type = data.get('video_type', 'product_showcase')
+    platform = data.get('platform', 'youtube')
+    style = data.get('style', 'cinematic')
+    
+    if not video_topic:
+        return jsonify({'error': 'Video topic is required'}), 400
+    
+    result = ai_image_generator.generate_video_thumbnail(video_topic, video_type, platform, style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-video-images', methods=['POST'])
+def ai_generate_video_images():
+    """Generate multiple images for video creation based on script"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_script = data.get('script', '')
+    num_images = data.get('num_images', 4)
+    style = data.get('style', 'cinematic')
+    platform = data.get('platform', 'instagram')
+    
+    if not video_script:
+        return jsonify({'error': 'Video script is required'}), 400
+    
+    result = ai_image_generator.generate_images_for_video(video_script, num_images, style, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/create-image-variations', methods=['POST'])
+def ai_create_image_variations():
+    """Create variations of an existing image"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    image_data = data.get('image_data', '')
+    num_variations = data.get('num_variations', 3)
+    
+    if not image_data:
+        return jsonify({'error': 'Image data is required'}), 400
+    
+    result = ai_image_generator.create_image_variations(image_data, num_variations)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-video-script', methods=['POST'])
+def ai_generate_video_script():
+    """Generate a video script optimized for platform and duration"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    topic = data.get('topic', '')
+    platform = data.get('platform', 'instagram')
+    duration = data.get('duration', 30)
+    style = data.get('style', 'engaging')
+    
+    if not topic:
+        return jsonify({'error': 'Topic is required'}), 400
+    
+    result = ai_video_generator.generate_video_script(topic, platform, duration, style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/create-slideshow', methods=['POST'])
+def ai_create_slideshow():
+    """Create a slideshow video from images"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    images = data.get('images', [])
+    duration_per_image = data.get('duration_per_image', 3.0)
+    platform = data.get('platform', 'instagram')
+    post_type = data.get('post_type', 'reel')
+    transition = data.get('transition', 'fade')
+    
+    if not images:
+        return jsonify({'error': 'At least one image is required'}), 400
+    
+    result = ai_video_generator.create_slideshow_video(
+        images, duration_per_image, platform, post_type, transition
+    )
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-video-prompt', methods=['POST'])
+def ai_generate_video_prompt():
+    """Generate text-to-video prompt for AI video generation tools"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    text = data.get('text', '')
+    platform = data.get('platform', 'instagram')
+    post_type = data.get('post_type', 'reel')
+    style = data.get('style', 'professional')
+    
+    if not text:
+        return jsonify({'error': 'Text is required'}), 400
+    
+    result = ai_video_generator.generate_text_to_video_prompt(text, platform, post_type, style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-video-captions', methods=['POST'])
+def ai_generate_video_captions():
+    """Generate optimized captions for video content"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_content = data.get('content', '')
+    platform = data.get('platform', 'instagram')
+    language = data.get('language', 'en')
+    
+    if not video_content:
+        return jsonify({'error': 'Video content is required'}), 400
+    
+    result = ai_video_generator.generate_video_captions(video_content, platform, language)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/optimize-video', methods=['POST'])
+def ai_optimize_video():
+    """Get optimization specifications for video based on platform"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_path = data.get('video_path', 'input.mp4')
+    platform = data.get('platform', 'instagram')
+    post_type = data.get('post_type', 'reel')
+    
+    result = ai_video_generator.optimize_video_for_platform(video_path, platform, post_type)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/video-specs/<platform>', methods=['GET'])
+def ai_video_specs(platform):
+    """Get all video specifications for a platform"""
+    result = ai_video_generator.get_platform_video_specs(platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 404
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/video-templates', methods=['GET'])
+def ai_video_templates():
+    """Get all available video templates"""
+    result = ai_video_generator.get_video_templates()
+    return jsonify(result)
+
+
+@app.route('/api/ai/video-templates/<template_id>', methods=['GET'])
+def ai_get_video_template(template_id):
+    """Get a specific video template"""
+    result = ai_video_generator.get_template(template_id)
+    
+    if not result.get('success'):
+        return jsonify(result), 404
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/generate-from-template', methods=['POST'])
+def ai_generate_from_template():
+    """Generate video script using a template"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    template_id = data.get('template_id', '')
+    topic = data.get('topic', '')
+    platform = data.get('platform', 'instagram')
+    
+    if not template_id:
+        return jsonify({'error': 'template_id is required'}), 400
+    
+    if not topic:
+        return jsonify({'error': 'topic is required'}), 400
+    
+    result = ai_video_generator.generate_from_template(template_id, topic, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/ai/render-slideshow', methods=['POST'])
+def ai_render_slideshow():
+    """Render slideshow video with FFmpeg (actual video file generation)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    images = data.get('images', [])
+    duration_per_image = data.get('duration_per_image', 3.0)
+    platform = data.get('platform', 'instagram')
+    post_type = data.get('post_type', 'reel')
+    transition = data.get('transition', 'fade')
+    output_path = data.get('output_path', '/tmp/output_video.mp4')
+    
+    if not images:
+        return jsonify({'error': 'At least one image is required'}), 400
+    
+    # Get platform specs
+    specs = ai_video_generator.platform_specs.get(platform, {}).get(post_type)
+    
+    if not specs:
+        return jsonify({
+            'error': f'Unknown platform/post type: {platform}/{post_type}',
+            'success': False
+        }), 400
+    
+    result = ai_video_generator.render_slideshow_with_ffmpeg(
+        images, duration_per_image, output_path, specs, transition
+    )
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'FFmpeg not installed' in result.get('error', '') else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/generate-subtitles', methods=['POST'])
+def video_generate_subtitles():
+    """Generate subtitle file from script (Faceless Video #1)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    duration = data.get('duration', 30)
+    output_format = data.get('format', 'srt')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_subtitle_file(script, duration, output_format)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/convert-aspect-ratio', methods=['POST'])
+def video_convert_aspect_ratio():
+    """Convert video aspect ratio (Faceless Video #2)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    input_specs = data.get('input_specs', {})
+    target_ratio = data.get('target_ratio', '16:9')
+    
+    result = ai_video_generator.convert_aspect_ratio(input_specs, target_ratio)
+    
+    if not result.get('success'):
+        return jsonify(result), 400
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/generate-voiceover-script', methods=['POST'])
+def video_generate_voiceover_script():
+    """Generate voiceover-ready script (Faceless Video #3)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    language = data.get('language', 'en')
+    voice_style = data.get('voice_style', 'professional')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_voiceover_script(script, language, voice_style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+# ===== AI VOICEOVER IMPROVEMENTS API ENDPOINTS (10 Features) =====
+
+@app.route('/api/voiceover/supported-languages', methods=['GET'])
+def voiceover_supported_languages():
+    """Get list of 60 supported languages (Voiceover Improvement #1)"""
+    result = ai_video_generator.get_supported_languages()
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/pronunciation-guide', methods=['POST'])
+def voiceover_pronunciation_guide():
+    """Generate pronunciation guide (Voiceover Improvement #2)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    language = data.get('language', 'en')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_pronunciation_guide(script, language)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/emotion-markers', methods=['POST'])
+def voiceover_emotion_markers():
+    """Add emotion and tone markers (Voiceover Improvement #3)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    video_type = data.get('video_type', 'general')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_emotion_markers(script, video_type)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/multi-voice-script', methods=['POST'])
+def voiceover_multi_voice_script():
+    """Generate multi-voice script (Voiceover Improvement #4)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    num_voices = data.get('num_voices', 2)
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    if num_voices < 2 or num_voices > 5:
+        return jsonify({'error': 'Number of voices must be between 2 and 5'}), 400
+    
+    result = ai_video_generator.generate_multi_voice_script(script, num_voices)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/breath-marks', methods=['POST'])
+def voiceover_breath_marks():
+    """Add breath marks and pacing (Voiceover Improvement #5)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    style = data.get('style', 'natural')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_breath_marks(script, style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/duration-estimate', methods=['POST'])
+def voiceover_duration_estimate():
+    """Estimate voiceover duration (Voiceover Improvement #6)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    language = data.get('language', 'en')
+    speech_rate = data.get('speech_rate', 'normal')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.estimate_voiceover_duration(script, language, speech_rate)
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/accent-guidance', methods=['POST'])
+def voiceover_accent_guidance():
+    """Generate accent guidance (Voiceover Improvement #7)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    target_accent = data.get('target_accent', 'neutral')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_accent_guidance(script, target_accent)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/tts-config', methods=['POST'])
+def voiceover_tts_config():
+    """Generate TTS provider config (Voiceover Improvement #8)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    language = data.get('language', 'en')
+    provider = data.get('provider', 'elevenlabs')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_tts_config(script, language, provider)
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/music-sync', methods=['POST'])
+def voiceover_music_sync():
+    """Generate background music sync (Voiceover Improvement #9)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    music_style = data.get('music_style', 'corporate')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_background_music_sync(script, music_style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/voiceover/quality-check', methods=['POST'])
+def voiceover_quality_check():
+    """Analyze script quality (Voiceover Improvement #10)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    language = data.get('language', 'en')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_voiceover_quality_check(script, language)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/broll-suggestions', methods=['POST'])
+def video_broll_suggestions():
+    """Generate B-roll footage suggestions (Faceless Video #4)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    video_type = data.get('video_type', 'general')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_broll_suggestions(script, video_type)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/batch-create', methods=['POST'])
+def video_batch_create():
+    """Batch video creation from data (Faceless Video #5)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    batch_data = data.get('batch_data', [])
+    template_id = data.get('template_id', 'product_showcase')
+    platform = data.get('platform', 'instagram')
+    
+    if not batch_data:
+        return jsonify({'error': 'Batch data is required'}), 400
+    
+    result = ai_video_generator.create_batch_videos(batch_data, template_id, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/add-watermark', methods=['POST'])
+def video_add_watermark():
+    """Add brand watermark to video (Faceless Video #6)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    video_specs = data.get('video_specs', {})
+    watermark_config = data.get('watermark_config', {})
+    
+    result = ai_video_generator.add_brand_watermark(video_specs, watermark_config)
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/generate-intro-outro', methods=['POST'])
+def video_generate_intro_outro():
+    """Generate intro/outro templates (Faceless Video #7)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    brand_name = data.get('brand_name', '')
+    style = data.get('style', 'modern')
+    
+    if not brand_name:
+        return jsonify({'error': 'Brand name is required'}), 400
+    
+    result = ai_video_generator.generate_intro_outro(brand_name, style)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/text-overlays', methods=['POST'])
+def video_text_overlays():
+    """Generate text overlay sequence (Faceless Video #8)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    key_points = data.get('key_points', [])
+    style = data.get('style', 'bold')
+    
+    if not key_points:
+        return jsonify({'error': 'Key points are required'}), 400
+    
+    result = ai_video_generator.generate_text_overlay_sequence(key_points, style)
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/multi-platform-export', methods=['POST'])
+def video_multi_platform_export():
+    """Generate multi-platform export specs (Faceless Video #9)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    source_video_specs = data.get('source_video_specs', {})
+    
+    result = ai_video_generator.optimize_for_multiple_platforms(source_video_specs)
+    
+    return jsonify(result)
+
+
+@app.route('/api/video/analytics-metadata', methods=['POST'])
+def video_analytics_metadata():
+    """Generate analytics metadata for video (Faceless Video #10)"""
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+    
+    script = data.get('script', '')
+    platform = data.get('platform', 'youtube')
+    
+    if not script:
+        return jsonify({'error': 'Script is required'}), 400
+    
+    result = ai_video_generator.generate_video_analytics_metadata(script, platform)
+    
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+    
+    return jsonify(result)
 
 
 @app.route('/api/oauth/init/<platform>', methods=['GET'])
@@ -2143,7 +5283,7 @@ def oauth_init(platform):
         state_token = str(uuid.uuid4())
         oauth_states[state_token] = {
             'platform': platform,
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': datetime.now(timezone.utc).isoformat()
         }
         
         # Map platform names to OAuth classes and check if credentials are configured
@@ -2347,7 +5487,7 @@ def oauth_connect():
             'oauth': True
         },
         'enabled': True,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'auth_method': 'oauth'
     }
     
@@ -2367,6 +5507,201 @@ def oauth_connect():
         }
     }), 201
 
+
+@app.route('/api/connection/health/<account_id>', methods=['GET'])
+def check_connection_health(account_id):
+    """Check the health status of a platform connection"""
+    try:
+        from oauth import ConnectionHealthMonitor
+        
+        account = accounts_db.get(account_id)
+        if not account:
+            return jsonify({'error': 'Account not found'}), 404
+        
+        platform = account.get('platform', '')
+        credentials = account.get('credentials', {})
+        access_token = credentials.get('access_token', '')
+        
+        # Get token expiration if available
+        expires_at = account.get('token_expires_at')
+        if expires_at and isinstance(expires_at, str):
+            try:
+                # Handle both with and without timezone info
+                if expires_at.endswith('Z'):
+                    expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                else:
+                    expires_at = datetime.fromisoformat(expires_at)
+            except ValueError:
+                expires_at = None  # If parsing fails, set to None
+        
+        status = ConnectionHealthMonitor.check_connection_status(platform, access_token, expires_at)
+        
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/reconnect-instructions/<platform>', methods=['GET'])
+def get_reconnection_instructions(platform):
+    """Get instructions for reconnecting a platform"""
+    try:
+        from oauth import ConnectionHealthMonitor
+        
+        instructions = ConnectionHealthMonitor.get_reconnection_instructions(platform)
+        return jsonify(instructions)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/validate/<account_id>', methods=['POST'])
+def validate_account(account_id):
+    """Validate account setup and permissions"""
+    try:
+        from oauth import PlatformAccountValidator
+        
+        account = accounts_db.get(account_id)
+        if not account:
+            return jsonify({'error': 'Account not found'}), 404
+        
+        platform = account.get('platform', '')
+        credentials = account.get('credentials', {})
+        access_token = credentials.get('access_token', '')
+        
+        validation = PlatformAccountValidator.validate_account_setup(platform, access_token)
+        return jsonify(validation)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/check-permissions/<account_id>', methods=['GET'])
+def check_permissions(account_id):
+    """Check what permissions are granted for an account"""
+    try:
+        from oauth import PlatformAccountValidator
+        
+        account = accounts_db.get(account_id)
+        if not account:
+            return jsonify({'error': 'Account not found'}), 404
+        
+        platform = account.get('platform', '')
+        credentials = account.get('credentials', {})
+        access_token = credentials.get('access_token', '')
+        
+        permissions = PlatformAccountValidator.check_permissions(platform, access_token)
+        return jsonify(permissions)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/quick-connect/options', methods=['GET'])
+def get_quick_connect_options():
+    """Get all available quick connect platform options"""
+    try:
+        from oauth import QuickConnectWizard
+        
+        options = QuickConnectWizard.get_quick_connect_options()
+        return jsonify(options)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/quick-connect/<platform>', methods=['POST'])
+def quick_connect_platform(platform):
+    """Start quick connect flow for a platform"""
+    try:
+        from oauth import QuickConnectWizard
+        import secrets
+        
+        user_id = request.json.get('user_id', 'default_user')
+        state = secrets.token_urlsafe(32)
+        
+        wizard = QuickConnectWizard()
+        connection_data = wizard.generate_connection_url(platform, state, user_id)
+        
+        return jsonify(connection_data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/troubleshoot', methods=['POST'])
+def troubleshoot_connection():
+    """Diagnose connection issues and provide solutions"""
+    try:
+        from oauth import ConnectionTroubleshooter
+        
+        data = request.get_json()
+        platform = data.get('platform', '')
+        error_code = data.get('error_code')
+        error_message = data.get('error_message')
+        
+        if not platform:
+            return jsonify({'error': 'Platform is required'}), 400
+        
+        diagnosis = ConnectionTroubleshooter.diagnose_connection_issue(platform, error_code, error_message)
+        return jsonify(diagnosis)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/test-prerequisites/<platform>', methods=['GET'])
+def test_connection_prerequisites(platform):
+    """Test if all prerequisites are met for connecting a platform"""
+    try:
+        from oauth import ConnectionTroubleshooter
+        
+        test_results = ConnectionTroubleshooter.test_connection_prerequisites(platform)
+        return jsonify(test_results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/bulk-connect/prepare', methods=['POST'])
+def prepare_bulk_connection():
+    """Prepare to connect multiple platforms in sequence"""
+    try:
+        from oauth import BulkConnectionManager
+        
+        data = request.get_json()
+        platforms = data.get('platforms', [])
+        user_id = data.get('user_id', 'default_user')
+        
+        if not platforms:
+            return jsonify({'error': 'Platforms list is required'}), 400
+        
+        result = BulkConnectionManager.prepare_bulk_connection(platforms, user_id)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/connection/auto-refresh/<account_id>', methods=['POST'])
+def auto_refresh_token(account_id):
+    """Automatically refresh token if needed"""
+    try:
+        from oauth import AutoReconnectionService
+        
+        account = accounts_db.get(account_id)
+        if not account:
+            return jsonify({'error': 'Account not found'}), 404
+        
+        platform = account.get('platform', '')
+        
+        account_data = {
+            'token_expires_at': account.get('token_expires_at'),
+            'refresh_token': account.get('refresh_token')
+        }
+        
+        result = AutoReconnectionService.auto_refresh_if_needed(platform, account_data)
+        
+        # If token was refreshed, update the account
+        if result['refreshed'] and result.get('expires_at'):
+            account['credentials']['access_token'] = result['new_token']
+            account['token_expires_at'] = result['expires_at'].isoformat()
+            accounts_db[account_id] = account
+        
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/post', methods=['POST'])
@@ -2439,7 +5774,7 @@ def create_post():
         'post_type': post_type,
         'post_options': post_options,
         'status': 'publishing',
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'scheduled_for': None
     }
     
@@ -2543,7 +5878,7 @@ def schedule_post():
         'post_type': post_type,
         'post_options': post_options,
         'status': 'scheduled',
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'scheduled_for': scheduled_time
     }
     
@@ -2711,7 +6046,7 @@ def shorten_url():
         'utm_source': utm_source,
         'utm_medium': utm_medium,
         'utm_campaign': utm_campaign,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'clicks': 0
     }
     
@@ -2742,7 +6077,7 @@ def redirect_short_url(short_code):
     
     # Track click
     click_data = {
-        'timestamp': datetime.utcnow().isoformat(),
+        'timestamp': datetime.now(timezone.utc).isoformat(),
         'user_agent': request.headers.get('User-Agent', ''),
         'referer': request.headers.get('Referer', ''),
         'ip': request.remote_addr
@@ -2890,7 +6225,7 @@ def create_social_monitor():
         'keywords': keywords,
         'platforms': platforms,
         'active': True,
-        'created_at': datetime.utcnow().isoformat()
+        'created_at': datetime.now(timezone.utc).isoformat()
     }
     
     # Initialize results storage
@@ -2938,7 +6273,7 @@ def _simulate_monitor_scan(monitor_id):
                         'shares': random.randint(0, 100),
                         'comments': random.randint(0, 50)
                     },
-                    'timestamp': (datetime.utcnow() - timedelta(hours=random.randint(0, 48))).isoformat(),
+                    'timestamp': (datetime.now(timezone.utc) - timedelta(hours=random.randint(0, 48))).isoformat(),
                     'read': False
                 }
                 monitor_results[monitor_id].append(result)
@@ -2965,7 +6300,7 @@ def update_social_monitor(monitor_id):
     if 'active' in data:
         monitor['active'] = data['active']
     
-    monitor['updated_at'] = datetime.utcnow().isoformat()
+    monitor['updated_at'] = datetime.now(timezone.utc).isoformat()
     
     return jsonify({
         'success': True,
@@ -3136,7 +6471,7 @@ def _simulate_post_analytics(post_id):
             },
             'hourly_data': hourly_data,
             'demographics': demographics,
-            'last_updated': datetime.utcnow().isoformat()
+            'last_updated': datetime.now(timezone.utc).isoformat()
         }
     
     return post_analytics[post_id]
@@ -3392,7 +6727,7 @@ def execute_bulk_import():
                 # Schedule the post
                 if not scheduled_time:
                     # Auto-schedule at intervals
-                    scheduled_dt = datetime.utcnow() + timedelta(minutes=len(created_posts) * 5)
+                    scheduled_dt = datetime.now(timezone.utc) + timedelta(minutes=len(created_posts) * 5)
                     scheduled_time = scheduled_dt.isoformat() + 'Z'
                 
                 scheduled_dt = datetime.fromisoformat(scheduled_time.replace('Z', '+00:00'))
@@ -3406,7 +6741,7 @@ def execute_bulk_import():
                     'post_type': post_type,
                     'post_options': post_options,
                     'status': 'scheduled',
-                    'created_at': datetime.utcnow().isoformat(),
+                    'created_at': datetime.now(timezone.utc).isoformat(),
                     'scheduled_for': scheduled_time,
                     'bulk_import_id': import_id
                 }
@@ -3432,7 +6767,7 @@ def execute_bulk_import():
                     'post_type': post_type,
                     'post_options': post_options,
                     'status': 'publishing',
-                    'created_at': datetime.utcnow().isoformat(),
+                    'created_at': datetime.now(timezone.utc).isoformat(),
                     'bulk_import_id': import_id
                 }
                 
@@ -3457,7 +6792,7 @@ def execute_bulk_import():
     # Store import job info
     bulk_imports[import_id] = {
         'id': import_id,
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'total_rows': len(rows),
         'successful': len(created_posts),
         'failed': len(failed_posts),
@@ -3653,7 +6988,7 @@ def templates():
             'content': content,
             'platforms': data.get('platforms', []),
             'variables': variables,
-            'createdAt': datetime.utcnow().isoformat() + 'Z'
+            'createdAt': datetime.now(timezone.utc).isoformat() + 'Z'
         }
         
         templates_db[template_id] = template
@@ -3700,7 +7035,7 @@ def create_post_version():
         'platforms': data['platforms'],
         'hashtags': data.get('hashtags', []),
         'cta': data.get('cta', ''),
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now(timezone.utc).isoformat(),
         'status': 'draft'  # draft, testing, winner, archived
     }
     
@@ -3757,7 +7092,7 @@ def publish_version(version_id):
     
     # Update status
     version['status'] = 'testing'
-    version['published_at'] = datetime.utcnow().isoformat()
+    version['published_at'] = datetime.now(timezone.utc).isoformat()
     
     # Simulate initial analytics (in production, integrate with platform APIs)
     import random
@@ -3876,7 +7211,7 @@ def response_templates_list():
             'sentiment': data.get('sentiment', 'neutral'),  # positive, neutral, negative, urgent
             'keywords': data.get('keywords', []),
             'auto_reply': data.get('auto_reply', False),
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': datetime.now(timezone.utc).isoformat()
         }
         
         response_templates[template_id] = template
@@ -3905,7 +7240,7 @@ def response_template_detail(template_id):
         template['sentiment'] = data.get('sentiment', template['sentiment'])
         template['keywords'] = data.get('keywords', template['keywords'])
         template['auto_reply'] = data.get('auto_reply', template['auto_reply'])
-        template['updated_at'] = datetime.utcnow().isoformat()
+        template['updated_at'] = datetime.now(timezone.utc).isoformat()
         
         logger.info(f"Updated response template {template_id}")
         return jsonify(template)
@@ -4003,7 +7338,7 @@ def chatbot_interactions_list():
             'sentiment': data.get('sentiment', 'neutral'),
             'auto_replied': data.get('auto_replied', False),
             'template_used': data.get('template_used'),
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'user': data.get('user', 'Unknown')
         }
         

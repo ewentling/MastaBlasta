@@ -146,7 +146,7 @@ class DatabaseManager:
                 return True
         return False
     
-    def _post_to_dict(self, post: Post) -> Dict:
+    def _post_to_dict(self, post: 'Post') -> Dict:
         """Convert Post model to dictionary"""
         return {
             'id': post.id,
@@ -645,7 +645,7 @@ class SearchManager:
                 'offset': offset
             }
     
-    def _post_to_dict(self, post: Post) -> Dict:
+    def _post_to_dict(self, post: 'Post') -> Dict:
         """Convert post to dictionary"""
         return {
             'id': post.id,

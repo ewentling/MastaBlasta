@@ -8,7 +8,7 @@ import hashlib
 import hmac
 import re
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import request, jsonify, g
 from typing import Dict, Any, Optional
@@ -69,7 +69,7 @@ class AccountSecurity:
     @staticmethod
     def record_login_attempt(email: str, success: bool):
         """Record login attempt"""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         if not success:
             # Record failed attempt
@@ -104,7 +104,7 @@ class AccountSecurity:
     def is_account_locked(email: str) -> bool:
         """Check if account is locked"""
         if email in account_lockouts:
-            if datetime.utcnow() < account_lockouts[email]:
+            if datetime.now(timezone.utc) < account_lockouts[email]:
                 return True
             else:
                 # Lockout expired, remove it
@@ -115,7 +115,7 @@ class AccountSecurity:
     def get_lockout_remaining(email: str) -> Optional[int]:
         """Get remaining lockout time in seconds"""
         if email in account_lockouts:
-            remaining = (account_lockouts[email] - datetime.utcnow()).total_seconds()
+            remaining = (account_lockouts[email] - datetime.now(timezone.utc)).total_seconds()
             return max(0, int(remaining))
         return None
 
@@ -292,7 +292,7 @@ class SecurityLogger:
     def log_event(event_type: str, user_id: str = None, details: Dict[str, Any] = None):
         """Log security event"""
         log_data = {
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'event_type': event_type,
             'user_id': user_id,
             'ip_address': request.remote_addr if request else None,

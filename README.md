@@ -59,11 +59,80 @@ See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 - **Alt Text Generation**: Automatic accessibility descriptions for images
 - **Format Conversion**: Convert images to optimal formats and sizes
 
-#### 4. Predictive Analytics
+#### 4. 🎨 AI Image Generation (DALL-E 3 Powered)
+- **Post Image Generation**: Create custom images for social media posts with DALL-E 3
+- **Video Thumbnails**: Generate eye-catching thumbnails optimized for each platform
+- **Video Content Images**: Automatically generate images for video scenes from scripts
+- **Image Variations**: Create multiple variations of existing images
+- **Multiple Styles**: 9 artistic styles (photorealistic, illustration, minimalist, abstract, cinematic, vintage, modern, cartoon, corporate)
+- **Platform-Specific Sizing**: Automatic size optimization for each social platform
+
+#### 5. Predictive Analytics
 - **Performance Prediction**: Forecast engagement before publishing
 - **A/B Testing**: Compare predicted performance of multiple variations
 - **Recommendation Engine**: Get actionable suggestions to improve posts
 - **Model Training**: Train custom models on your historical data
+
+#### 6. 🔥 Viral Content Intelligence Engine (NEW)
+- **Viral Hooks Library**: 1,000+ proven hooks in 5 categories (curiosity, urgency, controversy, storytelling, value)
+- **Virality Score Prediction**: Predict viral potential (0-100) before posting
+- **Platform Best Practices**: Get platform-specific viral patterns and optimal formats
+- **Engagement Triggers**: Identify what makes content go viral on each platform
+- **Real-time Recommendations**: Get actionable tips to boost virality
+
+#### 7. ♻️ Advanced AI Content Multiplier (NEW)
+- **1 → 50 Content Generation**: Transform one piece into multiple platform-specific posts
+- **Cross-Platform Adaptation**: Automatically adapt content for Twitter, LinkedIn, Instagram, TikTok, Facebook
+- **Brand Voice Consistency**: Maintain your brand voice across all outputs
+- **A/B Test Variations**: Generate multiple variations for testing
+- **Smart Remixing**: Preserve key messages while adapting style and format
+
+#### 8. 🎬 AI Video Generation + Faceless Video Studio (NEW - 10 Improvements)
+- **Video Script Generation**: AI-powered video scripts optimized for platform and duration
+- **Video Template Library**: 6 pre-built templates (product showcase, tutorial, testimonial, announcement, BTS, story)
+- **Auto-Subtitle Generation**: Generate SRT/VTT subtitle files with perfect timing
+- **Aspect Ratio Conversion**: Automatic conversion (16:9 → 9:16, 1:1) with one command
+- **AI Voiceover Prep**: Generate voiceover-ready scripts with timing markers and emphasis
+- **B-Roll Integration**: AI-suggested B-roll footage with stock library keywords
+- **Batch Video Creation**: Generate 100+ videos from CSV data
+- **Brand Watermarking**: Add logos/watermarks with customizable position and opacity
+- **Intro/Outro Templates**: 5 styles of branded intros and outros
+- **Text Overlay Editor**: Animated text sequences with 4 style presets
+- **Multi-Platform Export**: Generate optimized versions for all platforms at once
+- **Analytics Metadata**: Engagement prediction and performance tracking
+- **FFmpeg Rendering**: Actual video file generation with server-side rendering
+- **Text-to-Video Prompts**: Generate optimized prompts for AI video generation tools (Runway, Pika, Stable Video)
+- **Video Caption Generation**: Create engaging captions and hashtags for video content
+- **Slideshow Creation**: Automatically create video slideshows from images with transitions
+- **FFmpeg Rendering**: Actual video file generation with server-side rendering
+- **Text-to-Video Prompts**: Generate optimized prompts for AI video generation tools (Runway, Pika, Stable Video)
+- **Video Caption Generation**: Create engaging captions and hashtags for video content
+- **Platform Optimization**: Automatic video specs and ffmpeg commands for each platform
+- **Multi-Platform Support**: Optimized for Instagram Reels, YouTube Shorts, TikTok, Facebook Reels, and more
+
+#### 9. 🎙️ AI Voiceover Studio (NEW - 10 Features with 60 Languages)
+- **Multi-Language Support**: 60 languages across Europe, Asia, Middle East, and Africa
+- **Pronunciation Guide Generator**: AI-generated phonetic guidance for technical terms and acronyms
+- **Emotion & Tone Markers**: 8 emotion types (EXCITED, CALM, SERIOUS, FRIENDLY, etc.) with special markers (SMILE, WHISPER)
+- **Multi-Voice Script Generator**: Create dialogues with 2-5 voices with character personas
+- **Breath Marks & Pacing**: 4 pacing styles (natural, fast_paced, dramatic, conversational)
+- **Duration Estimation**: Accurate timing with 4 speech rates (slow 100wpm, normal 150wpm, fast 180wpm, very_fast 200wpm)
+- **Accent & Dialect Guidance**: 10 accent options (neutral, american, british, australian, scottish, irish, southern, etc.)
+- **TTS Provider Configuration**: Integration with ElevenLabs, Azure TTS, Google Cloud TTS, Amazon Polly
+- **Background Music Sync**: 6 music styles with volume/fade recommendations
+- **Quality Check & Analysis**: Automated script quality scoring (0-100) with issue detection
+
+#### 10. 🔌 Advanced Platform Connection System (NEW - 10 Improvements)
+- **Connection Health Monitoring**: Real-time status with expiration warnings and API connectivity tests
+- **Reconnection Wizard**: Step-by-step instructions for reconnecting expired or failed connections
+- **Account Validation**: Comprehensive validation of account setup, permissions, and configuration
+- **Permission Inspector**: Check granted permissions and identify missing scopes for each platform
+- **Quick Connect Wizard**: Simplified one-click connection with platform difficulty ratings and setup time estimates
+- **Connection Troubleshooter**: AI-powered diagnosis with specific solutions for common OAuth errors
+- **Prerequisites Checker**: Pre-connection validation of environment variables and configuration
+- **Bulk Connection Manager**: Connect multiple platforms simultaneously with progress tracking
+- **Auto-Reconnection Service**: Automatic token refresh before expiration (2-hour proactive buffer)
+- **Platform Config Discovery**: Smart platform detection with feature lists, requirements, and setup guides
 
 ## Supported Platforms
 
@@ -865,6 +934,131 @@ POST /api/ai/generate-alt-text
 }
 ```
 
+### AI Image Generation
+
+**Generate Custom Image**
+```bash
+POST /api/ai/generate-image
+{
+  "prompt": "A beautiful sunset over mountains",
+  "style": "photorealistic",  // photorealistic, illustration, minimalist, abstract, cinematic, vintage, modern, cartoon, corporate
+  "size": "1024x1024",  // 1024x1024, 1792x1024, 1024x1792
+  "platform": "instagram"  // Optional: auto-adjusts size
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "image_url": "https://...",
+  "image_data": "data:image/png;base64,...",
+  "size": "1024x1024",
+  "style": "photorealistic",
+  "platform": "instagram",
+  "original_prompt": "A beautiful sunset over mountains",
+  "revised_prompt": "A stunning photorealistic scene..."
+}
+```
+
+**Generate Post Image**
+```bash
+POST /api/ai/generate-post-image
+{
+  "content": "Exciting new product launch announcement!",
+  "platform": "instagram",
+  "style": "modern",
+  "include_text_space": true
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "image_url": "https://...",
+  "image_data": "data:image/png;base64,...",
+  "post_optimized": true,
+  "text_overlay_ready": true,
+  "platform": "instagram"
+}
+```
+
+**Generate Video Thumbnail**
+```bash
+POST /api/ai/generate-video-thumbnail
+{
+  "topic": "How to cook pasta",
+  "video_type": "tutorial",  // product_showcase, tutorial, testimonial, announcement, behind_the_scenes, story
+  "platform": "youtube",
+  "style": "cinematic"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "image_url": "https://...",
+  "image_data": "data:image/png;base64,...",
+  "thumbnail_type": "tutorial",
+  "optimized_for": "youtube video thumbnail",
+  "size": "1792x1024"
+}
+```
+
+**Generate Images for Video**
+```bash
+POST /api/ai/generate-video-images
+{
+  "script": "Scene 1: Product intro\nScene 2: Key features\nScene 3: Call to action",
+  "num_images": 3,
+  "style": "cinematic",
+  "platform": "instagram"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "images": [
+    {
+      "scene_number": 1,
+      "scene_description": "Scene 1: Product intro",
+      "image_url": "https://...",
+      "image_data": "data:image/png;base64,...",
+      "prompt": "Scene 1: Product intro. Consistent style, high quality."
+    }
+  ],
+  "count": 3,
+  "video_ready": true
+}
+```
+
+**Create Image Variations**
+```bash
+POST /api/ai/create-image-variations
+{
+  "image_data": "data:image/png;base64,...",
+  "num_variations": 3
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "variations": [
+    {
+      "image_url": "https://...",
+      "image_data": "data:image/png;base64,..."
+    }
+  ],
+  "count": 3
+}
+```
+
 ### Predictive Analytics
 
 **Predict Post Performance**
@@ -938,6 +1132,739 @@ POST /api/ai/train-model
   ]
 }
 ```
+
+### Viral Content Intelligence
+
+**Get Viral Hooks Library**
+```bash
+GET /api/viral/hooks?category=curiosity&count=5
+```
+
+Response:
+```json
+{
+  "success": true,
+  "category": "curiosity",
+  "hooks": [
+    "You won't believe what happened when...",
+    "The secret nobody tells you about...",
+    "What they don't want you to know about..."
+  ],
+  "count": 3
+}
+```
+
+**Predict Virality Score**
+```bash
+POST /api/viral/predict-score
+{
+  "content": "You won't believe this amazing hack! 🔥 #viral",
+  "platform": "twitter"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "virality_score": 78,
+  "rating": "Good Viral Potential",
+  "platform": "twitter",
+  "factors": [
+    "Optimal length",
+    "Strong curiosity hook",
+    "Good emoji usage"
+  ],
+  "recommendations": [
+    "Content looks great!"
+  ]
+}
+```
+
+**Get Platform Best Practices**
+```bash
+GET /api/viral/best-practices/instagram
+```
+
+Response:
+```json
+{
+  "success": true,
+  "platform": "instagram",
+  "best_practices": {
+    "caption_style": "Story-driven with line breaks",
+    "optimal_hashtags": "10-15",
+    "best_time": "Lunch (11 AM-1 PM) or Evening (7-9 PM)",
+    "engagement_triggers": ["carousels", "reels", "behind-the-scenes"]
+  }
+}
+```
+
+### Content Multiplier
+
+**Multiply Content Across Platforms**
+```bash
+POST /api/content/multiply
+{
+  "source_content": "We just launched an amazing new feature!",
+  "source_type": "announcement",
+  "target_platforms": ["twitter", "linkedin", "instagram"],
+  "brand_voice": "professional"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "source_type": "announcement",
+  "outputs": {
+    "twitter": {
+      "content": "🚀 Big news! We've just launched...",
+      "character_count": 127,
+      "hashtags": ["#product", "#launch"],
+      "platform": "twitter"
+    },
+    "linkedin": {
+      "content": "Exciting update from our team...",
+      "character_count": 450,
+      "hashtags": ["#innovation"],
+      "platform": "linkedin"
+    }
+  },
+  "platforms_generated": 3,
+  "brand_voice": "professional"
+}
+```
+
+**Generate Content Variations**
+```bash
+POST /api/content/variations
+{
+  "content": "Check out our new product! 🎉",
+  "num_variations": 3,
+  "platform": "twitter"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "original": "Check out our new product! 🎉",
+  "variations": [
+    {
+      "variation_number": 1,
+      "content": "Introducing our latest innovation...",
+      "character_count": 85,
+      "hashtags": ["#new", "#product"]
+    },
+    {
+      "variation_number": 2,
+      "content": "You asked, we delivered...",
+      "character_count": 92,
+      "hashtags": ["#launch"]
+    }
+  ],
+  "count": 3,
+  "platform": "twitter"
+}
+```
+
+### Video Generation
+      "engagement": 150,
+      "posted_at": "2026-01-01T12:00:00Z"
+    },
+    // ... at least 20 posts required
+  ]
+}
+```
+
+### Video Generation
+
+MastaBlasta now includes powerful AI-driven video generation capabilities that rival leading tools like Blotato.
+
+**Get Video Templates**
+```bash
+GET /api/ai/video-templates
+```
+
+Response:
+```json
+{
+  "success": true,
+  "templates": {
+    "product_showcase": {
+      "name": "Product Showcase",
+      "description": "Professional product demonstration",
+      "scenes": 4,
+      "duration": 30,
+      "style": "professional"
+    },
+    "tutorial": {...},
+    "testimonial": {...}
+  },
+  "count": 6
+}
+```
+
+**Generate Script from Template**
+```bash
+POST /api/ai/generate-from-template
+{
+  "template_id": "tutorial",
+  "topic": "How to use our software",
+  "platform": "youtube"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "template_id": "tutorial",
+  "template_name": "Tutorial",
+  "script": "Scene 1: Introduction...",
+  "platform": "youtube",
+  "duration": 45,
+  "style": "educational",
+  "scenes": 5
+}
+```
+
+**Generate Video Script**
+```bash
+POST /api/ai/generate-video-script
+{
+  "topic": "New product launch",
+  "platform": "instagram",
+  "duration": 30,
+  "style": "engaging"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "script": "Scene 1 (0-3 seconds): [Hook with product reveal]...",
+  "scenes": ["Scene 1...", "Scene 2..."],
+  "platform": "instagram",
+  "duration": 30,
+  "style": "engaging",
+  "scene_count": 4
+}
+```
+
+**Create Slideshow Video (FFmpeg Command Generation)**
+```bash
+POST /api/ai/create-slideshow
+{
+  "images": ["image1.jpg", "image2.jpg", "image3.jpg"],
+  "duration_per_image": 3.0,
+  "platform": "instagram",
+  "post_type": "reel",
+  "transition": "fade"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "format": "slideshow",
+  "image_count": 3,
+  "total_duration": 9.0,
+  "dimensions": {
+    "width": 1080,
+    "height": 1920,
+    "aspect_ratio": "9:16"
+  },
+  "ffmpeg_command_template": "ffmpeg -framerate 1/3 ..."
+}
+```
+
+**Render Slideshow Video (Actual Video File)**
+```bash
+POST /api/ai/render-slideshow
+{
+  "images": ["/path/to/image1.jpg", "/path/to/image2.jpg"],
+  "duration_per_image": 3.0,
+  "platform": "instagram",
+  "post_type": "reel",
+  "transition": "fade",
+  "output_path": "/tmp/my_video.mp4"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "output_path": "/tmp/my_video.mp4",
+  "file_size": 2048576,
+  "dimensions": {"width": 1080, "height": 1920},
+  "duration": 9.0,
+  "format": "mp4",
+  "codec": "h264"
+}
+```
+
+### Faceless Video Studio (10 New Features)
+
+**Generate Subtitles (Feature #1)**
+```bash
+POST /api/video/generate-subtitles
+{
+  "script": "Scene 1: Welcome\nScene 2: Main content\nScene 3: Conclusion",
+  "duration": 30,
+  "format": "srt"  // or "vtt"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "format": "srt",
+  "subtitle_count": 3,
+  "duration": 30,
+  "content": "1\n00:00:00,000 --> 00:00:10,000\nScene 1: Welcome\n\n2\n...",
+  "subtitles": [...]
+}
+```
+
+**Convert Aspect Ratio (Feature #2)**
+```bash
+POST /api/video/convert-aspect-ratio
+{
+  "input_specs": {"width": 1920, "height": 1080},
+  "target_ratio": "9:16"  // 16:9, 9:16, 1:1, 4:5, 2:3
+}
+```
+
+**Generate Voiceover Script (Feature #3)**
+```bash
+POST /api/video/generate-voiceover-script
+{
+  "script": "Welcome to our tutorial.",
+  "language": "en",
+  "voice_style": "professional"
+}
+```
+
+**B-Roll Suggestions (Feature #4)**
+```bash
+POST /api/video/broll-suggestions
+{
+  "script": "Scene 1: Product demonstration",
+  "video_type": "product_showcase"
+}
+```
+
+**Batch Video Creation (Feature #5)**
+```bash
+POST /api/video/batch-create
+{
+  "batch_data": [{"topic": "Product A"}, {"topic": "Product B"}],
+  "template_id": "product_showcase",
+  "platform": "instagram"
+}
+```
+
+**Add Brand Watermark (Feature #6)**
+```bash
+POST /api/video/add-watermark
+{
+  "video_specs": {"width": 1920, "height": 1080},
+  "watermark_config": {
+    "position": "bottom-right",
+    "opacity": 0.8,
+    "logo_path": "logo.png"
+  }
+}
+```
+
+**Generate Intro/Outro (Feature #7)**
+```bash
+POST /api/video/generate-intro-outro
+{
+  "brand_name": "MyBrand",
+  "style": "modern"
+}
+```
+
+**Text Overlay Sequence (Feature #8)**
+```bash
+POST /api/video/text-overlays
+{
+  "key_points": ["Point 1", "Point 2"],
+  "style": "bold"
+}
+```
+
+**Multi-Platform Export (Feature #9)**
+```bash
+POST /api/video/multi-platform-export
+{
+  "source_video_specs": {"width": 1920, "height": 1080}
+}
+```
+
+**Analytics Metadata (Feature #10)**
+```bash
+POST /api/video/analytics-metadata
+{
+  "script": "You won't believe this!",
+  "platform": "youtube"
+}
+```
+
+### AI Voiceover Improvements (10 New Features with 60 Language Support)
+
+**Supported Languages (Feature #1) - 60 Languages**
+```bash
+GET /api/voiceover/supported-languages
+```
+
+Response:
+```json
+{
+  "success": true,
+  "total_languages": 60,
+  "languages": {
+    "en": {"name": "English", "region": "Global", "tts_providers": ["ElevenLabs", "Azure", "Google", "Amazon"]},
+    "es": {"name": "Spanish", "region": "Europe/Americas", "tts_providers": [...]},
+    "fr": {"name": "French", "region": "Europe/Africa", "tts_providers": [...]},
+    "... 57 more languages ..."
+  },
+  "regions": ["Europe", "Asia", "Americas", "Middle East", "Africa", "Global"],
+  "tts_providers": ["ElevenLabs", "Azure", "Google", "Amazon"]
+}
+```
+
+**Pronunciation Guide (Feature #2)**
+```bash
+POST /api/voiceover/pronunciation-guide
+{
+  "script": "The CEO of ACME Corporation announced SQL improvements.",
+  "language": "en"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "pronunciation_guide": "CEO - sounds like 'see-ee-oh'\nACME - sounds like 'ak-mee'\nSQL - sounds like 'sequel' or 'es-que-el'...",
+  "language": "en",
+  "note": "Use this guide with voice actors or TTS systems"
+}
+```
+
+**Emotion Markers (Feature #3)**
+```bash
+POST /api/voiceover/emotion-markers
+{
+  "script": "Welcome! This is an exciting new product launch.",
+  "video_type": "product_showcase"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "marked_script": "[FRIENDLY] Welcome! [EXCITED] This is an exciting new product launch. [CONFIDENT]",
+  "emotion_markers": {
+    "EXCITED": 1,
+    "FRIENDLY": 1,
+    "CONFIDENT": 1
+  },
+  "total_markers": 3
+}
+```
+
+**Multi-Voice Script (Feature #4)**
+```bash
+POST /api/voiceover/multi-voice-script
+{
+  "script": "Let me tell you about our product. It has amazing features.",
+  "num_voices": 2
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "multi_voice_script": "[V1] Let me tell you about our product.\n[V2] It has amazing features...",
+  "num_voices": 2,
+  "voice_line_counts": {"V1": 3, "V2": 3}
+}
+```
+
+**Breath Marks (Feature #5)**
+```bash
+POST /api/voiceover/breath-marks
+{
+  "script": "This is a long sentence that needs breath control.",
+  "style": "natural"
+}
+```
+
+Styles: `natural`, `fast_paced`, `dramatic`, `conversational`
+
+Response:
+```json
+{
+  "success": true,
+  "marked_script": "This is a long sentence [BREATH] that needs breath control. [MEDIUM_PAUSE]",
+  "style": "natural",
+  "breath_marks": 2,
+  "pause_marks": 1
+}
+```
+
+**Duration Estimate (Feature #6)**
+```bash
+POST /api/voiceover/duration-estimate
+{
+  "script": "This is a test script with several words.",
+  "language": "en",
+  "speech_rate": "normal"
+}
+```
+
+Speech rates: `slow` (100 wpm), `normal` (150 wpm), `fast` (180 wpm), `very_fast` (200 wpm)
+
+Response:
+```json
+{
+  "success": true,
+  "total_duration_seconds": 5.2,
+  "total_duration_minutes": 0.09,
+  "word_count": 8,
+  "speech_rate": "normal",
+  "words_per_minute": 150,
+  "segment_timings": [
+    {"segment": 1, "text": "This is a test...", "duration": 3.2, "start_time": 0, "end_time": 3.2}
+  ]
+}
+```
+
+**Accent Guidance (Feature #7)**
+```bash
+POST /api/voiceover/accent-guidance
+{
+  "script": "Hello, welcome to our tutorial.",
+  "target_accent": "british"
+}
+```
+
+Accents: `neutral`, `american`, `british`, `australian`, `scottish`, `irish`, `southern`, `new_york`, `california`, `canadian`
+
+Response:
+```json
+{
+  "success": true,
+  "accent_guidance": "For British accent:\n- Pronounce 'hello' with rounded 'o'\n- 'welcome' with clear 't' sound...",
+  "target_accent": "british",
+  "available_accents": ["neutral", "american", "british", ...]
+}
+```
+
+**TTS Configuration (Feature #8)**
+```bash
+POST /api/voiceover/tts-config
+{
+  "script": "Test script for TTS.",
+  "language": "en",
+  "provider": "elevenlabs"
+}
+```
+
+Providers: `elevenlabs`, `azure`, `google`, `amazon`
+
+Response:
+```json
+{
+  "success": true,
+  "provider": "elevenlabs",
+  "character_count": 20,
+  "estimated_cost_usd": 0.03,
+  "configuration": {
+    "api_endpoint": "https://api.elevenlabs.io/v1/text-to-speech",
+    "recommended_voices": {
+      "male": ["Adam", "Antoni", "Arnold"],
+      "female": ["Bella", "Domi", "Elli"]
+    },
+    "parameters": {"stability": 0.75, "similarity_boost": 0.75},
+    "features": ["Voice cloning", "Emotion control", "60+ languages"],
+    "pricing": "Starts at $5/month for 30,000 characters"
+  }
+}
+```
+
+**Background Music Sync (Feature #9)**
+```bash
+POST /api/voiceover/music-sync
+{
+  "script": "Welcome to this tutorial. Let me show you the features.",
+  "music_style": "corporate"
+}
+```
+
+Styles: `corporate`, `energetic`, `calm`, `dramatic`, `upbeat`, `cinematic`
+
+Response:
+```json
+{
+  "success": true,
+  "music_sync_guide": "0:00 - Fade in corporate music at -20dB\n0:05 - Increase to -15dB during hook...",
+  "music_style": "corporate",
+  "available_styles": ["corporate", "energetic", "calm", "dramatic", "upbeat", "cinematic"]
+}
+```
+
+**Quality Check (Feature #10)**
+```bash
+POST /api/voiceover/quality-check
+{
+  "script": "This is a test script. It should be analyzed for quality.",
+  "language": "en"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "quality_score": 85,
+  "quality_rating": "Good",
+  "quality_issues": [],
+  "warnings": ["Script is short, consider expanding"],
+  "suggestions": ["Add more pauses for better pacing"],
+  "statistics": {
+    "word_count": 10,
+    "sentence_count": 2,
+    "avg_sentence_length": 5.0
+  },
+  "ai_analysis": "Script flows naturally. Consider adding emphasis markers..."
+}
+```
+
+**Generate Text-to-Video Prompt**
+```bash
+POST /api/ai/generate-video-prompt
+{
+  "text": "A beautiful sunset over the ocean",
+  "platform": "tiktok",
+  "post_type": "video",
+  "style": "cinematic"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "video_prompt": "Create a cinematic video featuring a stunning sunset...",
+  "platform": "tiktok",
+  "aspect_ratio": "9:16",
+  "recommended_duration": 30,
+  "note": "Use this prompt with AI video generation tools like Runway ML, Pika Labs, or Stable Video Diffusion"
+}
+```
+
+**Generate Video Captions**
+```bash
+POST /api/ai/generate-video-captions
+{
+  "content": "Behind the scenes of our product shoot",
+  "platform": "instagram",
+  "language": "en"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "caption": "🎬 Behind the scenes magic! Check out how we created this amazing content... #BTS #ProductShoot #ContentCreation",
+  "hashtags": ["#BTS", "#ProductShoot", "#ContentCreation"],
+  "platform": "instagram",
+  "character_count": 95
+}
+```
+
+**Optimize Video for Platform**
+```bash
+POST /api/ai/optimize-video
+{
+  "video_path": "input.mp4",
+  "platform": "youtube",
+  "post_type": "short"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "platform": "youtube",
+  "post_type": "short",
+  "specifications": {
+    "aspect_ratio": "9:16",
+    "min_duration": 1,
+    "max_duration": 60,
+    "width": 1080,
+    "height": 1920
+  },
+  "optimization_settings": {
+    "resolution": "1080x1920",
+    "recommended_format": "mp4",
+    "recommended_codec": "h264",
+    "recommended_bitrate": "3000k",
+    "audio_codec": "aac",
+    "audio_bitrate": "192k"
+  },
+  "ffmpeg_command": "ffmpeg -i input.mp4 -vf scale=1080:1920..."
+}
+```
+
+**Get Platform Video Specifications**
+```bash
+GET /api/ai/video-specs/instagram
+```
+
+Response:
+```json
+{
+  "success": true,
+  "platform": "instagram",
+  "video_types": ["reel", "story", "feed"],
+  "specifications": {
+    "reel": {
+      "aspect_ratio": "9:16",
+      "min_duration": 3,
+      "max_duration": 90,
+      "width": 1080,
+      "height": 1920
+    },
+    "story": {...},
+    "feed": {...}
+  }
+}
+```
+
+#### Supported Platforms for Video Generation
+- **Instagram**: Reels (9:16, 3-90s), Stories (9:16, 1-60s), Feed (1:1, 3-60s)
+- **YouTube**: Shorts (9:16, 1-60s), Videos (16:9, up to 12 hours)
+- **TikTok**: Videos (9:16, 3-600s)
+- **Facebook**: Reels (9:16, 3-90s), Feed (16:9, 1-240s)
+- **Pinterest**: Video Pins (2:3, 4-900s)
+- **Twitter**: Videos (16:9, 0.5-140s)
 
 ## Development
 
