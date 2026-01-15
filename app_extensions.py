@@ -341,8 +341,6 @@ class MediaManager:
 
 # ==================== 4. AUTHENTICATION MIDDLEWARE ====================
 
-import threading
-
 # Cache for user lookups to reduce database queries (thread-safe)
 _user_cache = {}
 _cache_lock = threading.RLock()
@@ -879,9 +877,12 @@ class RetryManager:
             
             # Perform batch update for all retryable posts
             if post_ids_to_retry:
+                # Use 'evaluate' for better performance with bulk updates
+                # Note: The Post.platforms and related fields may not exist in current schema
+                # This is a pre-existing issue in the codebase
                 session.query(Post).filter(Post.id.in_(post_ids_to_retry)).update(
                     {Post.status: PostStatus.SCHEDULED},
-                    synchronize_session='fetch'  # Fetch to maintain session state consistency
+                    synchronize_session='evaluate'  # Better performance than 'fetch'
                 )
                 session.commit()
         
