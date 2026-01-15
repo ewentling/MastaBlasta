@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { LucideIcon } from 'lucide-react';
 import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
@@ -28,13 +29,33 @@ const queryClient = new QueryClient({
   },
 });
 
+type AppRouteConfig = {
+  path: string;
+  label: string;
+  icon: LucideIcon;
+  element: JSX.Element;
+};
+
+export const appRoutes: AppRouteConfig[] = [
+  { path: '/', label: 'Dashboard', icon: Home, element: <DashboardPage /> },
+  { path: '/accounts', label: 'Accounts', icon: Users, element: <AccountsPage /> },
+  { path: '/post', label: 'Create Post', icon: Send, element: <PostPage /> },
+  { path: '/scheduled', label: 'Scheduled Posts', icon: Calendar, element: <ScheduledPostsPage /> },
+  { path: '/analytics', label: 'Analytics', icon: BarChart2, element: <AnalyticsPage /> },
+  { path: '/bulk-import', label: 'Bulk Import', icon: Upload, element: <BulkImportPage /> },
+  { path: '/url-shortener', label: 'URL Shortener', icon: Link2, element: <URLShortenerPage /> },
+  { path: '/social-monitoring', label: 'Social Monitoring', icon: TrendingUp, element: <SocialMonitoringPage /> },
+  { path: '/calendar', label: 'Content Calendar', icon: CalendarDays, element: <ContentCalendarPage /> },
+  { path: '/library', label: 'Content Library', icon: Folder, element: <ContentLibraryPage /> },
+  { path: '/ab-testing', label: 'A/B Testing', icon: Sparkles, element: <ABTestingPage /> },
+  { path: '/chatbot', label: 'AI Assistant', icon: MessageSquare, element: <ChatbotPage /> },
+];
+
 function Navigation() {
   const location = useLocation();
   const [showSettings, setShowSettings] = useState(false);
-  
-  const isActive = (path: string) => {
-    return location.pathname === path ? 'nav-link active' : 'nav-link';
-  };
+
+  const isActive = (path: string) => (location.pathname === path ? 'nav-link active' : 'nav-link');
 
   return (
     <>
@@ -43,78 +64,14 @@ function Navigation() {
           <img src="/logo.png" alt="MastaBlasta" className="logo-image" />
         </div>
         <ul className="nav-menu">
-          <li>
-            <Link to="/" className={isActive('/')}>
-              <Home size={20} />
-              <span>Dashboard</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/accounts" className={isActive('/accounts')}>
-              <Users size={20} />
-              <span>Accounts</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/post" className={isActive('/post')}>
-              <Send size={20} />
-              <span>Create Post</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/scheduled" className={isActive('/scheduled')}>
-              <Calendar size={20} />
-              <span>Scheduled Posts</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/analytics" className={isActive('/analytics')}>
-              <BarChart2 size={20} />
-              <span>Analytics</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/bulk-import" className={isActive('/bulk-import')}>
-              <Upload size={20} />
-              <span>Bulk Import</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/url-shortener" className={isActive('/url-shortener')}>
-              <Link2 size={20} />
-              <span>URL Shortener</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/social-monitoring" className={isActive('/social-monitoring')}>
-              <TrendingUp size={20} />
-              <span>Social Monitoring</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/calendar" className={isActive('/calendar')}>
-              <CalendarDays size={20} />
-              <span>Content Calendar</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/library" className={isActive('/library')}>
-              <Folder size={20} />
-              <span>Content Library</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/ab-testing" className={isActive('/ab-testing')}>
-              <Sparkles size={20} />
-              <span>A/B Testing</span>
-            </Link>
-          </li>
-          <li>
-            <Link to="/chatbot" className={isActive('/chatbot')}>
-              <Sparkles size={20} />
-              <span>AI Assistant</span>
-            </Link>
-          </li>
+          {appRoutes.map(({ path, label, icon: Icon }) => (
+            <li key={path}>
+              <Link to={path} className={isActive(path)}>
+                <Icon size={20} />
+                <span>{label}</span>
+              </Link>
+            </li>
+          ))}
         </ul>
         <div className="sidebar-footer">
           <button className="settings-button" onClick={() => setShowSettings(true)}>
@@ -138,18 +95,9 @@ function App() {
               <Navigation />
               <main className="main-content">
                 <Routes>
-                  <Route path="/" element={<DashboardPage />} />
-                  <Route path="/accounts" element={<AccountsPage />} />
-                  <Route path="/post" element={<PostPage />} />
-                  <Route path="/scheduled" element={<ScheduledPostsPage />} />
-                  <Route path="/analytics" element={<AnalyticsPage />} />
-                  <Route path="/bulk-import" element={<BulkImportPage />} />
-                  <Route path="/url-shortener" element={<URLShortenerPage />} />
-                  <Route path="/social-monitoring" element={<SocialMonitoringPage />} />
-                  <Route path="/calendar" element={<ContentCalendarPage />} />
-                  <Route path="/library" element={<ContentLibraryPage />} />
-                  <Route path="/ab-testing" element={<ABTestingPage />} />
-                  <Route path="/chatbot" element={<ChatbotPage />} />
+                  {appRoutes.map(({ path, element }) => (
+                    <Route key={path} path={path} element={element} />
+                  ))}
                 </Routes>
               </main>
             </div>
