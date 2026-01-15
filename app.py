@@ -488,6 +488,21 @@ class ImageEnhancer:
             logger.error(f"Image optimization error: {str(e)}")
             return {'error': str(e), 'success': False}
     
+    def get_platform_dimensions(self, platform: str) -> Dict[str, int]:
+        """Get optimal dimensions for a specific platform"""
+        dimensions = {
+            'twitter': {'width': 1200, 'height': 675},
+            'instagram': {'width': 1080, 'height': 1080},
+            'facebook': {'width': 1200, 'height': 630},
+            'linkedin': {'width': 1200, 'height': 627},
+            'threads': {'width': 1080, 'height': 1080},
+            'bluesky': {'width': 1200, 'height': 675},
+            'youtube': {'width': 1280, 'height': 720},
+            'pinterest': {'width': 1000, 'height': 1500},
+            'tiktok': {'width': 1080, 'height': 1920}
+        }
+        return dimensions.get(platform, {'width': 1200, 'height': 675})
+    
     def enhance_quality(self, image_data: str, enhancement_level: str = 'medium') -> Dict[str, Any]:
         """Enhance image quality (brightness, contrast, sharpness)"""
         if not self.enabled:
@@ -4364,6 +4379,10 @@ def ai_status():
     """Get status of AI services"""
     return jsonify({
         'ai_enabled': AI_ENABLED,
+        # Legacy fields for backwards compatibility
+        'openai': AI_ENABLED,
+        'pillow': True,  # PIL/Pillow is always available
+        'sklearn': AI_ENABLED,
         'services': {
             'content_generation': {
                 'enabled': ai_content_generator.enabled,
