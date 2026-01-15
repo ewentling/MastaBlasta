@@ -1,9 +1,10 @@
-from flask import Flask, request, jsonify, send_from_directory, redirect
+from flask import Flask, request, jsonify, send_from_directory, redirect, make_response
 from flask_cors import CORS
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.jobstores.memory import MemoryJobStore
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import wraps
 import uuid
 import os
 import logging
@@ -87,6 +88,20 @@ def get_user_from_request():
         return get_current_user()
     return None
 # ==================== End Production Integration ====================
+
+# Performance optimization: Response caching decorator
+def cache_response(max_age=300):
+    """Decorator to add cache headers to responses (max_age in seconds)"""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            response = make_response(f(*args, **kwargs))
+            # Add cache control headers for static/rarely-changing data
+            response.headers['Cache-Control'] = f'public, max-age={max_age}'
+            response.headers['Vary'] = 'Accept-Encoding'
+            return response
+        return decorated_function
+    return decorator
 
 # Configure scheduler
 jobstores = {
@@ -705,9 +720,14 @@ class AIImageGenerator:
             scenes = []
             script_lines = video_script.split('\n')
             
+            # Optimize keyword checking by pre-computing lowercase and using set
+            keywords = {'scene', 'shot', 'visual', ':'}
             for line in script_lines:
-                if line.strip() and any(word in line.lower() for word in ['scene', 'shot', 'visual', ':']):
-                    scenes.append(line.strip())
+                line_stripped = line.strip()
+                if line_stripped:
+                    line_lower = line_stripped.lower()
+                    if any(keyword in line_lower for keyword in keywords):
+                        scenes.append(line_stripped)
             
             # If no clear scenes, split script into segments
             if not scenes:
@@ -721,9 +741,11 @@ class AIImageGenerator:
             # Limit to requested number
             scenes = scenes[:num_images]
             
-            # Generate image for each scene
+            # Generate images in parallel for faster execution
             generated_images = []
-            for i, scene in enumerate(scenes, 1):
+            
+            def generate_scene_image(scene_data):
+                i, scene = scene_data
                 # Extract visual description
                 visual_prompt = scene
                 if ':' in scene:
@@ -739,15 +761,29 @@ class AIImageGenerator:
                 )
                 
                 if result.get('success'):
-                    generated_images.append({
+                    return {
                         'scene_number': i,
                         'scene_description': scene,
                         'image_url': result['image_url'],
                         'image_data': result['image_data'],
                         'prompt': result['original_prompt']
-                    })
+                    }
                 else:
                     logger.warning(f"Failed to generate image for scene {i}: {result.get('error')}")
+                    return None
+            
+            # Use ThreadPoolExecutor for parallel image generation
+            with ThreadPoolExecutor(max_workers=min(len(scenes), 3)) as executor:
+                scene_data = list(enumerate(scenes, 1))
+                futures = {executor.submit(generate_scene_image, data): data for data in scene_data}
+                
+                for future in as_completed(futures):
+                    result = future.result()
+                    if result:
+                        generated_images.append(result)
+            
+            # Sort by scene number to maintain order
+            generated_images.sort(key=lambda x: x['scene_number'])
             
             return {
                 'success': True,
@@ -3922,6 +3958,7 @@ def test_account(account_id):
 
 
 @app.route('/api/platforms', methods=['GET'])
+@cache_response(max_age=3600)  # Cache for 1 hour - platforms rarely change
 def get_platforms():
     """Get list of supported platforms"""
     # Define proper display names for platforms
@@ -3954,6 +3991,7 @@ def get_platforms():
 
 
 @app.route('/api/platforms/<platform>/post-types', methods=['GET'])
+@cache_response(max_age=3600)  # Cache for 1 hour
 def get_platform_post_types(platform):
     """Get supported post types for a specific platform"""
     if platform not in PLATFORM_ADAPTERS:
@@ -3967,6 +4005,7 @@ def get_platform_post_types(platform):
 
 
 @app.route('/api/platforms/<platform>/post-types/details', methods=['GET'])
+@cache_response(max_age=3600)  # Cache for 1 hour
 def get_platform_post_types_details(platform):
     """Get detailed information about post types for a specific platform"""
     if platform not in PLATFORM_ADAPTERS:
@@ -4387,6 +4426,7 @@ def ai_train_model():
 
 
 @app.route('/api/ai/status', methods=['GET'])
+@cache_response(max_age=600)  # Cache for 10 minutes
 def ai_status():
     """Get status of AI services"""
     return jsonify({
