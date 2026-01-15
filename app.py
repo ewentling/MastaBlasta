@@ -65,6 +65,17 @@ else:
     logger.info("ℹ Using in-memory storage (development mode)")
     logger.info("  Set DATABASE_URL to enable production features")
 
+# Register advanced features (TTS, Social Listening, AI Training)
+try:
+    from advanced_features import advanced_bp
+    app.register_blueprint(advanced_bp)
+    logger.info("✓ Advanced features registered at /api/advanced/*")
+    logger.info("  - /api/advanced/tts/* - Real TTS provider integrations")
+    logger.info("  - /api/advanced/social-listening/* - Social monitoring dashboard")
+    logger.info("  - /api/advanced/ai-training/* - Custom AI model training")
+except ImportError as e:
+    logger.warning(f"⚠ Advanced features not available: {e}")
+
 # Helper functions
 def use_database():
     """Check if database should be used"""
