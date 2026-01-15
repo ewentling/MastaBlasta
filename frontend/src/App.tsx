@@ -40,8 +40,7 @@ function Navigation() {
     <>
       <nav className="sidebar">
         <div className="logo">
-          <h1>🚀 MastaBlasta</h1>
-          <p>Multi-Platform Posting</p>
+          <img src="/logo.png" alt="MastaBlasta" className="logo-image" />
         </div>
         <ul className="nav-menu">
           <li>
