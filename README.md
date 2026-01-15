@@ -134,6 +134,18 @@ See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 - **Auto-Reconnection Service**: Automatic token refresh before expiration (2-hour proactive buffer)
 - **Platform Config Discovery**: Smart platform detection with feature lists, requirements, and setup guides
 
+#### 11. ✂️ Video Clipping with Gemini AI (NEW)
+- **Intelligent Video Analysis**: Automatically analyze YouTube, Vimeo, and other video URLs
+- **Viral Clip Detection**: AI-powered identification of the most engaging moments (1-10 clips)
+- **Engagement Scoring**: Each clip rated 0-100 for viral potential
+- **Platform Optimization**: Tailored suggestions for TikTok, Instagram Reels, YouTube Shorts
+- **Smart Metadata Generation**: Auto-generated captions, hashtags, and posting tips per platform
+- **Clip Timing**: Precise start/end timestamps with duration optimization (15-90s recommended)
+- **Download Instructions**: FFmpeg commands for extracting clips with proper formatting
+- **Viral Insights**: Detailed explanations of why each moment has viral potential
+- **Hook Suggestions**: Catchy titles and hooks for maximum engagement
+- **Batch Processing**: Analyze one video and get multiple clip opportunities at once
+
 ## Supported Platforms
 
 ### LinkedIn
@@ -257,6 +269,24 @@ Post to multiple accounts instantly:
 - Select multiple accounts across platforms
 - Real-time validation
 - Publish immediately or schedule for later
+
+### Video Clipper
+![Video Clipper](https://github.com/user-attachments/assets/f26097e5-3bd3-407c-94f4-7bafdca1cf6b)
+
+Extract viral clips from videos using AI:
+- Paste any YouTube, Vimeo, or supported video URL
+- Choose how many clips to generate (1-10)
+- AI analyzes video and identifies viral moments
+- Get engagement scores and platform recommendations
+
+![Video Clipper with URL](https://github.com/user-attachments/assets/20e18c4b-3118-4272-9fd8-bab65460552d)
+
+Features:
+- Gemini AI-powered video analysis
+- Engagement scoring (0-100) for each clip
+- Automatic metadata generation (captions, hashtags, posting tips)
+- Download instructions with FFmpeg commands
+- Platform-specific optimization for TikTok, Instagram Reels, YouTube Shorts
 
 ## API Endpoints
 
@@ -791,6 +821,7 @@ Each social media platform has its own adapter class that:
 Set environment variables:
 - `PORT`: API port (default: 33766)
 - `OPENAI_API_KEY`: OpenAI API key for AI features (optional, required for AI functionality)
+- `GEMINI_API_KEY` or `GOOGLE_API_KEY`: Google Gemini API key for video clipping (optional, required for video clipping feature)
 
 ### AI Features Setup
 
@@ -809,6 +840,41 @@ export OPENAI_API_KEY=your-api-key-here
 3. Verify AI services are enabled:
 ```bash
 GET /api/ai/status
+```
+
+### Video Clipping Setup
+
+To enable video clipping with Gemini AI:
+
+1. Install video clipping dependencies:
+```bash
+pip install google-generativeai yt-dlp
+```
+
+2. Get a Google Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
+
+3. Set your Gemini API key:
+```bash
+export GEMINI_API_KEY=your-gemini-api-key-here
+# or
+export GOOGLE_API_KEY=your-gemini-api-key-here
+```
+
+4. Verify video clipping is enabled:
+```bash
+GET /api/clips/status
+```
+
+5. (Optional) Install ffmpeg for clip extraction:
+```bash
+# Ubuntu/Debian
+sudo apt-get install ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# Windows
+# Download from https://ffmpeg.org/download.html
 ```
 
 ## AI API Endpoints
@@ -1865,6 +1931,132 @@ Response:
 - **Facebook**: Reels (9:16, 3-90s), Feed (16:9, 1-240s)
 - **Pinterest**: Video Pins (2:3, 4-900s)
 - **Twitter**: Videos (16:9, 0.5-140s)
+
+### Video Clipping with Gemini AI
+
+**Check Service Status**
+```bash
+GET /api/clips/status
+```
+
+Response:
+```json
+{
+  "success": true,
+  "enabled": true,
+  "service": "Video Clipping with Gemini AI",
+  "features": [
+    "Video URL analysis",
+    "Automatic viral clip detection",
+    "Gemini AI-powered insights",
+    "Multi-platform optimization",
+    "Metadata generation"
+  ]
+}
+```
+
+**Analyze Video for Clips**
+```bash
+POST /api/clips/analyze
+{
+  "video_url": "https://youtube.com/watch?v=...",
+  "num_clips": 3
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "video_info": {
+    "title": "Amazing Video Title",
+    "duration": 600,
+    "url": "https://youtube.com/watch?v=...",
+    "thumbnail": "https://..."
+  },
+  "suggested_clips": [
+    {
+      "start_time": 45,
+      "end_time": 75,
+      "duration": 30,
+      "title": "Amazing transformation in 30 seconds",
+      "hook": "You won't believe what happens next...",
+      "viral_reason": "Strong emotional payoff with clear before/after",
+      "platforms": ["tiktok", "instagram", "youtube_shorts"],
+      "engagement_score": 85,
+      "tags": ["transformation", "satisfying", "viral"],
+      "start_timestamp": "00:45",
+      "end_timestamp": "01:15"
+    }
+  ],
+  "num_clips": 3
+}
+```
+
+**Generate Clip Metadata**
+```bash
+POST /api/clips/metadata
+{
+  "clip": {
+    "title": "Amazing moment",
+    "hook": "You won't believe this...",
+    "duration": 30,
+    "viral_reason": "Emotional impact"
+  },
+  "platform": "instagram"
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "caption": "🔥 You won't believe what happens next! This transformation will blow your mind! 🤯",
+  "hashtags": ["#viral", "#transformation", "#satisfying"],
+  "thumbnail_text": "SHOCKING Result",
+  "best_time": "7-9 PM",
+  "cta": "Follow for more amazing content!",
+  "tips": ["Post during peak hours", "Use trending audio"],
+  "platform": "instagram"
+}
+```
+
+**Get Download Instructions**
+```bash
+POST /api/clips/download-info
+{
+  "video_url": "https://youtube.com/watch?v=...",
+  "start_time": 45,
+  "end_time": 75
+}
+```
+
+Response:
+```json
+{
+  "success": true,
+  "ffmpeg_command": "ffmpeg -ss 45 -i \"...\" -t 30 -c:v libx264 ...",
+  "instructions": [
+    "1. Install ffmpeg if not already installed",
+    "2. Run the ffmpeg command below",
+    "3. The clip will be saved as output_clip.mp4"
+  ],
+  "start_timestamp": "00:45",
+  "end_timestamp": "01:15",
+  "duration": 30
+}
+```
+
+**Schedule Clip for Posting**
+```bash
+POST /api/clips/schedule
+{
+  "clip": { ... },
+  "metadata": { ... },
+  "account_ids": ["account-id"],
+  "scheduled_time": "2026-01-20T10:00:00Z"
+}
+```
 
 ## Development
 
