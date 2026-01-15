@@ -14,36 +14,31 @@ This module provides the 9 critical improvements:
 9. Error recovery and retry logic
 """
 
-import os
 import uuid
 import logging
 import time
 import json
 import threading
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional, Callable
-from functools import wraps, lru_cache
+from datetime import datetime
+from typing import Dict, List, Optional, Callable
+from functools import wraps
 from flask import request, jsonify, g
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from sqlalchemy import cast, String, or_
+from sqlalchemy import or_
 
 # Import production infrastructure
 try:
-    from database import db_session_scope, get_db_session, init_db
+    from database import db_session_scope, init_db
     from models import (
-        User, Account, Post, Media, PostAnalytics, 
-        Template, ABTest, SocialMonitor, URLShortener,
-        ChatbotInteraction, ResponseTemplate, PostStatus, UserRole
+        User, Account, Post, Media, PostAnalytics, PostStatus
     )
     from auth import (
-        hash_password, verify_password, generate_api_key,
-        create_access_token, create_refresh_token, verify_token,
-        encrypt_token, decrypt_token, require_auth, require_role
+        verify_token, decrypt_token
     )
     from oauth import TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth
-    from media_utils import MediaUploadHandler, validate_file_upload, optimize_image_for_platform
+    from media_utils import MediaUploadHandler, validate_file_upload
     DB_ENABLED = True
 except ImportError as e:
     logging.warning(f"Production infrastructure not fully available: {e}")
@@ -55,28 +50,28 @@ logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     """Manages database operations replacing in-memory storage"""
-    
+
     def __init__(self):
         self.enabled = DB_ENABLED
         if self.enabled:
             init_db()
-    
+
     def get_post(self, post_id: str) -> Optional[Dict]:
         """Get post by ID from database"""
         if not self.enabled:
             return None
-        
+
         with db_session_scope() as session:
             post = session.query(Post).filter_by(id=post_id).first()
             if post:
                 return self._post_to_dict(post)
         return None
-    
+
     def create_post(self, user_id: str, data: Dict) -> Dict:
         """Create new post in database"""
         if not self.enabled:
             raise Exception("Database not enabled")
-        
+
         with db_session_scope() as session:
             post = Post(
                 id=str(uuid.uuid4()),
@@ -93,12 +88,12 @@ class DatabaseManager:
             session.add(post)
             session.flush()
             return self._post_to_dict(post)
-    
+
     def update_post(self, post_id: str, updates: Dict) -> Optional[Dict]:
         """Update post in database"""
         if not self.enabled:
             return None
-        
+
         with db_session_scope() as session:
             post = session.query(Post).filter_by(id=post_id).first()
             if post:
@@ -109,15 +104,15 @@ class DatabaseManager:
                 session.flush()
                 return self._post_to_dict(post)
         return None
-    
+
     def list_posts(self, user_id: str, filters: Dict = None, limit: int = 50, offset: int = 0) -> List[Dict]:
         """List posts with optional filters"""
         if not self.enabled:
             return []
-        
+
         with db_session_scope() as session:
             query = session.query(Post).filter_by(user_id=user_id)
-            
+
             # Apply filters
             if filters:
                 if filters.get('status'):
@@ -131,23 +126,23 @@ class DatabaseManager:
                 if filters.get('search'):
                     search_term = f"%{filters['search']}%"
                     query = query.filter(Post.content.like(search_term))
-            
+
             # Order by created_at desc and paginate
             posts = query.order_by(Post.created_at.desc()).limit(limit).offset(offset).all()
             return [self._post_to_dict(p) for p in posts]
-    
+
     def delete_post(self, post_id: str) -> bool:
         """Delete post from database"""
         if not self.enabled:
             return False
-        
+
         with db_session_scope() as session:
             post = session.query(Post).filter_by(id=post_id).first()
             if post:
                 session.delete(post)
                 return True
         return False
-    
+
     def _post_to_dict(self, post: 'Post') -> Dict:
         """Convert Post model to dictionary"""
         return {
@@ -170,19 +165,19 @@ class DatabaseManager:
 
 class OAuthManager:
     """Manages real OAuth implementations for platforms"""
-    
+
     def __init__(self):
         self.twitter = TwitterOAuth() if DB_ENABLED else None
         self.meta = MetaOAuth() if DB_ENABLED else None
         self.linkedin = LinkedInOAuth() if DB_ENABLED else None
         self.google = GoogleOAuth() if DB_ENABLED else None
         self.enabled = DB_ENABLED
-    
+
     def get_authorization_url(self, platform: str, user_id: str) -> Dict:
         """Get OAuth authorization URL for platform"""
         if not self.enabled:
             return {'error': 'OAuth not enabled'}
-        
+
         try:
             if platform == 'twitter':
                 return self.twitter.get_authorization_url(user_id)
@@ -197,12 +192,12 @@ class OAuthManager:
         except Exception as e:
             logger.error(f"OAuth authorization error for {platform}: {e}")
             return {'error': str(e)}
-    
+
     def handle_callback(self, platform: str, code: str, state: str) -> Dict:
         """Handle OAuth callback and exchange code for tokens"""
         if not self.enabled:
             return {'error': 'OAuth not enabled'}
-        
+
         try:
             if platform == 'twitter':
                 return self.twitter.handle_callback(code, state)
@@ -217,20 +212,20 @@ class OAuthManager:
         except Exception as e:
             logger.error(f"OAuth callback error for {platform}: {e}")
             return {'error': str(e)}
-    
+
     def post_to_platform(self, platform: str, account_id: str, content: str, media: List = None, options: Dict = None) -> Dict:
         """Post content to platform using real API"""
         if not self.enabled:
             return {'error': 'OAuth not enabled'}
-        
+
         # Get account with decrypted tokens
         with db_session_scope() as session:
             account = session.query(Account).filter_by(id=account_id).first()
             if not account:
                 return {'error': 'Account not found'}
-            
+
             access_token = decrypt_token(account.oauth_token)
-            
+
             try:
                 if platform == 'twitter':
                     return self.twitter.create_tweet(access_token, content, media)
@@ -254,25 +249,25 @@ class OAuthManager:
 
 class MediaManager:
     """Manages media uploads and library"""
-    
+
     def __init__(self):
         self.handler = MediaUploadHandler() if DB_ENABLED else None
         self.enabled = DB_ENABLED
-    
+
     def upload_media(self, user_id: str, file_data: bytes, filename: str, mime_type: str) -> Dict:
         """Upload media file"""
         if not self.enabled:
             return {'error': 'Media upload not enabled'}
-        
+
         try:
             # Validate file
             validation = validate_file_upload(file_data, mime_type, filename)
             if not validation['valid']:
                 return {'error': validation['error']}
-            
+
             # Save file
             result = self.handler.save_file(user_id, file_data, filename, mime_type)
-            
+
             # Store in database
             with db_session_scope() as session:
                 media = Media(
@@ -289,7 +284,7 @@ class MediaManager:
                 )
                 session.add(media)
                 session.flush()
-                
+
                 return {
                     'id': media.id,
                     'filename': media.filename,
@@ -302,12 +297,12 @@ class MediaManager:
         except Exception as e:
             logger.error(f"Media upload error: {e}")
             return {'error': str(e)}
-    
+
     def get_media(self, media_id: str) -> Optional[Dict]:
         """Get media by ID"""
         if not self.enabled:
             return None
-        
+
         with db_session_scope() as session:
             media = session.query(Media).filter_by(id=media_id).first()
             if media:
@@ -321,12 +316,12 @@ class MediaManager:
                     'created_at': media.created_at.isoformat()
                 }
         return None
-    
+
     def list_media(self, user_id: str, limit: int = 50, offset: int = 0) -> List[Dict]:
         """List media for user"""
         if not self.enabled:
             return []
-        
+
         with db_session_scope() as session:
             media_list = session.query(Media).filter_by(user_id=user_id).order_by(Media.created_at.desc()).limit(limit).offset(offset).all()
             return [{
@@ -367,7 +362,7 @@ def get_current_user() -> Optional[Dict]:
     """Get current authenticated user from request with caching"""
     if not DB_ENABLED:
         return None
-    
+
     # Check JWT token
     auth_header = request.headers.get('Authorization', '')
     if auth_header.startswith('Bearer '):
@@ -375,12 +370,12 @@ def get_current_user() -> Optional[Dict]:
         payload = verify_token(token)
         if payload:
             user_id = payload.get('user_id')
-            
+
             # Check cache first
             cached_user = _get_cached_user(user_id)
             if cached_user:
                 return cached_user
-            
+
             # Not in cache, query database
             with db_session_scope() as session:
                 user = session.query(User).filter_by(id=user_id).first()
@@ -393,7 +388,7 @@ def get_current_user() -> Optional[Dict]:
                     }
                     _cache_user(user_id, user_data)
                     return user_data
-    
+
     # Check API key (less frequent, skip caching)
     api_key = request.headers.get('X-API-Key', '')
     if api_key:
@@ -406,7 +401,7 @@ def get_current_user() -> Optional[Dict]:
                     'name': user.full_name,
                     'role': user.role.value
                 }
-    
+
     return None
 
 
@@ -430,15 +425,15 @@ def role_required(required_role: str) -> Callable:
             user = get_current_user()
             if not user:
                 return jsonify({'error': 'Authentication required'}), 401
-            
+
             # Check role hierarchy: admin > editor > viewer
             role_hierarchy = {'admin': 3, 'editor': 2, 'viewer': 1}
             user_level = role_hierarchy.get(user['role'], 0)
             required_level = role_hierarchy.get(required_role, 0)
-            
+
             if user_level < required_level:
                 return jsonify({'error': 'Insufficient permissions'}), 403
-            
+
             g.current_user = user
             return f(*args, **kwargs)
         return decorated_function
@@ -449,28 +444,28 @@ def role_required(required_role: str) -> Callable:
 
 class AnalyticsCollector:
     """Collects real analytics from platform APIs"""
-    
+
     def __init__(self):
         self.oauth_manager = OAuthManager()
         self.enabled = DB_ENABLED
-    
+
     def collect_post_analytics(self, post_id: str, platform: str, platform_post_id: str, account_id: str):
         """Collect analytics for a published post"""
         if not self.enabled:
             return
-        
+
         try:
             # Get account tokens
             with db_session_scope() as session:
                 account = session.query(Account).filter_by(id=account_id).first()
                 if not account:
                     return
-                
+
                 access_token = decrypt_token(account.oauth_token)
-                
+
                 # Fetch metrics from platform
                 metrics = self._fetch_platform_metrics(platform, platform_post_id, access_token)
-                
+
                 if metrics:
                     # Store in database
                     analytics = PostAnalytics(
@@ -490,7 +485,7 @@ class AnalyticsCollector:
                     logger.info(f"Collected analytics for post {post_id} on {platform}")
         except Exception as e:
             logger.error(f"Error collecting analytics: {e}")
-    
+
     def _fetch_platform_metrics(self, platform: str, post_id: str, access_token: str) -> Optional[Dict]:
         """Fetch metrics from specific platform"""
         try:
@@ -509,7 +504,7 @@ class AnalyticsCollector:
                         'comments': metrics.get('reply_count', 0),
                         'reach': metrics.get('impression_count', 0)
                     }
-            
+
             elif platform == 'facebook':
                 # Facebook Graph API
                 url = f"https://graph.facebook.com/v18.0/{post_id}?fields=insights.metric(post_impressions,post_engaged_users,post_reactions_like_total)"
@@ -518,14 +513,14 @@ class AnalyticsCollector:
                     data = response.json()
                     # Parse insights data
                     return self._parse_facebook_insights(data)
-            
+
             # Add more platforms as needed
-            
+
         except Exception as e:
             logger.error(f"Error fetching {platform} metrics: {e}")
-        
+
         return None
-    
+
     def _parse_facebook_insights(self, data: Dict) -> Dict:
         """Parse Facebook insights data"""
         insights = data.get('insights', {}).get('data', [])
@@ -549,11 +544,11 @@ class AnalyticsCollector:
 
 class WebhookManager:
     """Manages webhook registrations and notifications"""
-    
+
     def __init__(self):
         self.enabled = DB_ENABLED
         self.session = self._create_retry_session()
-    
+
     def _create_retry_session(self):
         """Create requests session with retry logic"""
         session = requests.Session()
@@ -566,14 +561,14 @@ class WebhookManager:
         session.mount('http://', adapter)
         session.mount('https://', adapter)
         return session
-    
+
     def register_webhook(self, user_id: str, url: str, events: List[str], secret: str = None) -> Dict:
         """Register a webhook"""
         if not self.enabled:
             return {'error': 'Webhooks not enabled'}
-        
+
         webhook_id = str(uuid.uuid4())
-        
+
         # Store in database (add Webhook model if needed)
         # For now, return success
         return {
@@ -583,7 +578,7 @@ class WebhookManager:
             'active': True,
             'created_at': datetime.utcnow().isoformat()
         }
-    
+
     def send_webhook(self, webhook_url: str, event: str, data: Dict, secret: str = None):
         """Send webhook notification"""
         try:
@@ -592,7 +587,7 @@ class WebhookManager:
                 'data': data,
                 'timestamp': datetime.utcnow().isoformat()
             }
-            
+
             headers = {'Content-Type': 'application/json'}
             if secret:
                 # Add HMAC signature for security
@@ -604,14 +599,14 @@ class WebhookManager:
                     hashlib.sha256
                 ).hexdigest()
                 headers['X-Webhook-Signature'] = signature
-            
+
             response = self.session.post(
                 webhook_url,
                 json=payload,
                 headers=headers,
                 timeout=10
             )
-            
+
             logger.info(f"Webhook sent to {webhook_url}: {response.status_code}")
             return True
         except Exception as e:
@@ -623,24 +618,24 @@ class WebhookManager:
 
 class SearchManager:
     """Provides advanced search and filtering capabilities"""
-    
+
     def __init__(self):
         self.enabled = DB_ENABLED
-    
+
     def search_posts(self, user_id: str, query: str, filters: Dict = None, limit: int = 50, offset: int = 0) -> Dict:
         """Full-text search across posts"""
         if not self.enabled:
             return {'posts': [], 'total': 0}
-        
+
         with db_session_scope() as session:
             # Start with base query
             q = session.query(Post).filter_by(user_id=user_id)
-            
+
             # Full-text search on content
             if query:
                 search_term = f"%{query}%"
                 q = q.filter(Post.content.like(search_term))
-            
+
             # Apply filters
             if filters:
                 if filters.get('platforms'):
@@ -659,38 +654,38 @@ class SearchManager:
                     else:
                         # Single platform fallback to like (less efficient but works)
                         q = q.filter(Post.platforms.like(f'%{platforms_filter}%'))
-                
+
                 if filters.get('status'):
                     q = q.filter_by(status=PostStatus[filters['status'].upper()])
-                
+
                 if filters.get('post_type'):
                     q = q.filter_by(post_type=filters['post_type'])
-                
+
                 if filters.get('date_from'):
                     q = q.filter(Post.created_at >= filters['date_from'])
-                
+
                 if filters.get('date_to'):
                     q = q.filter(Post.created_at <= filters['date_to'])
-                
+
                 if filters.get('has_media'):
                     if filters['has_media']:
                         q = q.filter(Post.media_ids != '[]')
                     else:
                         q = q.filter(Post.media_ids == '[]')
-            
+
             # Get total count
             total = q.count()
-            
+
             # Get paginated results
             posts = q.order_by(Post.created_at.desc()).limit(limit).offset(offset).all()
-            
+
             return {
                 'posts': [self._post_to_dict(p) for p in posts],
                 'total': total,
                 'limit': limit,
                 'offset': offset
             }
-    
+
     def _post_to_dict(self, post: 'Post') -> Dict:
         """Convert post to dictionary with optimized JSON handling"""
         # Cache parsed JSON to avoid repeated parsing in loops
@@ -698,7 +693,7 @@ class SearchManager:
             platforms = json.loads(post.platforms) if isinstance(post.platforms, str) else post.platforms or []
         except (json.JSONDecodeError, TypeError):
             platforms = []
-        
+
         return {
             'id': post.id,
             'content': post.content[:200] + '...' if len(post.content) > 200 else post.content,
@@ -713,47 +708,47 @@ class SearchManager:
 
 class BulkOperationsManager:
     """Handles bulk operations on posts"""
-    
+
     def __init__(self):
         self.enabled = DB_ENABLED
         self.db_manager = DatabaseManager()
         self.oauth_manager = OAuthManager()
-    
+
     def bulk_create_posts(self, user_id: str, posts_data: List[Dict]) -> Dict:
         """Create multiple posts at once"""
         if not self.enabled:
             return {'error': 'Bulk operations not enabled'}
-        
+
         results = {
             'successful': [],
             'failed': []
         }
-        
+
         for post_data in posts_data:
             try:
                 post = self.db_manager.create_post(user_id, post_data)
                 results['successful'].append({'id': post['id'], 'content': post['content'][:50]})
             except Exception as e:
                 results['failed'].append({'data': post_data, 'error': str(e)})
-        
+
         return results
-    
+
     def bulk_update_posts(self, user_id: str, updates: List[Dict]) -> Dict:
         """Update multiple posts at once"""
         if not self.enabled:
             return {'error': 'Bulk operations not enabled'}
-        
+
         results = {
             'successful': [],
             'failed': []
         }
-        
+
         for update in updates:
             post_id = update.get('id')
             if not post_id:
                 results['failed'].append({'data': update, 'error': 'No post ID'})
                 continue
-            
+
             try:
                 post = self.db_manager.update_post(post_id, update)
                 if post:
@@ -762,19 +757,19 @@ class BulkOperationsManager:
                     results['failed'].append({'id': post_id, 'error': 'Post not found'})
             except Exception as e:
                 results['failed'].append({'id': post_id, 'error': str(e)})
-        
+
         return results
-    
+
     def bulk_delete_posts(self, user_id: str, post_ids: List[str]) -> Dict:
         """Delete multiple posts at once"""
         if not self.enabled:
             return {'error': 'Bulk operations not enabled'}
-        
+
         results = {
             'successful': [],
             'failed': []
         }
-        
+
         for post_id in post_ids:
             try:
                 success = self.db_manager.delete_post(post_id)
@@ -784,7 +779,7 @@ class BulkOperationsManager:
                     results['failed'].append({'id': post_id, 'error': 'Not found'})
             except Exception as e:
                 results['failed'].append({'id': post_id, 'error': str(e)})
-        
+
         return results
 
 
@@ -792,22 +787,22 @@ class BulkOperationsManager:
 
 class RetryManager:
     """Handles error recovery and retry logic for failed operations"""
-    
+
     def __init__(self):
         self.max_retries = 3
         self.base_delay = 1  # seconds
         self.max_delay = 60  # seconds
         self._retry_cache = {}  # Cache retry attempts to avoid duplicate retries
-    
+
     def retry_with_backoff(self, func: Callable, *args, **kwargs) -> Dict:
         """Retry a function with exponential backoff (non-blocking for web requests)
-        
+
         Note: This implementation removes blocking time.sleep() to prevent freezing Flask threads.
         For production use with proper delayed retries, implement a task queue like Celery or RQ.
         Current behavior: Immediate retries which may not be ideal for rate-limited APIs.
         """
         last_exception = None
-        
+
         for attempt in range(self.max_retries):
             try:
                 return func(*args, **kwargs)
@@ -821,13 +816,13 @@ class RetryManager:
                     # For production, use task queue (Celery/RQ) for proper async retries with delays
                 else:
                     logger.error(f"All {self.max_retries} attempts failed: {e}")
-        
+
         return {
             'error': f'Operation failed after {self.max_retries} attempts',
             'last_error': str(last_exception),
             'retryable': self._is_retryable(last_exception)
         }
-    
+
     def _is_retryable(self, exception: Exception) -> bool:
         """Determine if an exception is retryable"""
         retryable_errors = [
@@ -840,30 +835,30 @@ class RetryManager:
             '503',
             '504'
         ]
-        
+
         error_str = str(exception).lower()
         return any(err in error_str for err in retryable_errors)
-    
+
     def retry_failed_posts(self, user_id: str) -> Dict:
         """Retry all failed posts for a user with optimized batch update"""
         if not DB_ENABLED:
             return {'error': 'Retry not enabled'}
-        
+
         results = {
             'retried': [],
             'still_failed': []
         }
-        
+
         with db_session_scope() as session:
             # Use more efficient bulk update instead of updating one by one
             failed_posts = session.query(Post).filter_by(
                 user_id=user_id,
                 status=PostStatus.FAILED
             ).all()
-            
+
             # Collect IDs for batch update
             post_ids_to_retry = []
-            
+
             for post in failed_posts:
                 try:
                     # Validate post can be retried
@@ -874,7 +869,7 @@ class RetryManager:
                         results['still_failed'].append({'id': post.id, 'error': 'Not retryable'})
                 except Exception as e:
                     results['still_failed'].append({'id': post.id, 'error': str(e)})
-            
+
             # Perform batch update for all retryable posts
             if post_ids_to_retry:
                 # Use 'evaluate' for better performance with bulk updates
@@ -885,7 +880,7 @@ class RetryManager:
                     synchronize_session='evaluate'  # Better performance than 'fetch'
                 )
                 session.commit()
-        
+
         return results
 
 

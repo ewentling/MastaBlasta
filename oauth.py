@@ -32,34 +32,34 @@ GOOGLE_REDIRECT_URI = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:33766/a
 
 class TwitterOAuth:
     """Twitter OAuth 2.0 PKCE implementation"""
-    
+
     AUTHORIZE_URL = 'https://twitter.com/i/oauth2/authorize'
     TOKEN_URL = 'https://api.twitter.com/2/oauth2/token'
     SCOPES = ['tweet.read', 'tweet.write', 'users.read', 'offline.access']
-    
+
     @classmethod
     def get_authorization_url(cls, state: str) -> Dict[str, str]:
         """Generate authorization URL with PKCE"""
         code_verifier = secrets.token_urlsafe(32)
-        
+
         oauth = OAuth2Session(
             TWITTER_CLIENT_ID,
             redirect_uri=TWITTER_REDIRECT_URI,
             scope=cls.SCOPES
         )
-        
+
         authorization_url, state = oauth.authorization_url(
             cls.AUTHORIZE_URL,
             code_challenge=code_verifier,
             code_challenge_method='plain'
         )
-        
+
         return {
             'authorization_url': authorization_url,
             'state': state,
             'code_verifier': code_verifier
         }
-    
+
     @classmethod
     def exchange_code_for_token(cls, code: str, code_verifier: str) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access token"""
@@ -71,10 +71,10 @@ class TwitterOAuth:
                 'code_verifier': code_verifier,
                 'client_id': TWITTER_CLIENT_ID
             }
-            
+
             response = requests.post(cls.TOKEN_URL, data=data)
             response.raise_for_status()
-            
+
             token_data = response.json()
             return {
                 'access_token': token_data['access_token'],
@@ -84,17 +84,17 @@ class TwitterOAuth:
         except Exception as e:
             logger.error(f"Twitter token exchange failed: {e}")
             return None
-    
+
     @classmethod
     def post_tweet(cls, access_token: str, content: str, media_ids: list = None) -> Optional[Dict[str, Any]]:
         """Post a tweet using Twitter API v2"""
         try:
             client = tweepy.Client(bearer_token=access_token)
-            
+
             tweet_data = {'text': content}
             if media_ids:
                 tweet_data['media'] = {'media_ids': media_ids}
-            
+
             response = client.create_tweet(**tweet_data)
             return {'id': response.data['id'], 'text': response.data['text']}
         except Exception as e:
@@ -104,12 +104,12 @@ class TwitterOAuth:
 
 class MetaOAuth:
     """Meta (Facebook/Instagram) OAuth implementation"""
-    
+
     AUTHORIZE_URL = 'https://www.facebook.com/v18.0/dialog/oauth'
     TOKEN_URL = 'https://graph.facebook.com/v18.0/oauth/access_token'
     GRAPH_API_URL = 'https://graph.facebook.com/v18.0'
     SCOPES = ['pages_manage_posts', 'pages_read_engagement', 'instagram_basic', 'instagram_content_publish']
-    
+
     @classmethod
     def get_authorization_url(cls, state: str) -> str:
         """Generate Meta OAuth authorization URL"""
@@ -120,10 +120,10 @@ class MetaOAuth:
             'scope': ','.join(cls.SCOPES),
             'response_type': 'code'
         }
-        
+
         query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
         return f"{cls.AUTHORIZE_URL}?{query_string}"
-    
+
     @classmethod
     def exchange_code_for_token(cls, code: str) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access token"""
@@ -134,12 +134,12 @@ class MetaOAuth:
                 'redirect_uri': META_REDIRECT_URI,
                 'code': code
             }
-            
+
             response = requests.get(cls.TOKEN_URL, params=params)
             response.raise_for_status()
-            
+
             token_data = response.json()
-            
+
             # Exchange short-lived token for long-lived token
             long_lived_params = {
                 'grant_type': 'fb_exchange_token',
@@ -147,11 +147,11 @@ class MetaOAuth:
                 'client_secret': META_APP_SECRET,
                 'fb_exchange_token': token_data['access_token']
             }
-            
+
             long_lived_response = requests.get(cls.TOKEN_URL, params=long_lived_params)
             long_lived_response.raise_for_status()
             long_lived_data = long_lived_response.json()
-            
+
             return {
                 'access_token': long_lived_data['access_token'],
                 'expires_at': datetime.now(timezone.utc) + timedelta(seconds=long_lived_data.get('expires_in', 5184000))  # ~60 days
@@ -159,7 +159,7 @@ class MetaOAuth:
         except Exception as e:
             logger.error(f"Meta token exchange failed: {e}")
             return None
-    
+
     @classmethod
     def post_to_facebook_page(cls, access_token: str, page_id: str, content: str, media_url: str = None) -> Optional[Dict[str, Any]]:
         """Post to Facebook Page"""
@@ -169,18 +169,18 @@ class MetaOAuth:
                 'message': content,
                 'access_token': access_token
             }
-            
+
             if media_url:
                 data['link'] = media_url
-            
+
             response = requests.post(url, data=data)
             response.raise_for_status()
-            
+
             return response.json()
         except Exception as e:
             logger.error(f"Facebook post failed: {e}")
             return None
-    
+
     @classmethod
     def post_instagram_media(cls, access_token: str, instagram_account_id: str, image_url: str, caption: str) -> Optional[Dict[str, Any]]:
         """Post to Instagram"""
@@ -192,21 +192,21 @@ class MetaOAuth:
                 'caption': caption,
                 'access_token': access_token
             }
-            
+
             container_response = requests.post(container_url, data=container_data)
             container_response.raise_for_status()
             container_id = container_response.json()['id']
-            
+
             # Step 2: Publish media
             publish_url = f"{cls.GRAPH_API_URL}/{instagram_account_id}/media_publish"
             publish_data = {
                 'creation_id': container_id,
                 'access_token': access_token
             }
-            
+
             publish_response = requests.post(publish_url, data=publish_data)
             publish_response.raise_for_status()
-            
+
             return publish_response.json()
         except Exception as e:
             logger.error(f"Instagram post failed: {e}")
@@ -215,12 +215,12 @@ class MetaOAuth:
 
 class LinkedInOAuth:
     """LinkedIn OAuth 2.0 implementation"""
-    
+
     AUTHORIZE_URL = 'https://www.linkedin.com/oauth/v2/authorization'
     TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken'
     API_URL = 'https://api.linkedin.com/v2'
     SCOPES = ['w_member_social', 'r_liteprofile', 'r_emailaddress']
-    
+
     @classmethod
     def get_authorization_url(cls, state: str) -> str:
         """Generate LinkedIn OAuth authorization URL"""
@@ -231,10 +231,10 @@ class LinkedInOAuth:
             'state': state,
             'scope': ' '.join(cls.SCOPES)
         }
-        
+
         query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
         return f"{cls.AUTHORIZE_URL}?{query_string}"
-    
+
     @classmethod
     def exchange_code_for_token(cls, code: str) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access token"""
@@ -246,10 +246,10 @@ class LinkedInOAuth:
                 'client_id': LINKEDIN_CLIENT_ID,
                 'client_secret': LINKEDIN_CLIENT_SECRET
             }
-            
+
             response = requests.post(cls.TOKEN_URL, data=data)
             response.raise_for_status()
-            
+
             token_data = response.json()
             return {
                 'access_token': token_data['access_token'],
@@ -258,7 +258,7 @@ class LinkedInOAuth:
         except Exception as e:
             logger.error(f"LinkedIn token exchange failed: {e}")
             return None
-    
+
     @classmethod
     def post_share(cls, access_token: str, content: str, visibility: str = 'PUBLIC') -> Optional[Dict[str, Any]]:
         """Post a share on LinkedIn"""
@@ -268,7 +268,7 @@ class LinkedInOAuth:
             me_response = requests.get(me_url, headers={'Authorization': f'Bearer {access_token}'})
             me_response.raise_for_status()
             user_id = me_response.json()['id']
-            
+
             # Create share
             share_url = f"{cls.API_URL}/ugcPosts"
             share_data = {
@@ -286,16 +286,16 @@ class LinkedInOAuth:
                     'com.linkedin.ugc.MemberNetworkVisibility': visibility
                 }
             }
-            
+
             headers = {
                 'Authorization': f'Bearer {access_token}',
                 'Content-Type': 'application/json',
                 'X-Restli-Protocol-Version': '2.0.0'
             }
-            
+
             response = requests.post(share_url, json=share_data, headers=headers)
             response.raise_for_status()
-            
+
             return response.json()
         except Exception as e:
             logger.error(f"LinkedIn post failed: {e}")
@@ -304,12 +304,12 @@ class LinkedInOAuth:
 
 class GoogleOAuth:
     """Google (YouTube) OAuth 2.0 implementation"""
-    
+
     AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
     TOKEN_URL = 'https://oauth2.googleapis.com/token'
     YOUTUBE_API_URL = 'https://www.googleapis.com/youtube/v3'
     SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube']
-    
+
     @classmethod
     def get_authorization_url(cls, state: str) -> str:
         """Generate Google OAuth authorization URL"""
@@ -322,10 +322,10 @@ class GoogleOAuth:
             'prompt': 'consent',
             'state': state
         }
-        
+
         query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
         return f"{cls.AUTHORIZE_URL}?{query_string}"
-    
+
     @classmethod
     def exchange_code_for_token(cls, code: str) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access token"""
@@ -337,10 +337,10 @@ class GoogleOAuth:
                 'redirect_uri': GOOGLE_REDIRECT_URI,
                 'grant_type': 'authorization_code'
             }
-            
+
             response = requests.post(cls.TOKEN_URL, data=data)
             response.raise_for_status()
-            
+
             token_data = response.json()
             return {
                 'access_token': token_data['access_token'],
@@ -372,10 +372,10 @@ def refresh_access_token(platform: str, refresh_token: str) -> Optional[Dict[str
             response = requests.post(GoogleOAuth.TOKEN_URL, data=data)
         else:
             return None
-        
+
         response.raise_for_status()
         token_data = response.json()
-        
+
         return {
             'access_token': token_data['access_token'],
             'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
@@ -387,7 +387,7 @@ def refresh_access_token(platform: str, refresh_token: str) -> Optional[Dict[str
 
 class ConnectionHealthMonitor:
     """Monitor OAuth connection health and status"""
-    
+
     @staticmethod
     def check_connection_status(platform: str, access_token: str, expires_at: datetime) -> Dict[str, Any]:
         """Check if a connection is healthy"""
@@ -399,7 +399,7 @@ class ConnectionHealthMonitor:
             'health_status': 'healthy',
             'warnings': []
         }
-        
+
         # Check expiration
         if expires_at:
             now = datetime.now(timezone.utc)
@@ -411,11 +411,11 @@ class ConnectionHealthMonitor:
                 delta = expires_at - now
                 hours_remaining = delta.total_seconds() / 3600
                 status['expires_in_hours'] = round(hours_remaining, 1)
-                
+
                 if hours_remaining < 24:
                     status['health_status'] = 'expiring_soon'
                     status['warnings'].append(f'Token expires in {round(hours_remaining, 1)} hours')
-        
+
         # Test API connectivity
         try:
             if platform == 'twitter' and access_token:
@@ -443,9 +443,9 @@ class ConnectionHealthMonitor:
             status['health_status'] = 'unhealthy'
             status['warnings'].append(f'API test failed: {str(e)}')
             status['is_connected'] = False
-        
+
         return status
-    
+
     @staticmethod
     def get_reconnection_instructions(platform: str) -> Dict[str, Any]:
         """Get instructions for reconnecting a platform"""
@@ -495,7 +495,7 @@ class ConnectionHealthMonitor:
                 'required_permissions': ['youtube.upload', 'youtube']
             }
         }
-        
+
         return instructions.get(platform, {
             'title': f'Reconnect {platform.title()}',
             'steps': ['Visit Accounts page and click Connect button'],
@@ -505,7 +505,7 @@ class ConnectionHealthMonitor:
 
 class PlatformAccountValidator:
     """Validate platform accounts and permissions"""
-    
+
     @staticmethod
     def validate_account_setup(platform: str, access_token: str) -> Dict[str, Any]:
         """Validate that an account is properly configured"""
@@ -516,7 +516,7 @@ class PlatformAccountValidator:
             'warnings': [],
             'account_info': {}
         }
-        
+
         try:
             if platform == 'twitter':
                 client = tweepy.Client(access_token)  # Use access_token parameter for user auth
@@ -541,7 +541,7 @@ class PlatformAccountValidator:
                     'name': data.get('name'),
                     'pages': [{'id': page['id'], 'name': page['name']} for page in data.get('accounts', [])]
                 }
-                
+
                 if not validation['account_info'].get('pages'):
                     validation['warnings'].append('No Facebook Pages found. You need a Page to post.')
             elif platform == 'linkedin':
@@ -564,7 +564,7 @@ class PlatformAccountValidator:
                 )
                 response.raise_for_status()
                 data = response.json()
-                
+
                 if data.get('items'):
                     channel = data['items'][0]
                     validation['account_info'] = {
@@ -575,13 +575,13 @@ class PlatformAccountValidator:
                 else:
                     validation['errors'].append('No YouTube channel found for this account')
                     validation['is_valid'] = False
-                    
+
         except Exception as e:
             validation['is_valid'] = False
             validation['errors'].append(f'Validation failed: {str(e)}')
-        
+
         return validation
-    
+
     @staticmethod
     def check_permissions(platform: str, access_token: str) -> Dict[str, Any]:
         """Check what permissions are granted for an account"""
@@ -592,7 +592,7 @@ class PlatformAccountValidator:
             'can_post': False,
             'can_read': False
         }
-        
+
         try:
             if platform == 'twitter':
                 # Twitter API v2 doesn't provide a simple scope check, assume granted based on successful connection
@@ -606,11 +606,11 @@ class PlatformAccountValidator:
                 )
                 response.raise_for_status()
                 data = response.json()
-                
+
                 for perm in data.get('data', []):
                     if perm.get('status') == 'granted':
                         permissions['granted_permissions'].append(perm['permission'])
-                
+
                 permissions['can_post'] = 'pages_manage_posts' in permissions['granted_permissions']
                 permissions['can_read'] = 'pages_read_engagement' in permissions['granted_permissions']
             elif platform == 'linkedin':
@@ -628,16 +628,16 @@ class PlatformAccountValidator:
                 permissions['granted_permissions'] = data.get('scope', '').split()
                 permissions['can_post'] = 'https://www.googleapis.com/auth/youtube.upload' in permissions['granted_permissions']
                 permissions['can_read'] = 'https://www.googleapis.com/auth/youtube' in permissions['granted_permissions']
-                
+
         except Exception as e:
             logger.error(f"Permission check failed for {platform}: {e}")
-        
+
         return permissions
 
 
 class QuickConnectWizard:
     """Simplified wizard for quick platform connections"""
-    
+
     PLATFORM_CONFIGS = {
         'twitter': {
             'display_name': 'Twitter/X',
@@ -699,7 +699,7 @@ class QuickConnectWizard:
             'features': ['Create pins', 'Upload images', 'Boards', 'Auto-scheduling']
         }
     }
-    
+
     @classmethod
     def get_quick_connect_options(cls) -> Dict[str, Any]:
         """Get all quick connect platform options"""
@@ -708,17 +708,17 @@ class QuickConnectWizard:
             'recommended_order': ['twitter', 'meta_facebook', 'meta_instagram', 'linkedin', 'google_youtube'],
             'total_platforms': len(cls.PLATFORM_CONFIGS)
         }
-    
+
     @classmethod
     def get_platform_config(cls, platform: str) -> Dict[str, Any]:
         """Get configuration for a specific platform"""
         return cls.PLATFORM_CONFIGS.get(platform, {})
-    
+
     @classmethod
     def generate_connection_url(cls, platform: str, state: str, user_id: str) -> Dict[str, Any]:
         """Generate a connection URL with enhanced user experience"""
         base_platform = platform.split('_')[0] if '_' in platform else platform
-        
+
         result = {
             'platform': platform,
             'display_name': cls.PLATFORM_CONFIGS.get(platform, {}).get('display_name', platform.title()),
@@ -727,7 +727,7 @@ class QuickConnectWizard:
             'authorization_url': None,
             'instructions': None
         }
-        
+
         try:
             if base_platform == 'twitter':
                 auth_data = TwitterOAuth.get_authorization_url(state)
@@ -745,13 +745,13 @@ class QuickConnectWizard:
         except Exception as e:
             result['error'] = f'Failed to generate connection URL: {str(e)}'
             logger.error(f"Connection URL generation failed for {platform}: {e}")
-        
+
         return result
 
 
 class ConnectionTroubleshooter:
     """Diagnose and fix connection issues"""
-    
+
     @staticmethod
     def diagnose_connection_issue(platform: str, error_code: str = None, error_message: str = None) -> Dict[str, Any]:
         """Diagnose connection issues and provide solutions"""
@@ -763,11 +763,11 @@ class ConnectionTroubleshooter:
             'solutions': [],
             'docs_url': None
         }
-        
+
         # Analyze error patterns
         if error_message:
             error_lower = error_message.lower()
-            
+
             if 'invalid_client' in error_lower or 'client_id' in error_lower:
                 diagnosis['issue_type'] = 'invalid_credentials'
                 diagnosis['severity'] = 'high'
@@ -852,7 +852,7 @@ class ConnectionTroubleshooter:
                     'Check platform status page',
                     'Verify no firewall/proxy blocking requests'
                 ]
-        
+
         # Add platform-specific documentation
         docs_urls = {
             'twitter': 'https://developer.twitter.com/en/docs/authentication/oauth-2-0',
@@ -861,9 +861,9 @@ class ConnectionTroubleshooter:
             'google': 'https://developers.google.com/identity/protocols/oauth2'
         }
         diagnosis['docs_url'] = docs_urls.get(platform)
-        
+
         return diagnosis
-    
+
     @staticmethod
     def test_connection_prerequisites(platform: str) -> Dict[str, Any]:
         """Test if all prerequisites are met for connecting a platform"""
@@ -872,7 +872,7 @@ class ConnectionTroubleshooter:
             'ready_to_connect': True,
             'checks': []
         }
-        
+
         # Check environment variables
         env_var_map = {
             'twitter': ('TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET'),
@@ -880,7 +880,7 @@ class ConnectionTroubleshooter:
             'linkedin': ('LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET'),
             'google': ('GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET')
         }
-        
+
         if platform in env_var_map:
             for var in env_var_map[platform]:
                 value = os.getenv(var)
@@ -892,7 +892,7 @@ class ConnectionTroubleshooter:
                 test_results['checks'].append(check)
                 if not value:
                     test_results['ready_to_connect'] = False
-        
+
         # Check redirect URI
         redirect_var_map = {
             'twitter': 'TWITTER_REDIRECT_URI',
@@ -900,7 +900,7 @@ class ConnectionTroubleshooter:
             'linkedin': 'LINKEDIN_REDIRECT_URI',
             'google': 'GOOGLE_REDIRECT_URI'
         }
-        
+
         if platform in redirect_var_map:
             redirect_uri = os.getenv(redirect_var_map[platform])
             check = {
@@ -911,33 +911,33 @@ class ConnectionTroubleshooter:
             test_results['checks'].append(check)
             if not redirect_uri:
                 test_results['ready_to_connect'] = False
-        
+
         return test_results
 
 
 class BulkConnectionManager:
     """Manage multiple platform connections at once"""
-    
+
     @staticmethod
     def prepare_bulk_connection(platforms: list, user_id: str) -> Dict[str, Any]:
         """Prepare to connect multiple platforms in sequence"""
         wizard = QuickConnectWizard()
-        
+
         result = {
             'total_platforms': len(platforms),
             'connection_sequence': [],
             'estimated_time_minutes': 0
         }
-        
+
         for platform in platforms:
             config = wizard.get_platform_config(platform)
             state = secrets.token_urlsafe(32)
-            
+
             connection_data = wizard.generate_connection_url(platform, state, user_id)
             connection_data['config'] = config
-            
+
             result['connection_sequence'].append(connection_data)
-            
+
             # Estimate time
             setup_time_str = config.get('setup_time', '3 minutes')
             # Extract first number from string like "2 minutes" or "10 minutes"
@@ -945,9 +945,9 @@ class BulkConnectionManager:
             match = re.search(r'\d+', setup_time_str)
             minutes = int(match.group()) if match else 3
             result['estimated_time_minutes'] += minutes
-        
+
         return result
-    
+
     @staticmethod
     def get_bulk_connection_progress(user_id: str, platforms: list) -> Dict[str, Any]:
         """Get progress of bulk connection setup"""
@@ -966,16 +966,16 @@ class BulkConnectionManager:
 
 class AutoReconnectionService:
     """Automatically handle token refreshes and reconnections"""
-    
+
     @staticmethod
     def should_refresh_token(expires_at: datetime, refresh_buffer_hours: int = 2) -> bool:
         """Check if token should be refreshed proactively"""
         if not expires_at:
             return False
-        
+
         buffer_time = datetime.now(timezone.utc) + timedelta(hours=refresh_buffer_hours)
         return expires_at <= buffer_time
-    
+
     @staticmethod
     def auto_refresh_if_needed(platform: str, account_data: Dict[str, Any]) -> Dict[str, Any]:
         """Automatically refresh token if needed"""
@@ -985,17 +985,17 @@ class AutoReconnectionService:
             'expires_at': None,
             'error': None
         }
-        
+
         try:
             expires_at = account_data.get('token_expires_at')
             refresh_token = account_data.get('refresh_token')
-            
+
             if not expires_at or not refresh_token:
                 return result
-            
+
             if AutoReconnectionService.should_refresh_token(expires_at):
                 new_token_data = refresh_access_token(platform, refresh_token)
-                
+
                 if new_token_data:
                     result['refreshed'] = True
                     result['new_token'] = new_token_data['access_token']
@@ -1005,16 +1005,16 @@ class AutoReconnectionService:
         except Exception as e:
             result['error'] = str(e)
             logger.error(f"Auto-refresh failed for {platform}: {e}")
-        
+
         return result
-    
+
     @staticmethod
     def schedule_token_refresh_check(account_id: str, platform: str, expires_at: datetime):
         """Schedule a token refresh check (would integrate with task queue)"""
         # This would normally schedule a background task
         # For now, return scheduling info
         check_time = expires_at - timedelta(hours=2)
-        
+
         return {
             'account_id': account_id,
             'platform': platform,

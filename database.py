@@ -22,7 +22,7 @@ try:
         pool_pre_ping=True,  # Verify connections before using
         echo=False  # Set to True for SQL debugging
     )
-    
+
     # Create session factory
     Session = scoped_session(sessionmaker(bind=engine))
     DB_CONNECTION_OK = True

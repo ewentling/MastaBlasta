@@ -6,8 +6,7 @@ import os
 import logging
 import json
 import re
-from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ except ImportError:
 
 class VideoClipperService:
     """Service for analyzing videos and generating viral clips using Gemini AI"""
-    
+
     def __init__(self):
         self.enabled = GEMINI_ENABLED and YT_DLP_ENABLED
         if GEMINI_ENABLED:
@@ -40,18 +39,18 @@ class VideoClipperService:
             else:
                 self.enabled = False
                 logger.warning("⚠ GEMINI_API_KEY or GOOGLE_API_KEY not set. Video clipping features disabled.")
-    
+
     def is_enabled(self) -> bool:
         """Check if video clipper service is enabled"""
         return self.enabled
-    
+
     def get_video_info(self, video_url: str) -> Dict[str, Any]:
         """
         Extract video information from URL
-        
+
         Args:
             video_url: URL of the video (YouTube, Vimeo, etc.)
-            
+
         Returns:
             Dictionary with video metadata
         """
@@ -60,17 +59,17 @@ class VideoClipperService:
                 'success': False,
                 'error': 'yt-dlp not installed. Cannot extract video info.'
             }
-        
+
         try:
             ydl_opts = {
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
             }
-            
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(video_url, download=False)
-                
+
                 return {
                     'success': True,
                     'title': info.get('title', 'Unknown'),
@@ -90,34 +89,34 @@ class VideoClipperService:
                 'success': False,
                 'error': str(e)
             }
-    
+
     def _extract_subtitles(self, info: Dict) -> str:
         """Extract subtitles/captions from video info"""
         try:
             # Try to get automatic captions or subtitles
             subtitles = info.get('subtitles', {})
             auto_captions = info.get('automatic_captions', {})
-            
+
             # Prefer English subtitles
             for lang in ['en', 'en-US', 'en-GB']:
                 if lang in subtitles:
                     return f"Subtitles available in {lang}"
                 if lang in auto_captions:
                     return f"Auto-captions available in {lang}"
-            
+
             return "No subtitles available"
         except Exception as e:
             logger.error(f"Error extracting subtitles: {str(e)}")
             return "Error extracting subtitles"
-    
+
     def analyze_video(self, video_url: str, num_clips: int = 3) -> Dict[str, Any]:
         """
         Analyze video content and identify viral clip opportunities
-        
+
         Args:
             video_url: URL of the video to analyze
             num_clips: Number of clips to generate (default: 3)
-            
+
         Returns:
             Dictionary with analysis results and clip suggestions
         """
@@ -126,22 +125,22 @@ class VideoClipperService:
                 'success': False,
                 'error': 'Video clipper service not enabled. Check API keys and dependencies.'
             }
-        
+
         try:
             # Get video information
             video_info = self.get_video_info(video_url)
             if not video_info.get('success'):
                 return video_info
-            
+
             # Analyze video content with Gemini
             prompt = self._create_analysis_prompt(video_info, num_clips)
-            
+
             response = self.model.generate_content(prompt)
             analysis = response.text
-            
+
             # Parse the analysis results
             clips = self._parse_clip_suggestions(analysis, video_info)
-            
+
             return {
                 'success': True,
                 'video_info': {
@@ -154,19 +153,19 @@ class VideoClipperService:
                 'suggested_clips': clips,
                 'num_clips': len(clips),
             }
-        
+
         except Exception as e:
             logger.error(f"Error analyzing video: {str(e)}")
             return {
                 'success': False,
                 'error': str(e)
             }
-    
+
     def _create_analysis_prompt(self, video_info: Dict, num_clips: int) -> str:
         """Create prompt for Gemini to analyze video and suggest clips"""
         duration_minutes = video_info['duration'] // 60
         duration_seconds = video_info['duration'] % 60
-        
+
         prompt = f"""Analyze this video and identify the {num_clips} best moments for viral social media clips:
 
 Video Title: {video_info['title']}
@@ -179,7 +178,7 @@ Your task:
 1. Identify {num_clips} segments that have the highest viral potential
 2. For each clip, provide:
    - Start time (in seconds)
-   - End time (in seconds) 
+   - End time (in seconds)
    - Clip duration (15-90 seconds recommended)
    - Why this moment is viral-worthy
    - Suggested title/hook
@@ -212,9 +211,9 @@ Format your response as JSON with this structure:
 }}
 
 Provide ONLY the JSON response, no additional text."""
-        
+
         return prompt
-    
+
     def _parse_clip_suggestions(self, analysis: str, video_info: Dict) -> List[Dict[str, Any]]:
         """Parse Gemini's analysis into structured clip suggestions"""
         try:
@@ -223,37 +222,37 @@ Provide ONLY the JSON response, no additional text."""
             if json_match:
                 data = json.loads(json_match.group())
                 clips = data.get('clips', [])
-                
+
                 # Add video metadata to each clip
                 for clip in clips:
                     clip['video_title'] = video_info['title']
                     clip['video_url'] = video_info['url']
                     clip['thumbnail'] = video_info['thumbnail']
-                    
+
                     # Format timestamps
                     clip['start_timestamp'] = self._format_timestamp(clip['start_time'])
                     clip['end_timestamp'] = self._format_timestamp(clip['end_time'])
-                
+
                 return clips
-            
+
             # Fallback: try to parse manually if JSON extraction fails
             return self._manual_parse_clips(analysis, video_info)
-        
+
         except Exception as e:
             logger.error(f"Error parsing clip suggestions: {str(e)}")
             return []
-    
+
     def _manual_parse_clips(self, analysis: str, video_info: Dict) -> List[Dict[str, Any]]:
         """Manually parse clip information if JSON parsing fails"""
         clips = []
-        
+
         # Simple pattern matching for clip information
         lines = analysis.split('\n')
         current_clip = {}
-        
+
         for line in lines:
             line = line.strip()
-            
+
             # Look for time patterns
             time_match = re.search(r'(\d+):(\d+)\s*-\s*(\d+):(\d+)', line)
             if time_match:
@@ -261,47 +260,47 @@ Provide ONLY the JSON response, no additional text."""
                 current_clip['start_time'] = start_min * 60 + start_sec
                 current_clip['end_time'] = end_min * 60 + end_sec
                 current_clip['duration'] = current_clip['end_time'] - current_clip['start_time']
-            
+
             # Look for engagement scores
             score_match = re.search(r'score[:\s]+(\d+)', line, re.IGNORECASE)
             if score_match:
                 current_clip['engagement_score'] = int(score_match.group(1))
-            
+
             # If we have enough info, add clip
             if 'start_time' in current_clip and 'end_time' in current_clip:
                 if 'title' not in current_clip:
                     current_clip['title'] = f"Clip {len(clips) + 1}"
                 if 'engagement_score' not in current_clip:
                     current_clip['engagement_score'] = 70
-                
+
                 current_clip['video_title'] = video_info['title']
                 current_clip['video_url'] = video_info['url']
                 current_clip['thumbnail'] = video_info['thumbnail']
                 current_clip['platforms'] = ['tiktok', 'instagram', 'youtube_shorts']
-                
+
                 clips.append(current_clip)
                 current_clip = {}
-        
+
         return clips
-    
+
     def _format_timestamp(self, seconds: int) -> str:
         """Format seconds to MM:SS or HH:MM:SS"""
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
         secs = seconds % 60
-        
+
         if hours > 0:
             return f"{hours:02d}:{minutes:02d}:{secs:02d}"
         return f"{minutes:02d}:{secs:02d}"
-    
+
     def generate_clip_metadata(self, clip: Dict[str, Any], platform: str = 'instagram') -> Dict[str, Any]:
         """
         Generate optimized metadata for a clip based on platform
-        
+
         Args:
             clip: Clip data dictionary
             platform: Target platform (instagram, tiktok, youtube_shorts, etc.)
-            
+
         Returns:
             Dictionary with optimized metadata
         """
@@ -310,7 +309,7 @@ Provide ONLY the JSON response, no additional text."""
                 'success': False,
                 'error': 'Video clipper service not enabled'
             }
-        
+
         try:
             prompt = f"""Generate optimized social media metadata for this video clip:
 
@@ -339,10 +338,10 @@ Format as JSON:
 }}
 
 Provide ONLY the JSON response."""
-            
+
             response = self.model.generate_content(prompt)
             result = response.text
-            
+
             # Parse JSON response
             json_match = re.search(r'\{.*\}', result, re.DOTALL)
             if json_match:
@@ -350,40 +349,40 @@ Provide ONLY the JSON response."""
                 metadata['success'] = True
                 metadata['platform'] = platform
                 return metadata
-            
+
             return {
                 'success': False,
                 'error': 'Failed to parse metadata response'
             }
-        
+
         except Exception as e:
             logger.error(f"Error generating clip metadata: {str(e)}")
             return {
                 'success': False,
                 'error': str(e)
             }
-    
+
     def get_clip_download_info(self, video_url: str, start_time: int, end_time: int) -> Dict[str, Any]:
         """
         Get download instructions for a specific clip segment
-        
+
         Args:
             video_url: Original video URL
             start_time: Clip start time in seconds
             end_time: Clip end time in seconds
-            
+
         Returns:
             Dictionary with download information and ffmpeg command
         """
         try:
             duration = end_time - start_time
-            
+
             # Generate ffmpeg command for clip extraction
             ffmpeg_command = f"""ffmpeg -ss {start_time} -i "{video_url}" -t {duration} \\
   -c:v libx264 -c:a aac -b:v 3000k -b:a 192k \\
   -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2" \\
   -movflags +faststart output_clip.mp4"""
-            
+
             return {
                 'success': True,
                 'video_url': video_url,

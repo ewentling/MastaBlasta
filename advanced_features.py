@@ -4,7 +4,6 @@ Integrates TTS providers, social listening, and AI training into the main app
 """
 from flask import Blueprint, request, jsonify
 import logging
-from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ def list_tts_providers():
     """List available TTS providers and their status"""
     if not TTS_AVAILABLE:
         return jsonify({'error': 'TTS providers not available'}), 503
-    
+
     providers_status = {}
     for name, provider in tts_manager.providers.items():
         providers_status[name] = {
@@ -49,7 +48,7 @@ def list_tts_providers():
             'configured': provider.is_configured(),
             'description': f"{name.title()} Text-to-Speech"
         }
-    
+
     return jsonify({
         'providers': providers_status,
         'default_provider': 'elevenlabs',
@@ -62,14 +61,14 @@ def synthesize_speech():
     """Synthesize speech from text"""
     if not TTS_AVAILABLE:
         return jsonify({'error': 'TTS providers not available'}), 503
-    
+
     data = request.json
     text = data.get('text')
     provider = data.get('provider', 'elevenlabs')
-    
+
     if not text:
         return jsonify({'error': 'Text is required'}), 400
-    
+
     try:
         result = tts_manager.synthesize(
             text=text,
@@ -78,7 +77,7 @@ def synthesize_speech():
             voice_name=data.get('voice_name'),
             language=data.get('language', 'en-US')
         )
-        
+
         return jsonify({
             'success': True,
             'audio_data': result['audio_data'],
@@ -96,7 +95,7 @@ def get_tts_voices(provider):
     """Get available voices for a TTS provider"""
     if not TTS_AVAILABLE:
         return jsonify({'error': 'TTS providers not available'}), 503
-    
+
     try:
         voices = tts_manager.get_available_voices(provider)
         return jsonify({
@@ -115,16 +114,16 @@ def create_monitor():
     """Create a new social listening monitor"""
     if not SOCIAL_LISTENING_AVAILABLE:
         return jsonify({'error': 'Social listening not available'}), 503
-    
+
     data = request.json
     monitor_id = data.get('monitor_id')
     keywords = data.get('keywords', [])
     platforms = data.get('platforms', ['twitter', 'reddit'])
     filters = data.get('filters', {})
-    
+
     if not monitor_id or not keywords:
         return jsonify({'error': 'monitor_id and keywords are required'}), 400
-    
+
     try:
         monitor = social_listening.create_monitor(
             monitor_id=monitor_id,
@@ -132,7 +131,7 @@ def create_monitor():
             platforms=platforms,
             filters=filters
         )
-        
+
         return jsonify({
             'success': True,
             'monitor': monitor
@@ -146,12 +145,12 @@ def scan_monitor(monitor_id):
     """Scan for mentions matching monitor criteria"""
     if not SOCIAL_LISTENING_AVAILABLE:
         return jsonify({'error': 'Social listening not available'}), 503
-    
+
     limit = int(request.args.get('limit', 100))
-    
+
     try:
         mentions = social_listening.scan_mentions(monitor_id, limit=limit)
-        
+
         return jsonify({
             'monitor_id': monitor_id,
             'mentions': mentions,
@@ -166,12 +165,12 @@ def get_sentiment_analysis(monitor_id):
     """Get sentiment analysis for a monitor"""
     if not SOCIAL_LISTENING_AVAILABLE:
         return jsonify({'error': 'Social listening not available'}), 503
-    
+
     time_range = request.args.get('time_range', '24h')
-    
+
     try:
         analysis = social_listening.get_sentiment_analysis(monitor_id, time_range)
-        
+
         return jsonify({
             'success': True,
             'analysis': analysis
@@ -185,12 +184,12 @@ def identify_influencers(monitor_id):
     """Identify influencers for a monitor"""
     if not SOCIAL_LISTENING_AVAILABLE:
         return jsonify({'error': 'Social listening not available'}), 503
-    
+
     min_followers = int(request.args.get('min_followers', 10000))
-    
+
     try:
         influencers = social_listening.identify_influencers(monitor_id, min_followers)
-        
+
         return jsonify({
             'monitor_id': monitor_id,
             'influencers': influencers,
@@ -205,16 +204,16 @@ def get_competitive_intelligence():
     """Analyze competitor social media activity"""
     if not SOCIAL_LISTENING_AVAILABLE:
         return jsonify({'error': 'Social listening not available'}), 503
-    
+
     data = request.json
     competitors = data.get('competitors', [])
-    
+
     if not competitors:
         return jsonify({'error': 'competitors list is required'}), 400
-    
+
     try:
         intelligence = social_listening.get_competitive_intelligence(competitors)
-        
+
         return jsonify({
             'success': True,
             'competitors': intelligence
@@ -228,12 +227,12 @@ def get_alerts():
     """Get active alerts"""
     if not SOCIAL_LISTENING_AVAILABLE:
         return jsonify({'error': 'Social listening not available'}), 503
-    
+
     severity = request.args.get('severity')
-    
+
     try:
         alerts = social_listening.get_alerts(severity)
-        
+
         return jsonify({
             'alerts': alerts,
             'count': len(alerts)
@@ -249,10 +248,10 @@ def list_trained_models():
     """List all trained models"""
     if not AI_TRAINING_AVAILABLE:
         return jsonify({'error': 'AI training not available'}), 503
-    
+
     try:
         models = ai_trainer.list_models()
-        
+
         return jsonify({
             'models': models,
             'count': len(models)
@@ -266,17 +265,17 @@ def train_engagement_predictor():
     """Train engagement prediction model"""
     if not AI_TRAINING_AVAILABLE:
         return jsonify({'error': 'AI training not available'}), 503
-    
+
     data = request.json
     training_data = data.get('training_data', [])
     target_metric = data.get('target_metric', 'engagement')
-    
+
     if len(training_data) < 10:
         return jsonify({'error': 'Need at least 10 training samples'}), 400
-    
+
     try:
         results = ai_trainer.train_engagement_predictor(training_data, target_metric)
-        
+
         return jsonify({
             'success': True,
             'results': results
@@ -290,16 +289,16 @@ def train_content_classifier():
     """Train content classification model"""
     if not AI_TRAINING_AVAILABLE:
         return jsonify({'error': 'AI training not available'}), 503
-    
+
     data = request.json
     training_data = data.get('training_data', [])
-    
+
     if len(training_data) < 20:
         return jsonify({'error': 'Need at least 20 training samples'}), 400
-    
+
     try:
         results = ai_trainer.train_content_classifier(training_data)
-        
+
         return jsonify({
             'success': True,
             'results': results
@@ -313,16 +312,16 @@ def train_optimal_time():
     """Train optimal posting time model"""
     if not AI_TRAINING_AVAILABLE:
         return jsonify({'error': 'AI training not available'}), 503
-    
+
     data = request.json
     training_data = data.get('training_data', [])
-    
+
     if len(training_data) < 50:
         return jsonify({'error': 'Need at least 50 training samples'}), 400
-    
+
     try:
         results = ai_trainer.train_optimal_time_predictor(training_data)
-        
+
         return jsonify({
             'success': True,
             'results': results
@@ -336,17 +335,17 @@ def predict_engagement():
     """Predict engagement for content"""
     if not AI_TRAINING_AVAILABLE:
         return jsonify({'error': 'AI training not available'}), 503
-    
+
     data = request.json
     content = data.get('content', '')
     features = data.get('features', {})
-    
+
     if not content:
         return jsonify({'error': 'content is required'}), 400
-    
+
     try:
         prediction = ai_trainer.predict_engagement(content, features)
-        
+
         return jsonify({
             'success': True,
             'predicted_engagement': prediction,
@@ -361,16 +360,16 @@ def predict_content_performance():
     """Classify content performance potential"""
     if not AI_TRAINING_AVAILABLE:
         return jsonify({'error': 'AI training not available'}), 503
-    
+
     data = request.json
     content = data.get('content', '')
-    
+
     if not content:
         return jsonify({'error': 'content is required'}), 400
-    
+
     try:
         classification = ai_trainer.classify_content(content)
-        
+
         return jsonify({
             'success': True,
             'classification': classification
@@ -384,12 +383,12 @@ def get_optimal_times():
     """Get optimal posting times"""
     if not AI_TRAINING_AVAILABLE:
         return jsonify({'error': 'AI training not available'}), 503
-    
+
     is_weekday = request.args.get('is_weekday', 'true').lower() == 'true'
-    
+
     try:
         times = ai_trainer.get_optimal_posting_time(is_weekday)
-        
+
         return jsonify({
             'success': True,
             'is_weekday': is_weekday,
@@ -404,10 +403,10 @@ def get_training_history():
     """Get training history"""
     if not AI_TRAINING_AVAILABLE:
         return jsonify({'error': 'AI training not available'}), 503
-    
+
     try:
         history = ai_trainer.get_training_history()
-        
+
         return jsonify({
             'history': history,
             'count': len(history)
