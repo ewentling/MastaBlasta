@@ -7149,131 +7149,361 @@ def list_bulk_imports():
 
 # ==================== Google Calendar Integration ====================
 
-@app.route('/api/google-calendar/auth', methods=['POST'])
-def google_calendar_auth():
-    """Exchange authorization code for tokens"""
-    # data = request.json  # Currently unused in mock implementation
-    # code = data.get('code')  # Currently unused in mock implementation
+@app.route('/api/google-calendar/authorize', methods=['GET'])
+def google_calendar_authorize():
+    """Get Google Calendar OAuth authorization URL"""
+    try:
+        from oauth import GoogleCalendarOAuth
+        from database import db_session_scope
+        from models import User
+        from auth import get_current_user
+        import secrets
+        
+        # Get current user from token
+        with db_session_scope() as session:
+            user = get_current_user(session)
+            if not user:
+                return jsonify({'error': 'Unauthorized'}), 401
+            
+            # Generate state for CSRF protection
+            state = secrets.token_urlsafe(32)
+            
+            # Store state in session or temporary storage
+            # For simplicity, we'll include user_id in state
+            state_data = f"{user['id']}:{state}"
+            
+            auth_url = GoogleCalendarOAuth.get_authorization_url(user['id'], state_data)
+            
+            return jsonify({
+                'authorization_url': auth_url,
+                'state': state_data
+            })
+    except Exception as e:
+        logger.error(f"Google Calendar authorization error: {e}")
+        return jsonify({'error': str(e)}), 500
 
-    # TODO: In production, exchange code for tokens with Google OAuth2
-    # This is a simplified mock response
-    return jsonify({
-        'access_token': f'mock_access_token_{uuid.uuid4()}',
-        'refresh_token': f'mock_refresh_token_{uuid.uuid4()}',
-        'expires_in': 3600
-    })
+
+@app.route('/api/google-calendar/callback', methods=['GET'])
+def google_calendar_callback():
+    """Handle Google Calendar OAuth callback"""
+    try:
+        from oauth import GoogleCalendarOAuth
+        from database import db_session_scope
+        from models import GoogleService
+        from auth import encrypt_token
+        import uuid
+        
+        code = request.args.get('code')
+        state = request.args.get('state')
+        
+        if not code:
+            return jsonify({'error': 'No authorization code provided'}), 400
+        
+        # Extract user_id from state
+        user_id = state.split(':')[0] if state else None
+        if not user_id:
+            return jsonify({'error': 'Invalid state'}), 400
+        
+        # Exchange code for tokens
+        token_data = GoogleCalendarOAuth.exchange_code_for_token(code)
+        if not token_data:
+            return jsonify({'error': 'Failed to exchange code for tokens'}), 500
+        
+        # Store tokens in database
+        with db_session_scope() as session:
+            # Check if service already exists
+            service = session.query(GoogleService).filter_by(
+                user_id=user_id,
+                service_type='calendar'
+            ).first()
+            
+            if service:
+                # Update existing service
+                service.access_token = encrypt_token(token_data['access_token'])
+                if token_data.get('refresh_token'):
+                    service.refresh_token = encrypt_token(token_data['refresh_token'])
+                service.token_expires_at = token_data['expires_at']
+                service.is_active = True
+            else:
+                # Create new service
+                service = GoogleService(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    service_type='calendar',
+                    access_token=encrypt_token(token_data['access_token']),
+                    refresh_token=encrypt_token(token_data.get('refresh_token', '')),
+                    token_expires_at=token_data['expires_at'],
+                    is_active=True,
+                    service_metadata={'calendar_id': 'primary'}
+                )
+                session.add(service)
+            
+            session.commit()
+        
+        # Redirect to frontend with success message
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        return f"""
+        <html>
+            <script>
+                window.opener.postMessage({{ type: 'calendar_auth_success' }}, '{frontend_url}');
+                window.close();
+            </script>
+        </html>
+        """
+    except Exception as e:
+        logger.error(f"Google Calendar callback error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/google-calendar/sync', methods=['POST'])
 def sync_google_calendar():
     """Sync posts with Google Calendar"""
-    data = request.json
-    # access_token = data.get('access_token')  # Currently unused in mock implementation
-    calendar_id = data.get('calendar_id', 'primary')
-    events = data.get('events', [])
-
-    # TODO: In production, use Google Calendar API to create/update events
-    # This is a mock implementation
-    logger.info(f"Syncing {len(events)} events to Google Calendar {calendar_id}")
-
-    return jsonify({
-        'success': True,
-        'synced_count': len(events),
-        'message': f'Successfully synced {len(events)} events to Google Calendar'
-    })
+    try:
+        from oauth import GoogleCalendarOAuth
+        from database import db_session_scope
+        from models import GoogleService
+        from auth import get_current_user, decrypt_token
+        
+        data = request.json
+        events = data.get('events', [])
+        
+        with db_session_scope() as session:
+            user = get_current_user(session)
+            if not user:
+                return jsonify({'error': 'Unauthorized'}), 401
+            
+            # Get Calendar service
+            service = session.query(GoogleService).filter_by(
+                user_id=user['id'],
+                service_type='calendar',
+                is_active=True
+            ).first()
+            
+            if not service:
+                return jsonify({'error': 'Google Calendar not connected'}), 400
+            
+            # Decrypt access token
+            access_token = decrypt_token(service.access_token)
+            calendar_id = service.service_metadata.get('calendar_id', 'primary')
+            
+            synced_count = 0
+            errors = []
+            
+            # Sync each event
+            for event in events:
+                try:
+                    event_data = {
+                        'summary': event.get('title', 'Social Media Post'),
+                        'description': event.get('description', ''),
+                        'start': {
+                            'dateTime': event.get('start'),
+                            'timeZone': 'UTC'
+                        },
+                        'end': {
+                            'dateTime': event.get('end'),
+                            'timeZone': 'UTC'
+                        }
+                    }
+                    
+                    if event.get('event_id'):
+                        # Update existing event
+                        result = GoogleCalendarOAuth.update_calendar_event(
+                            access_token,
+                            calendar_id,
+                            event['event_id'],
+                            event_data
+                        )
+                    else:
+                        # Create new event
+                        result = GoogleCalendarOAuth.create_calendar_event(
+                            access_token,
+                            calendar_id,
+                            event_data
+                        )
+                    
+                    if result:
+                        synced_count += 1
+                    else:
+                        errors.append(f"Failed to sync event: {event.get('title')}")
+                except Exception as e:
+                    errors.append(f"Error syncing event: {str(e)}")
+            
+            return jsonify({
+                'success': True,
+                'synced_count': synced_count,
+                'total_events': len(events),
+                'errors': errors,
+                'message': f'Successfully synced {synced_count} of {len(events)} events'
+            })
+    except Exception as e:
+        logger.error(f"Google Calendar sync error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 # ==================== Google Drive Integration ====================
 
-@app.route('/api/google-drive/auth', methods=['POST'])
-def google_drive_auth():
-    """Exchange authorization code for tokens"""
-    # data = request.json  # Currently unused in mock implementation
-    # code = data.get('code')  # Currently unused in mock implementation
+@app.route('/api/google-drive/authorize', methods=['GET'])
+def google_drive_authorize():
+    """Get Google Drive OAuth authorization URL"""
+    try:
+        from oauth import GoogleDriveOAuth
+        from database import db_session_scope
+        from models import User
+        from auth import get_current_user
+        import secrets
+        
+        # Get current user from token
+        with db_session_scope() as session:
+            user = get_current_user(session)
+            if not user:
+                return jsonify({'error': 'Unauthorized'}), 401
+            
+            # Generate state for CSRF protection
+            state = secrets.token_urlsafe(32)
+            
+            # Store state in session or temporary storage
+            state_data = f"{user['id']}:{state}"
+            
+            auth_url = GoogleDriveOAuth.get_authorization_url(user['id'], state_data)
+            
+            return jsonify({
+                'authorization_url': auth_url,
+                'state': state_data
+            })
+    except Exception as e:
+        logger.error(f"Google Drive authorization error: {e}")
+        return jsonify({'error': str(e)}), 500
 
-    # TODO: In production, exchange code for tokens with Google OAuth2
-    # This is a simplified mock response
-    return jsonify({
-        'access_token': f'mock_drive_access_token_{uuid.uuid4()}',
-        'refresh_token': f'mock_drive_refresh_token_{uuid.uuid4()}',
-        'expires_in': 3600
-    })
+
+@app.route('/api/google-drive/callback', methods=['GET'])
+def google_drive_callback():
+    """Handle Google Drive OAuth callback"""
+    try:
+        from oauth import GoogleDriveOAuth
+        from database import db_session_scope
+        from models import GoogleService
+        from auth import encrypt_token
+        import uuid
+        
+        code = request.args.get('code')
+        state = request.args.get('state')
+        
+        if not code:
+            return jsonify({'error': 'No authorization code provided'}), 400
+        
+        # Extract user_id from state
+        user_id = state.split(':')[0] if state else None
+        if not user_id:
+            return jsonify({'error': 'Invalid state'}), 400
+        
+        # Exchange code for tokens
+        token_data = GoogleDriveOAuth.exchange_code_for_token(code)
+        if not token_data:
+            return jsonify({'error': 'Failed to exchange code for tokens'}), 500
+        
+        # Store tokens in database
+        with db_session_scope() as session:
+            # Check if service already exists
+            service = session.query(GoogleService).filter_by(
+                user_id=user_id,
+                service_type='drive'
+            ).first()
+            
+            if service:
+                # Update existing service
+                service.access_token = encrypt_token(token_data['access_token'])
+                if token_data.get('refresh_token'):
+                    service.refresh_token = encrypt_token(token_data['refresh_token'])
+                service.token_expires_at = token_data['expires_at']
+                service.is_active = True
+            else:
+                # Create new service
+                service = GoogleService(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    service_type='drive',
+                    access_token=encrypt_token(token_data['access_token']),
+                    refresh_token=encrypt_token(token_data.get('refresh_token', '')),
+                    token_expires_at=token_data['expires_at'],
+                    is_active=True,
+                    service_metadata={}
+                )
+                session.add(service)
+            
+            session.commit()
+        
+        # Redirect to frontend with success message
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        return f"""
+        <html>
+            <script>
+                window.opener.postMessage({{ type: 'drive_auth_success' }}, '{frontend_url}');
+                window.close();
+            </script>
+        </html>
+        """
+    except Exception as e:
+        logger.error(f"Google Drive callback error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/google-drive/list', methods=['POST'])
 def list_drive_files():
     """List files from Google Drive folder"""
-    data = request.json
-    # access_token = data.get('access_token')  # Currently unused in mock implementation
-    folder_id = data.get('folder_id', 'root')
-
-    # TODO: In production, use Google Drive API to list files
-    # This is a mock implementation with sample files
-    import random
-
-    mock_files = [
-        {
-            'id': str(uuid.uuid4()),
-            'name': 'Campaign Banner.jpg',
-            'mimeType': 'image/jpeg',
-            'type': 'file',
-            'size': '2458624',
-            'createdTime': '2026-01-01T12:00:00Z',
-            'thumbnailLink': 'https://via.placeholder.com/150',
-            'webViewLink': 'https://drive.google.com/file/d/sample'
-        },
-        {
-            'id': str(uuid.uuid4()),
-            'name': 'Product Video.mp4',
-            'mimeType': 'video/mp4',
-            'type': 'file',
-            'size': '15728640',
-            'createdTime': '2026-01-02T14:30:00Z',
-            'webViewLink': 'https://drive.google.com/file/d/sample'
-        },
-        {
-            'id': str(uuid.uuid4()),
-            'name': 'Press Release.pdf',
-            'mimeType': 'application/pdf',
-            'type': 'file',
-            'size': '524288',
-            'createdTime': '2026-01-03T09:15:00Z',
-            'webViewLink': 'https://drive.google.com/file/d/sample'
-        },
-        {
-            'id': str(uuid.uuid4()),
-            'name': 'Templates',
-            'mimeType': 'application/vnd.google-apps.folder',
-            'type': 'folder',
-            'createdTime': '2026-01-04T10:00:00Z',
-            'webViewLink': 'https://drive.google.com/drive/folders/sample'
-        },
-        {
-            'id': str(uuid.uuid4()),
-            'name': 'Social Media Images',
-            'mimeType': 'application/vnd.google-apps.folder',
-            'type': 'folder',
-            'createdTime': '2026-01-05T11:00:00Z',
-            'webViewLink': 'https://drive.google.com/drive/folders/sample'
-        }
-    ]
-
-    # Add more random image files
-    for i in range(5):
-        mock_files.append({
-            'id': str(uuid.uuid4()),
-            'name': f'Image_{i + 1}.png',
-            'mimeType': 'image/png',
-            'type': 'file',
-            'size': str(random.randint(500000, 3000000)),
-            'createdTime': f'2026-01-0{i + 1}T15:00:00Z',
-            'thumbnailLink': 'https://via.placeholder.com/150',
-            'webViewLink': 'https://drive.google.com/file/d/sample'
-        })
-
-    logger.info(f"Listing files from Google Drive folder {folder_id}")
-
-    return jsonify(mock_files)
+    try:
+        from oauth import GoogleDriveOAuth
+        from database import db_session_scope
+        from models import GoogleService
+        from auth import get_current_user, decrypt_token
+        
+        data = request.json
+        folder_id = data.get('folder_id', 'root')
+        page_size = data.get('page_size', 100)
+        
+        with db_session_scope() as session:
+            user = get_current_user(session)
+            if not user:
+                return jsonify({'error': 'Unauthorized'}), 401
+            
+            # Get Drive service
+            service = session.query(GoogleService).filter_by(
+                user_id=user['id'],
+                service_type='drive',
+                is_active=True
+            ).first()
+            
+            if not service:
+                return jsonify({'error': 'Google Drive not connected'}), 400
+            
+            # Decrypt access token
+            access_token = decrypt_token(service.access_token)
+            
+            # List files from Drive
+            result = GoogleDriveOAuth.list_files(access_token, folder_id, page_size)
+            
+            if not result:
+                return jsonify({'error': 'Failed to list files from Drive'}), 500
+            
+            # Transform response to match frontend format
+            files = []
+            for file in result.get('files', []):
+                files.append({
+                    'id': file['id'],
+                    'name': file['name'],
+                    'mimeType': file['mimeType'],
+                    'type': 'folder' if file['mimeType'] == 'application/vnd.google-apps.folder' else 'file',
+                    'size': file.get('size', '0'),
+                    'createdTime': file['createdTime'],
+                    'thumbnailLink': file.get('thumbnailLink', ''),
+                    'webViewLink': file.get('webViewLink', '')
+                })
+            
+            logger.info(f"Listed {len(files)} files from Google Drive folder {folder_id}")
+            
+            return jsonify(files)
+    except Exception as e:
+        logger.error(f"Google Drive list error: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 # ==================== Templates API ====================
