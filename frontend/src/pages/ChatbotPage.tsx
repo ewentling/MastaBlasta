@@ -64,7 +64,10 @@ export default function ChatbotPage() {
                 platform: selectedPlatform,
                 tone: contentTone
               })
-            }).then(r => r.json()),
+            }).then(async r => {
+              if (!r.ok) throw new Error(`HTTP ${r.status}`);
+              return r.json();
+            }),
             fetch(`${API_BASE_URL}/api/ai/generate-caption`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -73,7 +76,10 @@ export default function ChatbotPage() {
                 platform: selectedPlatform,
                 tone: contentTone === 'professional' ? 'casual' : 'professional'
               })
-            }).then(r => r.json()),
+            }).then(async r => {
+              if (!r.ok) throw new Error(`HTTP ${r.status}`);
+              return r.json();
+            }),
             fetch(`${API_BASE_URL}/api/ai/generate-caption`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -82,11 +88,14 @@ export default function ChatbotPage() {
                 platform: selectedPlatform,
                 tone: 'inspirational'
               })
-            }).then(r => r.json())
+            }).then(async r => {
+              if (!r.ok) throw new Error(`HTTP ${r.status}`);
+              return r.json();
+            })
           ]);
           
           content = captions.map((c, i) => 
-            c.success ? `Post Idea ${i + 1}:\n${c.caption}` : `Error generating idea ${i + 1}`
+            c.success ? `Post Idea ${i + 1}:\n${c.caption}` : `Error: ${c.error || 'Failed to generate'}`
           ).join('\n\n');
           break;
 
@@ -101,6 +110,9 @@ export default function ChatbotPage() {
               target_platform: selectedPlatform
             })
           });
+          if (!improveResponse.ok) {
+            throw new Error(`HTTP ${improveResponse.status}: Failed to improve content`);
+          }
           const improveData = await improveResponse.json();
           content = improveData.success ? 
             `✨ Improved Version:\n\n${improveData.rewritten_content}\n\n${improveData.improvements?.join('\n') || ''}` :
@@ -118,6 +130,9 @@ export default function ChatbotPage() {
               count: 10
             })
           });
+          if (!hashtagResponse.ok) {
+            throw new Error(`HTTP ${hashtagResponse.status}: Failed to generate hashtags`);
+          }
           const hashtagData = await hashtagResponse.json();
           content = hashtagData.success ?
             hashtagData.hashtags.join(' ') :
@@ -135,6 +150,9 @@ export default function ChatbotPage() {
               platform: selectedPlatform
             })
           });
+          if (!translateResponse.ok) {
+            throw new Error(`HTTP ${translateResponse.status}: Failed to translate content`);
+          }
           const translateData = await translateResponse.json();
           const langName = languages.find(l => l.code === targetLanguage)?.name || targetLanguage;
           content = translateData.success ?

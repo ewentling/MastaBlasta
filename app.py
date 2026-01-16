@@ -6500,6 +6500,10 @@ def _simulate_monitor_scan(monitor_id):
     demo_users = ['@user1', '@user2', '@company_x', '@influencer', '@brand_y']
     demo_sentiments = ['positive', 'neutral', 'negative']
 
+    # Initialize results list if needed
+    if monitor_id not in monitor_results:
+        monitor_results[monitor_id] = []
+
     for keyword in monitor['keywords']:
         for platform in monitor['platforms']:
             # Generate 3-5 demo mentions per keyword/platform
@@ -6521,8 +6525,6 @@ def _simulate_monitor_scan(monitor_id):
                     'timestamp': (datetime.now(timezone.utc) - timedelta(hours=random.randint(0, 48))).isoformat(),
                     'read': False
                 }
-                if monitor_id not in monitor_results:
-                    monitor_results[monitor_id] = []
                 monitor_results[monitor_id].append(result)
 
 
