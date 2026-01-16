@@ -6444,12 +6444,56 @@ def create_social_monitor():
 
 
 def _simulate_monitor_scan(monitor_id):
-    """Simulate social media monitoring scan (demo data)"""
+    """
+    Scan social media for mentions (uses real APIs when configured)
+    
+    Note: This requires platform-specific API credentials:
+    - Twitter: TWITTER_BEARER_TOKEN for Twitter API v2
+    - Reddit: REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET
+    - For production, integrate with social_listening.py module
+    """
     monitor = social_monitors.get(monitor_id)
     if not monitor:
         return
 
-    # Generate some demo results
+    # Check if social listening module is available
+    try:
+        from social_listening import SocialListeningDashboard
+        
+        # Create dashboard instance
+        dashboard = SocialListeningDashboard()
+        
+        # Scan for real mentions
+        results = dashboard.scan_mentions(
+            monitor_id=monitor_id,
+            limit=50
+        )
+        
+        # Store results
+        if monitor_id not in monitor_results:
+            monitor_results[monitor_id] = []
+        
+        for result in results:
+            monitor_results[monitor_id].append({
+                'id': result.get('id'),
+                'platform': result.get('platform'),
+                'keyword': result.get('keyword'),
+                'author': result.get('author'),
+                'content': result.get('content'),
+                'url': result.get('url'),
+                'sentiment': result.get('sentiment'),
+                'engagement': result.get('engagement', {}),
+                'timestamp': result.get('timestamp'),
+                'read': False
+            })
+        
+        logger.info(f"Scanned {len(results)} real mentions for monitor {monitor_id}")
+        return
+        
+    except (ImportError, Exception) as e:
+        logger.warning(f"Social listening not available, using demo data: {e}")
+    
+    # Fallback: Generate demo data if real APIs not available
     import random
     from datetime import timedelta
 
@@ -6477,6 +6521,8 @@ def _simulate_monitor_scan(monitor_id):
                     'timestamp': (datetime.now(timezone.utc) - timedelta(hours=random.randint(0, 48))).isoformat(),
                     'read': False
                 }
+                if monitor_id not in monitor_results:
+                    monitor_results[monitor_id] = []
                 monitor_results[monitor_id].append(result)
 
 
@@ -6831,7 +6877,21 @@ def clips_schedule():
 # ==================== POST ANALYTICS ENDPOINTS ====================
 
 def _simulate_post_analytics(post_id):
-    """Simulate analytics data for a post (in production, fetch from platform APIs)"""
+    """
+    Get analytics data for a post
+    
+    PRODUCTION NOTE: Analytics are simulated in development mode.
+    For real analytics, posts must be published through integrated_routes.py
+    with DATABASE_URL configured, which stores platform post IDs and can
+    fetch real metrics using platform APIs (Twitter API v2, Meta Graph API,
+    LinkedIn API, YouTube Analytics API).
+    
+    Real analytics are available when:
+    1. DATABASE_URL is set (enables production mode)
+    2. Posts are created via /api/v2/posts/* endpoints
+    3. Platform OAuth tokens are valid
+    4. Platform accounts are properly connected
+    """
     import random
     from datetime import timedelta
 

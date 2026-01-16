@@ -330,6 +330,82 @@ This will create all necessary tables including:
 - GoogleServices table for Calendar and Drive integrations
 - Posts, Media, Analytics, and other tables
 
+## Production Deployment Guide
+
+### Required Configuration for Production
+
+MastaBlasta operates in two modes:
+
+#### Development Mode (Default)
+- Uses in-memory storage (dictionaries)
+- Simulated analytics and social monitoring
+- No database required
+- Basic AI features work with OpenAI API key
+
+#### Production Mode (Recommended)
+Enabled when `DATABASE_URL` is configured. Provides:
+- PostgreSQL database persistence
+- Real OAuth integrations
+- JWT authentication with refresh tokens
+- Encrypted token storage
+- Advanced features
+
+### API Keys Required for Full Production Functionality
+
+#### Essential (Core Features)
+1. **DATABASE_URL** - PostgreSQL connection string
+2. **JWT_SECRET_KEY** - For token signing
+3. **ENCRYPTION_KEY** - Fernet key for OAuth token encryption
+4. **OPENAI_API_KEY** - For AI content generation, translation, alt text generation
+
+#### Platform Publishing (OAuth)
+Configure these to publish posts to social platforms:
+- **TWITTER_CLIENT_ID** + **TWITTER_CLIENT_SECRET**
+- **META_APP_ID** + **META_APP_SECRET** (Facebook/Instagram)
+- **LINKEDIN_CLIENT_ID** + **LINKEDIN_CLIENT_SECRET**
+- **GOOGLE_CLIENT_ID** + **GOOGLE_CLIENT_SECRET** (YouTube)
+
+#### Social Listening (Optional)
+For real social media monitoring:
+- **TWITTER_BEARER_TOKEN** - Twitter API v2 for mentions/search
+- **REDDIT_CLIENT_ID** + **REDDIT_CLIENT_SECRET** - Reddit API
+
+#### Advanced Features (Optional)
+- **GOOGLE_API_KEY** - Google Gemini as OpenAI alternative
+- **REDIS_URL** - Redis for production rate limiting (recommended)
+
+### Analytics in Production
+
+**Important:** Post analytics are simulated in development mode.
+
+For **real analytics**, you need:
+1. Production mode enabled (`DATABASE_URL` set)
+2. Posts created via `/api/v2/posts/*` endpoints (with database)
+3. Valid OAuth tokens for each platform
+4. Platform accounts connected and active
+
+Real analytics fetch data from:
+- Twitter API v2 (impressions, engagement, reach)
+- Meta Graph API (Facebook/Instagram insights)
+- LinkedIn Analytics API
+- YouTube Analytics API
+
+**Development Mode Behavior:**
+- Analytics show simulated data for demonstration
+- Useful for UI/UX development and testing
+- Switch to production mode for real metrics
+
+### Social Monitoring in Production
+
+Social listening requires external API access:
+
+**Setup:**
+1. Configure `TWITTER_BEARER_TOKEN` for Twitter monitoring
+2. Configure Reddit credentials for Reddit monitoring
+3. The `social_listening.py` module handles real API calls
+
+**Fallback:** If APIs are not configured, demo data is used for UI testing.
+
 ### Local Development
 
 #### Backend
