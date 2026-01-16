@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { oauthAppsApi } from '../api';
-import { Plus, X, Save, Settings, ExternalLink, Key, Info } from 'lucide-react';
+import { X, Save, Settings, ExternalLink, Key, Info } from 'lucide-react';
 
 interface OAuthAppModalProps {
   isOpen: boolean;
@@ -20,7 +20,7 @@ export default function OAuthAppModal({ isOpen, onClose }: OAuthAppModalProps) {
     redirect_uri: '',
   });
 
-  const { data: oauthAppsData, isLoading: isLoadingApps } = useQuery({
+  const { data: oauthAppsData } = useQuery({
     queryKey: ['oauth-apps'],
     queryFn: () => oauthAppsApi.getAll(),
     enabled: isOpen,
@@ -76,7 +76,15 @@ export default function OAuthAppModal({ isOpen, onClose }: OAuthAppModalProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await createMutation.mutateAsync(formData);
+    // Trim whitespace from all input fields
+    const trimmedFormData = {
+      platform: formData.platform.trim(),
+      app_name: formData.app_name.trim(),
+      client_id: formData.client_id.trim(),
+      client_secret: formData.client_secret.trim(),
+      redirect_uri: formData.redirect_uri.trim(),
+    };
+    await createMutation.mutateAsync(trimmedFormData);
   };
 
   const handleDelete = async (id: string) => {
@@ -251,6 +259,17 @@ export default function OAuthAppModal({ isOpen, onClose }: OAuthAppModalProps) {
                   </small>
                 </div>
 
+                {createMutation.isError && (
+                  <div className="alert alert-error" style={{ marginTop: '1rem' }}>
+                    <X size={20} />
+                    <span>
+                      {((createMutation.error as any)?.response?.data?.error) ||
+                        ((createMutation.error as any)?.message) ||
+                        'Failed to save OAuth app. Please try again.'}
+                    </span>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
                   <button
                     type="button"
@@ -282,25 +301,25 @@ export default function OAuthAppModal({ isOpen, onClose }: OAuthAppModalProps) {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '1rem' }}>
                 {Object.entries(platforms).map(([key, platform]: [string, any]) => {
-                  const hasApp = oauthApps.some((app: any) => app.platform === key);
+                  const hasActiveApp = oauthApps.some((app: any) => app.platform === key && app.is_active !== false);
                   return (
                     <button
                       key={key}
                       className="btn btn-secondary"
                       onClick={() => handlePlatformSelect(key)}
-                      disabled={hasApp}
+                      disabled={hasActiveApp}
                       style={{
                         padding: '1.5rem 1rem',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         gap: '0.5rem',
-                        opacity: hasApp ? 0.5 : 1,
+                        opacity: hasActiveApp ? 0.5 : 1,
                       }}
                     >
                       <span style={{ fontSize: '1.5rem' }}>{platform.icon || '🔗'}</span>
                       <span>{platform.display_name}</span>
-                      {hasApp && (
+                      {hasActiveApp && (
                         <span style={{ fontSize: '0.75rem', color: 'var(--color-success)' }}>✓ Configured</span>
                       )}
                     </button>

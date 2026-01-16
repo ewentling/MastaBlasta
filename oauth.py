@@ -1283,7 +1283,7 @@ def get_platform_oauth_requirements(platform: str) -> Dict[str, Any]:
         'twitter': {
             'platform': 'twitter',
             'display_name': 'Twitter/X',
-            'icon': '𝕏',
+            'icon': 'X',  # Using standard 'X' for better compatibility
             'fields': [
                 {'name': 'client_id', 'label': 'Client ID', 'type': 'text', 'required': True},
                 {'name': 'client_secret', 'label': 'Client Secret', 'type': 'password', 'required': True},
@@ -1331,7 +1331,8 @@ def get_platform_oauth_requirements(platform: str) -> Dict[str, Any]:
                 {'name': 'redirect_uri', 'label': 'Redirect URI', 'type': 'text', 'required': False,
                  'placeholder': 'http://localhost:33766/api/oauth/linkedin/callback'}
             ],
-            'docs_url': 'https://docs.microsoft.com/en-us/linkedin/shared/authentication/authentication',
+            # NOTE: LinkedIn documentation URLs can change; verify this URL periodically.
+            'docs_url': 'https://learn.microsoft.com/linkedin/shared/authentication/authentication',
             'setup_instructions': [
                 'Go to LinkedIn Developers (linkedin.com/developers)',
                 'Create a new App',

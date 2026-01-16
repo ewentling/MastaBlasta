@@ -5662,10 +5662,28 @@ def oauth_callback(platform):
             if oauth_app_id:
                 # User has custom OAuth app - use it for token exchange
                 oauth_app = db_session.query(OAuthAppConfig).filter_by(id=oauth_app_id).first()
-                if oauth_app:
-                    client_id = decrypt_token(oauth_app.client_id)
-                    client_secret = decrypt_token(oauth_app.client_secret)
-                    redirect_uri = oauth_app.redirect_uri
+                if oauth_app and oauth_app.is_active:
+                    try:
+                        client_id = decrypt_token(oauth_app.client_id)
+                        client_secret = decrypt_token(oauth_app.client_secret)
+                        redirect_uri = oauth_app.redirect_uri
+                    except Exception as decrypt_error:
+                        logger.error(f"Failed to decrypt OAuth app credentials for {platform}: {decrypt_error}")
+                        return f"""
+                        <html>
+                            <body>
+                                <script>
+                                    window.opener.postMessage({{
+                                        type: 'oauth_error',
+                                        platform: '{platform}',
+                                        error: 'Failed to decrypt OAuth credentials'
+                                    }}, '*');
+                                    window.close();
+                                </script>
+                                <p>Failed to decrypt OAuth credentials. This window should close automatically.</p>
+                            </body>
+                        </html>
+                        """
                     
                     # Exchange code for token based on platform
                     if platform == 'twitter':
@@ -5788,6 +5806,10 @@ def oauth_callback(platform):
 
         except Exception as e:
             logger.error(f"OAuth token exchange failed for {platform}: {e}")
+
+    # Clean up state token in all paths
+    if state in oauth_states:
+        del oauth_states[state]
 
     # Fallback to demo mode if real OAuth failed
     if not account_data:
@@ -5947,7 +5969,9 @@ def get_oauth_apps():
                     'platform': app.platform,
                     'app_name': app.app_name,
                     'redirect_uri': app.redirect_uri,
-                    'has_credentials': bool(app.client_id and app.client_secret),
+                    # Note: This only indicates that encrypted credentials are stored,
+                    # not that they are valid or usable.
+                    'has_credentials': app.client_id is not None and app.client_secret is not None,
                     'created_at': app.created_at.isoformat(),
                     'updated_at': app.updated_at.isoformat() if app.updated_at else None
                 })
@@ -5993,6 +6017,22 @@ def create_oauth_app():
         
         if not client_id or not client_secret:
             return jsonify({'error': 'Client ID and Client Secret are required'}), 400
+        
+        # Basic validation for OAuth credentials
+        MIN_CREDENTIAL_LENGTH = 10
+        if len(client_id) < MIN_CREDENTIAL_LENGTH or len(client_secret) < MIN_CREDENTIAL_LENGTH:
+            return jsonify({
+                'error': f'Client ID and Client Secret must be at least {MIN_CREDENTIAL_LENGTH} characters long'
+            }), 400
+        
+        # Validate redirect URI if provided
+        if redirect_uri:
+            import re
+            redirect_uri_pattern = re.compile(r'^https?://[\w\-\.]+(:\d+)?(/.*)?$')
+            if not redirect_uri_pattern.match(redirect_uri):
+                return jsonify({
+                    'error': 'Invalid redirect URI format. Must be a valid HTTP(S) URL.'
+                }), 400
         
         try:
             # Check if user already has an OAuth app for this platform
@@ -6042,7 +6082,12 @@ def create_oauth_app():
             }), 201
         except Exception as e:
             db_session.rollback()
-            logger.error(f"Error creating OAuth app: {e}")
+            # Sanitize error message to avoid exposing sensitive information
+            logger.error(
+                "Error creating OAuth app for user %s on platform %s",
+                user.get('id'),
+                platform
+            )
             return jsonify({'error': 'Failed to create OAuth app'}), 500
     else:
         return jsonify({
@@ -6123,7 +6168,7 @@ def update_oauth_app(app_id):
 def delete_oauth_app(app_id):
     """Delete an OAuth app configuration"""
     if USE_DATABASE:
-        from models import OAuthAppConfig
+        from models import OAuthAppConfig, Account
         from auth import get_current_user
         
         user = get_current_user(db_session)
@@ -6138,6 +6183,18 @@ def delete_oauth_app(app_id):
             
             if not oauth_app:
                 return jsonify({'error': 'OAuth app not found'}), 404
+            
+            # Check if any accounts are using this OAuth app
+            active_accounts = db_session.query(Account).filter_by(
+                oauth_app_config_id=app_id,
+                is_active=True
+            ).count()
+            
+            if active_accounts > 0:
+                return jsonify({
+                    'error': 'Cannot delete OAuth app',
+                    'message': f'This OAuth app is being used by {active_accounts} active account(s). Please disconnect those accounts first.'
+                }), 400
             
             # Soft delete by marking as inactive
             oauth_app.is_active = False

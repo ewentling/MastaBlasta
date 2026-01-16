@@ -39,7 +39,11 @@ def upgrade() -> None:
     op.create_index(op.f('ix_oauth_app_configs_user_id'), 'oauth_app_configs', ['user_id'], unique=False)
     op.create_index(op.f('ix_oauth_app_configs_platform'), 'oauth_app_configs', ['platform'], unique=False)
     
-    # Add oauth_app_config_id column to accounts table
+    # Add oauth_app_config_id column to accounts table.
+    # The column is intentionally nullable so existing account rows remain valid with NULL
+    # values and are not forced to reference an oauth_app_configs record. Any backfill of
+    # oauth_app_config_id for existing accounts, if required, should be handled in a separate
+    # data migration or at the application level.
     op.add_column('accounts', sa.Column('oauth_app_config_id', sa.String(length=36), nullable=True))
     op.create_foreign_key('fk_accounts_oauth_app_config', 'accounts', 'oauth_app_configs', ['oauth_app_config_id'], ['id'])
 

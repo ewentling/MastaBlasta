@@ -493,4 +493,7 @@ function OAuthModal({
             {isConnecting ? 'Connecting...' : 'Connect'}
           </button>
         </div>
+      </div>
+    </div>
+  );
 }
