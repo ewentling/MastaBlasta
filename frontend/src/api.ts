@@ -261,6 +261,52 @@ export const oauthApi = {
   },
 };
 
+export const oauthAppsApi = {
+  getAll: async (): Promise<{ success: boolean; oauth_apps: any[]; count: number }> => {
+    const response = await api.get('/oauth-apps');
+    return response.data;
+  },
+
+  create: async (data: {
+    platform: string;
+    app_name?: string;
+    client_id: string;
+    client_secret: string;
+    redirect_uri?: string;
+    additional_config?: any;
+  }): Promise<{ success: boolean; oauth_app_id: string; oauth_app: any }> => {
+    const response = await api.post('/oauth-apps', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: {
+    app_name?: string;
+    client_id?: string;
+    client_secret?: string;
+    redirect_uri?: string;
+    additional_config?: any;
+    is_active?: boolean;
+  }): Promise<{ success: boolean; oauth_app: any }> => {
+    const response = await api.put(`/oauth-apps/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<{ success: boolean; message: string }> => {
+    const response = await api.delete(`/oauth-apps/${id}`);
+    return response.data;
+  },
+
+  getPlatformRequirements: async (platform: string): Promise<{ success: boolean; platform: string; fields: any[]; setup_instructions: string[] }> => {
+    const response = await api.get(`/oauth-apps/${platform}/requirements`);
+    return response.data;
+  },
+
+  getAllRequirements: async (): Promise<{ success: boolean; platforms: any; count: number }> => {
+    const response = await api.get('/oauth-apps/requirements');
+    return response.data;
+  },
+};
+
 export const urlsApi = {
   getAll: async (): Promise<{ urls: any[]; count: number }> => {
     const response = await api.get('/urls');

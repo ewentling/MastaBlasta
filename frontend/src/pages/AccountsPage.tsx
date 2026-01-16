@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { accountsApi, platformsApi, oauthApi } from '../api';
-import { Plus, Trash2, Edit2, Check, X, TestTube, Zap } from 'lucide-react';
+import { accountsApi, platformsApi, oauthApi, oauthAppsApi } from '../api';
+import { Plus, Trash2, Edit2, Check, X, TestTube, Zap, Settings } from 'lucide-react';
 import type { Account, CreateAccountRequest, Platform } from '../types';
+import OAuthAppModal from '../components/OAuthAppModal';
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
   const [showOAuthModal, setShowOAuthModal] = useState(false);
+  const [showOAuthAppModal, setShowOAuthAppModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [testingAccount, setTestingAccount] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -19,6 +21,11 @@ export default function AccountsPage() {
   const { data: platformsData } = useQuery({
     queryKey: ['platforms'],
     queryFn: () => platformsApi.getAll(),
+  });
+
+  const { data: oauthAppsData } = useQuery({
+    queryKey: ['oauth-apps'],
+    queryFn: () => oauthAppsApi.getAll(),
   });
 
   const createMutation = useMutation({
@@ -78,16 +85,23 @@ export default function AccountsPage() {
       <div className="card">
         <div className="card-header">
           <h3>Connected Accounts</h3>
-          <button className="btn btn-primary" onClick={() => setShowOAuthModal(true)}>
-            <Zap size={18} />
-            Quick Connect
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button className="btn btn-secondary" onClick={() => setShowOAuthAppModal(true)}>
+              <Settings size={18} />
+              OAuth Apps
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowOAuthModal(true)}>
+              <Zap size={18} />
+              Quick Connect
+            </button>
+          </div>
         </div>
 
         <div className="alert alert-info" style={{ margin: '1rem' }}>
           <span style={{ fontSize: '0.875rem' }}>
-            💡 <strong>OAuth Setup:</strong> To use Quick Connect, you need to configure OAuth credentials in environment variables.
-            See PLATFORM_SETUP.md for detailed instructions on setting up OAuth for each platform.
+            💡 <strong>Getting Started:</strong> Click "OAuth Apps" to configure your own OAuth credentials for each platform, 
+            then use "Quick Connect" to link your social media accounts. This allows you to manage your own API apps without 
+            needing access to environment variables.
           </span>
         </div>
 
@@ -169,7 +183,12 @@ export default function AccountsPage() {
       {showOAuthModal && (
         <OAuthModal
           platforms={platforms}
+          oauthApps={oauthAppsData?.oauth_apps || []}
           onClose={() => setShowOAuthModal(false)}
+          onOpenOAuthApps={() => {
+            setShowOAuthModal(false);
+            setShowOAuthAppModal(true);
+          }}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['accounts'] });
             setShowOAuthModal(false);
@@ -186,6 +205,8 @@ export default function AccountsPage() {
           }}
         />
       )}
+
+      <OAuthAppModal isOpen={showOAuthAppModal} onClose={() => setShowOAuthAppModal(false)} />
     </div>
   );
 }
@@ -266,17 +287,25 @@ function EditAccountModal({
 
 function OAuthModal({
   platforms,
+  oauthApps = [],
   onClose,
+  onOpenOAuthApps,
   onSuccess,
 }: {
   platforms: Platform[];
+  oauthApps?: any[];
   onClose: () => void;
+  onOpenOAuthApps: () => void;
   onSuccess: () => void;
 }) {
   const [selectedPlatform, setSelectedPlatform] = useState('');
   const [accountName, setAccountName] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState('');
+
+  const hasOAuthApp = (platformName: string) => {
+    return oauthApps.some(app => app.platform === platformName);
+  };
 
   const handleConnect = async () => {
     if (!selectedPlatform) {
@@ -391,9 +420,30 @@ function OAuthModal({
 
           <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
             <Zap size={20} />
-            <span style={{ fontSize: '0.875rem' }}>
-              Connect your account in one click! You'll be redirected to authorize access.
-            </span>
+            <div>
+              <span style={{ fontSize: '0.875rem' }}>
+                Connect your account in one click! You'll be redirected to authorize access.
+              </span>
+              {oauthApps.length === 0 && (
+                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
+                  <strong>Note:</strong> You need to configure OAuth apps for the platforms you want to connect.{' '}
+                  <button
+                    type="button"
+                    onClick={onOpenOAuthApps}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--color-primary)',
+                      textDecoration: 'underline',
+                      cursor: 'pointer',
+                      padding: 0,
+                    }}
+                  >
+                    Setup OAuth Apps
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="form-group">
@@ -407,6 +457,10 @@ function OAuthModal({
             >
               <option value="">Select a platform</option>
               {platforms.map(p => (
+                <option key={p.name} value={p.name}>
+                  {p.display_name} {hasOAuthApp(p.name) ? '✓ Configured' : '⚠️ Not configured'}
+                </option>
+              ))}
                 <option key={p.name} value={p.name}>{p.display_name}</option>
               ))}
             </select>
