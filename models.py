@@ -31,11 +31,13 @@ class User(Base):
 
     id = Column(String(36), primary_key=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)  # Nullable for Google-only users
     full_name = Column(String(255))
     role = Column(Enum(UserRole), default=UserRole.EDITOR, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     api_key = Column(String(64), unique=True, index=True)
+    auth_provider = Column(String(50), default='email')  # 'email' or 'google'
+    google_id = Column(String(255), unique=True, index=True, nullable=True)  # Google's sub ID
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     last_login = Column(DateTime)
@@ -45,6 +47,7 @@ class User(Base):
     posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
     media = relationship("Media", back_populates="user", cascade="all, delete-orphan")
     templates = relationship("Template", back_populates="user", cascade="all, delete-orphan")
+    google_services = relationship("GoogleService", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User {self.email} ({self.role.value})>"
@@ -349,3 +352,25 @@ class ChatbotInteraction(Base):
 
     def __repr__(self):
         return f"<ChatbotInteraction {self.platform}:{self.platform_user_id}>"
+
+
+class GoogleService(Base):
+    """Google service connections (Calendar, Drive, YouTube) for users"""
+    __tablename__ = 'google_services'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    service_type = Column(String(50), nullable=False)  # 'calendar', 'drive', 'youtube'
+    access_token = Column(Text)  # Encrypted with Fernet
+    refresh_token = Column(Text)  # Encrypted with Fernet
+    token_expires_at = Column(DateTime)
+    is_active = Column(Boolean, default=True)
+    service_metadata = Column(JSON)  # e.g., {'calendar_id': 'primary'}
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = relationship("User", back_populates="google_services")
+
+    def __repr__(self):
+        return f"<GoogleService {self.service_type} for user {self.user_id}>"

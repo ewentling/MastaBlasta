@@ -34,6 +34,7 @@ def register():
         from auth import hash_password, generate_api_key, create_access_token, create_refresh_token
         from database import db_session_scope
         from models import User, UserRole
+        from security_enhancements import PasswordPolicy
         import uuid
 
         data = request.get_json()
@@ -43,6 +44,11 @@ def register():
 
         if not email or not password:
             return jsonify({'error': 'Email and password required'}), 400
+
+        # Validate password policy
+        is_valid, message = PasswordPolicy.validate(password)
+        if not is_valid:
+            return jsonify({'error': message}), 400
 
         with db_session_scope() as session:
             # Check if user exists
@@ -59,6 +65,7 @@ def register():
                 role=UserRole.EDITOR,
                 api_key=generate_api_key(),
                 is_active=True,
+                auth_provider='email',
                 created_at=datetime.utcnow()
             )
             session.add(user)
@@ -185,12 +192,16 @@ def google_auth():
                 return jsonify({'error': 'Email not provided by Google'}), 400
 
             with db_session_scope() as session:
-                # Check if user exists
-                user = session.query(User).filter_by(email=email).first()
+                # Check if user exists by email or google_id
+                user = session.query(User).filter(
+                    (User.email == email) | (User.google_id == google_id)
+                ).first()
 
                 if user:
-                    # Update last login
+                    # Update last login and google_id if needed
                     user.last_login = datetime.utcnow()
+                    if not user.google_id:
+                        user.google_id = google_id
                     if not user.is_active:
                         return jsonify({'error': 'Account is deactivated'}), 403
                 else:
@@ -198,11 +209,13 @@ def google_auth():
                     user = User(
                         id=str(uuid.uuid4()),
                         email=email,
-                        password_hash='',  # No password for Google auth users
+                        password_hash=None,  # No password for Google auth users
                         full_name=name,
                         role=UserRole.EDITOR,
                         api_key=generate_api_key(),
                         is_active=True,
+                        auth_provider='google',
+                        google_id=google_id,
                         created_at=datetime.utcnow()
                     )
                     session.add(user)
