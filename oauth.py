@@ -39,13 +39,17 @@ class TwitterOAuth:
     SCOPES = ['tweet.read', 'tweet.write', 'users.read', 'offline.access']
 
     @classmethod
-    def get_authorization_url(cls, state: str) -> Dict[str, str]:
+    def get_authorization_url(cls, state: str, client_id: str = None, redirect_uri: str = None) -> Dict[str, str]:
         """Generate authorization URL with PKCE"""
         code_verifier = secrets.token_urlsafe(32)
+        
+        # Use provided credentials or fall back to environment
+        client_id = client_id or TWITTER_CLIENT_ID
+        redirect_uri = redirect_uri or TWITTER_REDIRECT_URI
 
         oauth = OAuth2Session(
-            TWITTER_CLIENT_ID,
-            redirect_uri=TWITTER_REDIRECT_URI,
+            client_id,
+            redirect_uri=redirect_uri,
             scope=cls.SCOPES
         )
 
@@ -62,15 +66,19 @@ class TwitterOAuth:
         }
 
     @classmethod
-    def exchange_code_for_token(cls, code: str, code_verifier: str) -> Optional[Dict[str, Any]]:
+    def exchange_code_for_token(cls, code: str, code_verifier: str, client_id: str = None, redirect_uri: str = None) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access token"""
         try:
+            # Use provided credentials or fall back to environment
+            client_id = client_id or TWITTER_CLIENT_ID
+            redirect_uri = redirect_uri or TWITTER_REDIRECT_URI
+            
             data = {
                 'grant_type': 'authorization_code',
                 'code': code,
-                'redirect_uri': TWITTER_REDIRECT_URI,
+                'redirect_uri': redirect_uri,
                 'code_verifier': code_verifier,
-                'client_id': TWITTER_CLIENT_ID
+                'client_id': client_id
             }
 
             response = requests.post(cls.TOKEN_URL, data=data)
@@ -112,11 +120,15 @@ class MetaOAuth:
     SCOPES = ['pages_manage_posts', 'pages_read_engagement', 'instagram_basic', 'instagram_content_publish']
 
     @classmethod
-    def get_authorization_url(cls, state: str) -> str:
+    def get_authorization_url(cls, state: str, app_id: str = None, redirect_uri: str = None) -> str:
         """Generate Meta OAuth authorization URL"""
+        # Use provided credentials or fall back to environment
+        app_id = app_id or META_APP_ID
+        redirect_uri = redirect_uri or META_REDIRECT_URI
+        
         params = {
-            'client_id': META_APP_ID,
-            'redirect_uri': META_REDIRECT_URI,
+            'client_id': app_id,
+            'redirect_uri': redirect_uri,
             'state': state,
             'scope': ','.join(cls.SCOPES),
             'response_type': 'code'
@@ -126,13 +138,18 @@ class MetaOAuth:
         return f"{cls.AUTHORIZE_URL}?{query_string}"
 
     @classmethod
-    def exchange_code_for_token(cls, code: str) -> Optional[Dict[str, Any]]:
+    def exchange_code_for_token(cls, code: str, app_id: str = None, app_secret: str = None, redirect_uri: str = None) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access token"""
         try:
+            # Use provided credentials or fall back to environment
+            app_id = app_id or META_APP_ID
+            app_secret = app_secret or META_APP_SECRET
+            redirect_uri = redirect_uri or META_REDIRECT_URI
+            
             params = {
-                'client_id': META_APP_ID,
-                'client_secret': META_APP_SECRET,
-                'redirect_uri': META_REDIRECT_URI,
+                'client_id': app_id,
+                'client_secret': app_secret,
+                'redirect_uri': redirect_uri,
                 'code': code
             }
 
@@ -144,8 +161,8 @@ class MetaOAuth:
             # Exchange short-lived token for long-lived token
             long_lived_params = {
                 'grant_type': 'fb_exchange_token',
-                'client_id': META_APP_ID,
-                'client_secret': META_APP_SECRET,
+                'client_id': app_id,
+                'client_secret': app_secret,
                 'fb_exchange_token': token_data['access_token']
             }
 
@@ -224,12 +241,16 @@ class LinkedInOAuth:
     SCOPES = ['w_member_social', 'r_liteprofile', 'r_emailaddress']
 
     @classmethod
-    def get_authorization_url(cls, state: str) -> str:
+    def get_authorization_url(cls, state: str, client_id: str = None, redirect_uri: str = None) -> str:
         """Generate LinkedIn OAuth authorization URL"""
+        # Use provided credentials or fall back to environment
+        client_id = client_id or LINKEDIN_CLIENT_ID
+        redirect_uri = redirect_uri or LINKEDIN_REDIRECT_URI
+        
         params = {
             'response_type': 'code',
-            'client_id': LINKEDIN_CLIENT_ID,
-            'redirect_uri': LINKEDIN_REDIRECT_URI,
+            'client_id': client_id,
+            'redirect_uri': redirect_uri,
             'state': state,
             'scope': ' '.join(cls.SCOPES)
         }
@@ -238,15 +259,20 @@ class LinkedInOAuth:
         return f"{cls.AUTHORIZE_URL}?{query_string}"
 
     @classmethod
-    def exchange_code_for_token(cls, code: str) -> Optional[Dict[str, Any]]:
+    def exchange_code_for_token(cls, code: str, client_id: str = None, client_secret: str = None, redirect_uri: str = None) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access token"""
         try:
+            # Use provided credentials or fall back to environment
+            client_id = client_id or LINKEDIN_CLIENT_ID
+            client_secret = client_secret or LINKEDIN_CLIENT_SECRET
+            redirect_uri = redirect_uri or LINKEDIN_REDIRECT_URI
+            
             data = {
                 'grant_type': 'authorization_code',
                 'code': code,
-                'redirect_uri': LINKEDIN_REDIRECT_URI,
-                'client_id': LINKEDIN_CLIENT_ID,
-                'client_secret': LINKEDIN_CLIENT_SECRET
+                'redirect_uri': redirect_uri,
+                'client_id': client_id,
+                'client_secret': client_secret
             }
 
             response = requests.post(cls.TOKEN_URL, data=data)
@@ -313,11 +339,15 @@ class GoogleOAuth:
     SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube']
 
     @classmethod
-    def get_authorization_url(cls, state: str) -> str:
+    def get_authorization_url(cls, state: str, client_id: str = None, redirect_uri: str = None) -> str:
         """Generate Google OAuth authorization URL"""
+        # Use provided credentials or fall back to environment
+        client_id = client_id or GOOGLE_CLIENT_ID
+        redirect_uri = redirect_uri or GOOGLE_REDIRECT_URI
+        
         params = {
-            'client_id': GOOGLE_CLIENT_ID,
-            'redirect_uri': GOOGLE_REDIRECT_URI,
+            'client_id': client_id,
+            'redirect_uri': redirect_uri,
             'response_type': 'code',
             'scope': ' '.join(cls.SCOPES),
             'access_type': 'offline',
@@ -329,14 +359,19 @@ class GoogleOAuth:
         return f"{cls.AUTHORIZE_URL}?{query_string}"
 
     @classmethod
-    def exchange_code_for_token(cls, code: str) -> Optional[Dict[str, Any]]:
+    def exchange_code_for_token(cls, code: str, client_id: str = None, client_secret: str = None, redirect_uri: str = None) -> Optional[Dict[str, Any]]:
         """Exchange authorization code for access token"""
         try:
+            # Use provided credentials or fall back to environment
+            client_id = client_id or GOOGLE_CLIENT_ID
+            client_secret = client_secret or GOOGLE_CLIENT_SECRET
+            redirect_uri = redirect_uri or GOOGLE_REDIRECT_URI
+            
             data = {
                 'code': code,
-                'client_id': GOOGLE_CLIENT_ID,
-                'client_secret': GOOGLE_CLIENT_SECRET,
-                'redirect_uri': GOOGLE_REDIRECT_URI,
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'redirect_uri': redirect_uri,
                 'grant_type': 'authorization_code'
             }
 
@@ -1239,3 +1274,106 @@ class AutoReconnectionService:
             'check_scheduled_for': check_time.isoformat(),
             'message': 'Token refresh will be attempted automatically before expiration'
         }
+
+
+# OAuth platform configuration helper
+def get_platform_oauth_requirements(platform: str) -> Dict[str, Any]:
+    """Get OAuth requirements for a platform"""
+    requirements = {
+        'twitter': {
+            'platform': 'twitter',
+            'display_name': 'Twitter/X',
+            'fields': [
+                {'name': 'client_id', 'label': 'Client ID', 'type': 'text', 'required': True},
+                {'name': 'client_secret', 'label': 'Client Secret', 'type': 'password', 'required': True},
+                {'name': 'redirect_uri', 'label': 'Redirect URI', 'type': 'text', 'required': False, 
+                 'placeholder': 'http://localhost:33766/api/oauth/twitter/callback'}
+            ],
+            'docs_url': 'https://developer.twitter.com/en/docs/authentication/oauth-2-0',
+            'setup_instructions': [
+                'Go to Twitter Developer Portal (developer.twitter.com)',
+                'Create a new App or use an existing one',
+                'Go to App Settings > User authentication settings',
+                'Set up OAuth 2.0 with PKCE',
+                'Add redirect URI: http://localhost:33766/api/oauth/twitter/callback',
+                'Copy your Client ID and Client Secret'
+            ],
+            'required_permissions': ['tweet.read', 'tweet.write', 'users.read', 'offline.access']
+        },
+        'meta': {
+            'platform': 'meta',
+            'display_name': 'Facebook/Instagram',
+            'fields': [
+                {'name': 'app_id', 'label': 'App ID', 'type': 'text', 'required': True},
+                {'name': 'app_secret', 'label': 'App Secret', 'type': 'password', 'required': True},
+                {'name': 'redirect_uri', 'label': 'Redirect URI', 'type': 'text', 'required': False,
+                 'placeholder': 'http://localhost:33766/api/oauth/meta/callback'}
+            ],
+            'docs_url': 'https://developers.facebook.com/docs/facebook-login',
+            'setup_instructions': [
+                'Go to Meta for Developers (developers.facebook.com)',
+                'Create a new App',
+                'Add Facebook Login product',
+                'Configure OAuth Redirect URIs: http://localhost:33766/api/oauth/meta/callback',
+                'Copy your App ID and App Secret from Settings > Basic'
+            ],
+            'required_permissions': ['pages_manage_posts', 'pages_read_engagement', 'instagram_basic', 'instagram_content_publish']
+        },
+        'linkedin': {
+            'platform': 'linkedin',
+            'display_name': 'LinkedIn',
+            'fields': [
+                {'name': 'client_id', 'label': 'Client ID', 'type': 'text', 'required': True},
+                {'name': 'client_secret', 'label': 'Client Secret', 'type': 'password', 'required': True},
+                {'name': 'redirect_uri', 'label': 'Redirect URI', 'type': 'text', 'required': False,
+                 'placeholder': 'http://localhost:33766/api/oauth/linkedin/callback'}
+            ],
+            'docs_url': 'https://docs.microsoft.com/en-us/linkedin/shared/authentication/authentication',
+            'setup_instructions': [
+                'Go to LinkedIn Developers (linkedin.com/developers)',
+                'Create a new App',
+                'Go to Auth tab',
+                'Add redirect URL: http://localhost:33766/api/oauth/linkedin/callback',
+                'Copy your Client ID and Client Secret'
+            ],
+            'required_permissions': ['w_member_social', 'r_liteprofile', 'r_emailaddress']
+        },
+        'google': {
+            'platform': 'google',
+            'display_name': 'YouTube',
+            'fields': [
+                {'name': 'client_id', 'label': 'Client ID', 'type': 'text', 'required': True},
+                {'name': 'client_secret', 'label': 'Client Secret', 'type': 'password', 'required': True},
+                {'name': 'redirect_uri', 'label': 'Redirect URI', 'type': 'text', 'required': False,
+                 'placeholder': 'http://localhost:33766/api/oauth/google/callback'}
+            ],
+            'docs_url': 'https://developers.google.com/identity/protocols/oauth2',
+            'setup_instructions': [
+                'Go to Google Cloud Console (console.cloud.google.com)',
+                'Create or select a project',
+                'Enable YouTube Data API v3',
+                'Go to Credentials > Create Credentials > OAuth 2.0 Client ID',
+                'Add redirect URI: http://localhost:33766/api/oauth/google/callback',
+                'Copy your Client ID and Client Secret'
+            ],
+            'required_permissions': ['youtube.upload', 'youtube']
+        }
+    }
+    
+    return requirements.get(platform, {
+        'platform': platform,
+        'display_name': platform.title(),
+        'fields': [],
+        'docs_url': None,
+        'setup_instructions': ['Platform configuration not available'],
+        'required_permissions': []
+    })
+
+
+def get_all_platform_requirements() -> Dict[str, Any]:
+    """Get OAuth requirements for all supported platforms"""
+    platforms = ['twitter', 'meta', 'linkedin', 'google']
+    return {
+        'platforms': {platform: get_platform_oauth_requirements(platform) for platform in platforms},
+        'count': len(platforms)
+    }

@@ -77,6 +77,7 @@ class Account(Base):
     oauth_token = Column(Text)  # Encrypted
     refresh_token = Column(Text)  # Encrypted
     token_expires_at = Column(DateTime)
+    oauth_app_config_id = Column(String(36), ForeignKey('oauth_app_configs.id'), nullable=True)  # Reference to OAuth app used
     is_active = Column(Boolean, default=True, nullable=False)
     platform_metadata = Column(JSON)  # Platform-specific data
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
@@ -85,6 +86,7 @@ class Account(Base):
     # Relationships
     user = relationship("User", back_populates="accounts")
     posts = relationship("Post", secondary="post_accounts", back_populates="accounts")
+    oauth_app_config = relationship("OAuthAppConfig")
 
     def __repr__(self):
         return f"<Account {self.platform}:{self.platform_username}>"
@@ -385,3 +387,26 @@ class GoogleService(Base):
 
     def __repr__(self):
         return f"<GoogleService {self.service_type} for user {self.user_id}>"
+
+
+class OAuthAppConfig(Base):
+    """User's OAuth application credentials for social platforms"""
+    __tablename__ = 'oauth_app_configs'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    platform = Column(String(50), nullable=False, index=True)  # 'twitter', 'meta', 'linkedin', 'google'
+    app_name = Column(String(255))  # Friendly name like "My Twitter App"
+    client_id = Column(Text, nullable=False)  # Encrypted with Fernet
+    client_secret = Column(Text, nullable=False)  # Encrypted with Fernet
+    redirect_uri = Column(String(512))  # Platform-specific redirect URI
+    additional_config = Column(JSON)  # Platform-specific additional configuration
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = relationship("User")
+
+    def __repr__(self):
+        return f"<OAuthAppConfig {self.platform} for user {self.user_id}>"

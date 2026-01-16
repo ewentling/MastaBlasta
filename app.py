@@ -5503,11 +5503,67 @@ def video_analytics_metadata():
 
 @app.route('/api/oauth/init/<platform>', methods=['GET'])
 def oauth_init(platform):
-    """Initialize OAuth flow for a platform"""
+    """Initialize OAuth flow for a platform using user's OAuth app"""
     if platform not in PLATFORM_ADAPTERS:
         return jsonify({'error': f'Invalid platform: {platform}'}), 400
 
-    # Try to use real OAuth implementation from oauth.py
+    # Try to use per-user OAuth configuration first
+    if USE_DATABASE:
+        from models import OAuthAppConfig
+        from auth import get_current_user, decrypt_token
+        
+        user = get_current_user(db_session)
+        if user:
+            try:
+                # Look for user's OAuth app configuration
+                oauth_app = db_session.query(OAuthAppConfig).filter_by(
+                    user_id=user['id'],
+                    platform=platform,
+                    is_active=True
+                ).first()
+                
+                if oauth_app:
+                    # User has custom OAuth credentials
+                    from oauth import TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth
+                    
+                    state_token = str(uuid.uuid4())
+                    oauth_states[state_token] = {
+                        'platform': platform,
+                        'user_id': user['id'],
+                        'oauth_app_id': oauth_app.id,
+                        'created_at': datetime.now(timezone.utc).isoformat()
+                    }
+                    
+                    # Decrypt credentials
+                    client_id = decrypt_token(oauth_app.client_id)
+                    client_secret = decrypt_token(oauth_app.client_secret)
+                    redirect_uri = oauth_app.redirect_uri
+                    
+                    # Generate OAuth URL with user's credentials
+                    if platform == 'twitter':
+                        auth_data = TwitterOAuth.get_authorization_url(state_token, client_id, redirect_uri)
+                        oauth_url = auth_data['authorization_url']
+                        oauth_states[state_token]['code_verifier'] = auth_data['code_verifier']
+                    elif platform in ['facebook', 'instagram']:
+                        oauth_url = MetaOAuth.get_authorization_url(state_token, client_id, redirect_uri)
+                    elif platform == 'linkedin':
+                        oauth_url = LinkedInOAuth.get_authorization_url(state_token, client_id, redirect_uri)
+                    elif platform == 'youtube':
+                        oauth_url = GoogleOAuth.get_authorization_url(state_token, client_id, redirect_uri)
+                    else:
+                        return jsonify({'error': f'Platform {platform} OAuth not implemented'}), 400
+                    
+                    return jsonify({
+                        'oauth_url': oauth_url,
+                        'state': state_token,
+                        'platform': platform,
+                        'mode': 'user_credentials'
+                    })
+            except Exception as e:
+                logger.error(f"Error using user OAuth credentials for {platform}: {e}")
+                # Fall through to environment-based OAuth
+
+    # Try to use environment-based OAuth implementation from oauth.py
     try:
         from oauth import (
             TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth,
@@ -5533,7 +5589,7 @@ def oauth_init(platform):
             oauth_class, client_id = oauth_config[platform]
 
             if client_id:
-                # Real OAuth is configured
+                # Environment OAuth is configured
                 if platform == 'twitter':
                     auth_data = oauth_class.get_authorization_url(state_token)
                     oauth_url = auth_data['authorization_url']
@@ -5549,18 +5605,17 @@ def oauth_init(platform):
                     'oauth_url': oauth_url,
                     'state': state_token,
                     'platform': platform,
-                    'mode': 'real'
+                    'mode': 'environment'
                 })
     except Exception as e:
-        logger.warning(f"Real OAuth not available for {platform}: {e}")
+        logger.warning(f"Environment OAuth not available for {platform}: {e}")
 
-    # Fallback to demo mode with helpful error message
+    # No OAuth configured
     return jsonify({
         'error': 'OAuth not configured',
-        'message': f'Please configure OAuth credentials for {platform}. See PLATFORM_SETUP.md for instructions.',
+        'message': f'Please configure OAuth credentials for {platform}. You can either add them in your account settings or set environment variables.',
         'platform': platform,
-        'mode': 'demo',
-        'required_env_vars': OAUTH_REQUIRED_ENV_VARS.get(platform, [])
+        'mode': 'none'
     }), 400
 
 
@@ -5593,72 +5648,146 @@ def oauth_callback(platform):
         </html>
         """
 
-    # Try to use real OAuth token exchange
+    # Try to use user's OAuth credentials for token exchange
     account_data = None
-    try:
-        from oauth import TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth
+    state_data = oauth_states.get(state)
+    
+    if state_data and USE_DATABASE:
+        try:
+            from oauth import TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth
+            from models import OAuthAppConfig
+            from auth import decrypt_token
+            
+            oauth_app_id = state_data.get('oauth_app_id')
+            if oauth_app_id:
+                # User has custom OAuth app - use it for token exchange
+                oauth_app = db_session.query(OAuthAppConfig).filter_by(id=oauth_app_id).first()
+                if oauth_app:
+                    client_id = decrypt_token(oauth_app.client_id)
+                    client_secret = decrypt_token(oauth_app.client_secret)
+                    redirect_uri = oauth_app.redirect_uri
+                    
+                    # Exchange code for token based on platform
+                    if platform == 'twitter':
+                        code_verifier = state_data.get('code_verifier')
+                        if code_verifier:
+                            token_data = TwitterOAuth.exchange_code_for_token(code, code_verifier, client_id, redirect_uri)
+                            if token_data:
+                                account_data = {
+                                    'code': code,
+                                    'state': state,
+                                    'platform': platform,
+                                    'username': 'twitter_user',
+                                    'access_token': token_data['access_token'],
+                                    'refresh_token': token_data.get('refresh_token'),
+                                    'token_type': 'Bearer',
+                                    'oauth_app_id': oauth_app_id
+                                }
+                    elif platform in ['facebook', 'instagram']:
+                        token_data = MetaOAuth.exchange_code_for_token(code, client_id, client_secret, redirect_uri)
+                        if token_data:
+                            account_data = {
+                                'code': code,
+                                'state': state,
+                                'platform': platform,
+                                'username': f'{platform}_user',
+                                'access_token': token_data['access_token'],
+                                'token_type': 'Bearer',
+                                'oauth_app_id': oauth_app_id
+                            }
+                    elif platform == 'linkedin':
+                        token_data = LinkedInOAuth.exchange_code_for_token(code, client_id, client_secret, redirect_uri)
+                        if token_data:
+                            account_data = {
+                                'code': code,
+                                'state': state,
+                                'platform': platform,
+                                'username': 'linkedin_user',
+                                'access_token': token_data['access_token'],
+                                'token_type': 'Bearer',
+                                'oauth_app_id': oauth_app_id
+                            }
+                    elif platform == 'youtube':
+                        token_data = GoogleOAuth.exchange_code_for_token(code, client_id, client_secret, redirect_uri)
+                        if token_data:
+                            account_data = {
+                                'code': code,
+                                'state': state,
+                                'platform': platform,
+                                'username': 'youtube_user',
+                                'access_token': token_data['access_token'],
+                                'refresh_token': token_data.get('refresh_token'),
+                                'token_type': 'Bearer',
+                                'oauth_app_id': oauth_app_id
+                            }
+        except Exception as e:
+            logger.error(f"OAuth token exchange failed with user credentials for {platform}: {e}")
 
-        # Verify state token
-        state_data = oauth_states.get(state)
-        if not state_data or state_data['platform'] != platform:
-            raise ValueError('Invalid state token')
+    # Fallback to environment-based OAuth if user credentials didn't work
+    if not account_data and state_data:
+        try:
+            from oauth import TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth
 
-        # Exchange code for token based on platform
-        if platform == 'twitter':
-            code_verifier = state_data.get('code_verifier')
-            if code_verifier:
-                token_data = TwitterOAuth.exchange_code_for_token(code, code_verifier)
+            # Verify state token
+            if state_data['platform'] != platform:
+                raise ValueError('Invalid state token')
+
+            # Exchange code for token based on platform
+            if platform == 'twitter':
+                code_verifier = state_data.get('code_verifier')
+                if code_verifier:
+                    token_data = TwitterOAuth.exchange_code_for_token(code, code_verifier)
+                    if token_data:
+                        account_data = {
+                            'code': code,
+                            'state': state,
+                            'platform': platform,
+                            'username': 'twitter_user',
+                            'access_token': token_data['access_token'],
+                            'refresh_token': token_data.get('refresh_token'),
+                            'token_type': 'Bearer'
+                        }
+            elif platform in ['facebook', 'instagram']:
+                token_data = MetaOAuth.exchange_code_for_token(code)
                 if token_data:
                     account_data = {
                         'code': code,
                         'state': state,
                         'platform': platform,
-                        'username': 'twitter_user',
+                        'username': f'{platform}_user',
+                        'access_token': token_data['access_token'],
+                        'token_type': 'Bearer'
+                    }
+            elif platform == 'linkedin':
+                token_data = LinkedInOAuth.exchange_code_for_token(code)
+                if token_data:
+                    account_data = {
+                        'code': code,
+                        'state': state,
+                        'platform': platform,
+                        'username': 'linkedin_user',
+                        'access_token': token_data['access_token'],
+                        'token_type': 'Bearer'
+                    }
+            elif platform == 'youtube':
+                token_data = GoogleOAuth.exchange_code_for_token(code)
+                if token_data:
+                    account_data = {
+                        'code': code,
+                        'state': state,
+                        'platform': platform,
+                        'username': 'youtube_user',
                         'access_token': token_data['access_token'],
                         'refresh_token': token_data.get('refresh_token'),
                         'token_type': 'Bearer'
                     }
-        elif platform in ['facebook', 'instagram']:
-            token_data = MetaOAuth.exchange_code_for_token(code)
-            if token_data:
-                account_data = {
-                    'code': code,
-                    'state': state,
-                    'platform': platform,
-                    'username': f'{platform}_user',
-                    'access_token': token_data['access_token'],
-                    'token_type': 'Bearer'
-                }
-        elif platform == 'linkedin':
-            token_data = LinkedInOAuth.exchange_code_for_token(code)
-            if token_data:
-                account_data = {
-                    'code': code,
-                    'state': state,
-                    'platform': platform,
-                    'username': 'linkedin_user',
-                    'access_token': token_data['access_token'],
-                    'token_type': 'Bearer'
-                }
-        elif platform == 'youtube':
-            token_data = GoogleOAuth.exchange_code_for_token(code)
-            if token_data:
-                account_data = {
-                    'code': code,
-                    'state': state,
-                    'platform': platform,
-                    'username': 'youtube_user',
-                    'access_token': token_data['access_token'],
-                    'refresh_token': token_data.get('refresh_token'),
-                    'token_type': 'Bearer'
-                }
 
-        # Clean up state token
-        if state in oauth_states:
-            del oauth_states[state]
+            # Clean up state token
+            if state in oauth_states:
+                del oauth_states[state]
 
-    except Exception as e:
-        logger.error(f"OAuth token exchange failed for {platform}: {e}")
+        except Exception as e:
+            logger.error(f"OAuth token exchange failed for {platform}: {e}")
 
     # Fallback to demo mode if real OAuth failed
     if not account_data:
@@ -5708,38 +5837,361 @@ def oauth_connect():
     if not platform or platform not in PLATFORM_ADAPTERS:
         return jsonify({'error': 'Invalid platform'}), 400
 
-    # Create account record with OAuth credentials
-    account_id = str(uuid.uuid4())
-    account_record = {
-        'id': account_id,
-        'platform': platform,
-        'name': account_name,
-        'username': oauth_data.get('username', ''),
-        'credentials': {
-            'access_token': oauth_data.get('access_token', ''),
-            'token_type': oauth_data.get('token_type', 'Bearer'),
-            'oauth': True
-        },
-        'enabled': True,
-        'created_at': datetime.now(timezone.utc).isoformat(),
-        'auth_method': 'oauth'
-    }
-
-    accounts_db[account_id] = account_record
-
-    return jsonify({
-        'success': True,
-        'account_id': account_id,
-        'message': 'Account connected successfully via OAuth',
-        'account': {
+    # If using database, create a proper account with OAuth credentials
+    if USE_DATABASE:
+        from models import Account
+        from auth import get_current_user, encrypt_token
+        
+        user = get_current_user(db_session)
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        try:
+            # Encrypt OAuth tokens
+            encrypted_access_token = encrypt_token(oauth_data.get('access_token', ''))
+            encrypted_refresh_token = None
+            if oauth_data.get('refresh_token'):
+                encrypted_refresh_token = encrypt_token(oauth_data['refresh_token'])
+            
+            # Create account record with OAuth credentials
+            account = Account(
+                id=str(uuid.uuid4()),
+                user_id=user['id'],
+                platform=platform,
+                display_name=account_name,
+                platform_username=oauth_data.get('username', ''),
+                oauth_token=encrypted_access_token,
+                refresh_token=encrypted_refresh_token,
+                oauth_app_config_id=oauth_data.get('oauth_app_id'),  # Link to OAuth app if user provided
+                is_active=True
+            )
+            
+            db_session.add(account)
+            db_session.commit()
+            
+            return jsonify({
+                'success': True,
+                'account_id': account.id,
+                'message': 'Account connected successfully via OAuth',
+                'account': {
+                    'id': account.id,
+                    'platform': account.platform,
+                    'name': account.display_name,
+                    'username': account.platform_username,
+                    'enabled': account.is_active,
+                    'auth_method': 'oauth'
+                }
+            }), 201
+        except Exception as e:
+            db_session.rollback()
+            logger.error(f"Error creating OAuth account: {e}")
+            return jsonify({'error': 'Failed to create account'}), 500
+    else:
+        # In-memory mode
+        account_id = str(uuid.uuid4())
+        account_record = {
             'id': account_id,
             'platform': platform,
             'name': account_name,
             'username': oauth_data.get('username', ''),
+            'credentials': {
+                'access_token': oauth_data.get('access_token', ''),
+                'token_type': oauth_data.get('token_type', 'Bearer'),
+                'oauth': True
+            },
             'enabled': True,
+            'created_at': datetime.now(timezone.utc).isoformat(),
             'auth_method': 'oauth'
         }
-    }), 201
+
+        accounts_db[account_id] = account_record
+
+        return jsonify({
+            'success': True,
+            'account_id': account_id,
+            'message': 'Account connected successfully via OAuth',
+            'account': {
+                'id': account_id,
+                'platform': platform,
+                'name': account_name,
+                'username': oauth_data.get('username', ''),
+                'enabled': True,
+                'auth_method': 'oauth'
+            }
+        }), 201
+
+
+# OAuth App Configuration Management Endpoints (for per-user OAuth credentials)
+@app.route('/api/oauth-apps', methods=['GET'])
+def get_oauth_apps():
+    """Get user's OAuth app configurations"""
+    if USE_DATABASE:
+        from models import OAuthAppConfig
+        from auth import get_current_user, decrypt_token
+        
+        user = get_current_user(db_session)
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        try:
+            apps = db_session.query(OAuthAppConfig).filter_by(
+                user_id=user['id'],
+                is_active=True
+            ).all()
+            
+            # Decrypt and return OAuth apps (excluding secrets)
+            apps_list = []
+            for app in apps:
+                apps_list.append({
+                    'id': app.id,
+                    'platform': app.platform,
+                    'app_name': app.app_name,
+                    'redirect_uri': app.redirect_uri,
+                    'has_credentials': bool(app.client_id and app.client_secret),
+                    'created_at': app.created_at.isoformat(),
+                    'updated_at': app.updated_at.isoformat() if app.updated_at else None
+                })
+            
+            return jsonify({
+                'success': True,
+                'oauth_apps': apps_list,
+                'count': len(apps_list)
+            })
+        except Exception as e:
+            logger.error(f"Error fetching OAuth apps: {e}")
+            return jsonify({'error': 'Failed to fetch OAuth apps'}), 500
+    else:
+        return jsonify({
+            'error': 'OAuth app management requires database mode',
+            'message': 'Please configure DATABASE_URL to use this feature'
+        }), 400
+
+
+@app.route('/api/oauth-apps', methods=['POST'])
+def create_oauth_app():
+    """Create a new OAuth app configuration"""
+    if USE_DATABASE:
+        from models import OAuthAppConfig
+        from auth import get_current_user, encrypt_token
+        
+        user = get_current_user(db_session)
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        platform = data.get('platform', '').lower()
+        app_name = data.get('app_name', '')
+        client_id = data.get('client_id', '')
+        client_secret = data.get('client_secret', '')
+        redirect_uri = data.get('redirect_uri', '')
+        
+        if not platform or platform not in ['twitter', 'meta', 'linkedin', 'google']:
+            return jsonify({'error': 'Invalid platform'}), 400
+        
+        if not client_id or not client_secret:
+            return jsonify({'error': 'Client ID and Client Secret are required'}), 400
+        
+        try:
+            # Check if user already has an OAuth app for this platform
+            existing = db_session.query(OAuthAppConfig).filter_by(
+                user_id=user['id'],
+                platform=platform,
+                is_active=True
+            ).first()
+            
+            if existing:
+                return jsonify({
+                    'error': f'You already have an OAuth app configured for {platform}',
+                    'message': 'Please update the existing app or delete it first'
+                }), 400
+            
+            # Encrypt credentials
+            encrypted_client_id = encrypt_token(client_id)
+            encrypted_client_secret = encrypt_token(client_secret)
+            
+            # Create OAuth app config
+            oauth_app = OAuthAppConfig(
+                id=str(uuid.uuid4()),
+                user_id=user['id'],
+                platform=platform,
+                app_name=app_name or f'{platform.title()} App',
+                client_id=encrypted_client_id,
+                client_secret=encrypted_client_secret,
+                redirect_uri=redirect_uri or f'http://localhost:33766/api/oauth/{platform}/callback',
+                additional_config=data.get('additional_config'),
+                is_active=True
+            )
+            
+            db_session.add(oauth_app)
+            db_session.commit()
+            
+            return jsonify({
+                'success': True,
+                'oauth_app_id': oauth_app.id,
+                'message': f'OAuth app for {platform} created successfully',
+                'oauth_app': {
+                    'id': oauth_app.id,
+                    'platform': oauth_app.platform,
+                    'app_name': oauth_app.app_name,
+                    'redirect_uri': oauth_app.redirect_uri,
+                    'created_at': oauth_app.created_at.isoformat()
+                }
+            }), 201
+        except Exception as e:
+            db_session.rollback()
+            logger.error(f"Error creating OAuth app: {e}")
+            return jsonify({'error': 'Failed to create OAuth app'}), 500
+    else:
+        return jsonify({
+            'error': 'OAuth app management requires database mode',
+            'message': 'Please configure DATABASE_URL to use this feature'
+        }), 400
+
+
+@app.route('/api/oauth-apps/<app_id>', methods=['PUT'])
+def update_oauth_app(app_id):
+    """Update an OAuth app configuration"""
+    if USE_DATABASE:
+        from models import OAuthAppConfig
+        from auth import get_current_user, encrypt_token
+        
+        user = get_current_user(db_session)
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        try:
+            oauth_app = db_session.query(OAuthAppConfig).filter_by(
+                id=app_id,
+                user_id=user['id']
+            ).first()
+            
+            if not oauth_app:
+                return jsonify({'error': 'OAuth app not found'}), 404
+            
+            # Update fields
+            if 'app_name' in data:
+                oauth_app.app_name = data['app_name']
+            
+            if 'client_id' in data and data['client_id']:
+                oauth_app.client_id = encrypt_token(data['client_id'])
+            
+            if 'client_secret' in data and data['client_secret']:
+                oauth_app.client_secret = encrypt_token(data['client_secret'])
+            
+            if 'redirect_uri' in data:
+                oauth_app.redirect_uri = data['redirect_uri']
+            
+            if 'additional_config' in data:
+                oauth_app.additional_config = data['additional_config']
+            
+            if 'is_active' in data:
+                oauth_app.is_active = data['is_active']
+            
+            oauth_app.updated_at = datetime.now(timezone.utc)
+            db_session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'OAuth app updated successfully',
+                'oauth_app': {
+                    'id': oauth_app.id,
+                    'platform': oauth_app.platform,
+                    'app_name': oauth_app.app_name,
+                    'redirect_uri': oauth_app.redirect_uri,
+                    'updated_at': oauth_app.updated_at.isoformat()
+                }
+            })
+        except Exception as e:
+            db_session.rollback()
+            logger.error(f"Error updating OAuth app: {e}")
+            return jsonify({'error': 'Failed to update OAuth app'}), 500
+    else:
+        return jsonify({
+            'error': 'OAuth app management requires database mode',
+            'message': 'Please configure DATABASE_URL to use this feature'
+        }), 400
+
+
+@app.route('/api/oauth-apps/<app_id>', methods=['DELETE'])
+def delete_oauth_app(app_id):
+    """Delete an OAuth app configuration"""
+    if USE_DATABASE:
+        from models import OAuthAppConfig
+        from auth import get_current_user
+        
+        user = get_current_user(db_session)
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        try:
+            oauth_app = db_session.query(OAuthAppConfig).filter_by(
+                id=app_id,
+                user_id=user['id']
+            ).first()
+            
+            if not oauth_app:
+                return jsonify({'error': 'OAuth app not found'}), 404
+            
+            # Soft delete by marking as inactive
+            oauth_app.is_active = False
+            oauth_app.updated_at = datetime.now(timezone.utc)
+            db_session.commit()
+            
+            return jsonify({
+                'success': True,
+                'message': 'OAuth app deleted successfully'
+            })
+        except Exception as e:
+            db_session.rollback()
+            logger.error(f"Error deleting OAuth app: {e}")
+            return jsonify({'error': 'Failed to delete OAuth app'}), 500
+    else:
+        return jsonify({
+            'error': 'OAuth app management requires database mode',
+            'message': 'Please configure DATABASE_URL to use this feature'
+        }), 400
+
+
+@app.route('/api/oauth-apps/<platform>/requirements', methods=['GET'])
+def get_platform_requirements(platform):
+    """Get OAuth requirements for a platform"""
+    try:
+        from oauth import get_platform_oauth_requirements
+        
+        requirements = get_platform_oauth_requirements(platform)
+        if not requirements.get('fields'):
+            return jsonify({'error': f'Platform {platform} not supported'}), 404
+        
+        return jsonify({
+            'success': True,
+            **requirements
+        })
+    except Exception as e:
+        logger.error(f"Error getting platform requirements: {e}")
+        return jsonify({'error': 'Failed to get platform requirements'}), 500
+
+
+@app.route('/api/oauth-apps/requirements', methods=['GET'])
+def get_all_requirements():
+    """Get OAuth requirements for all platforms"""
+    try:
+        from oauth import get_all_platform_requirements
+        
+        requirements = get_all_platform_requirements()
+        return jsonify({
+            'success': True,
+            **requirements
+        })
+    except Exception as e:
+        logger.error(f"Error getting all requirements: {e}")
+        return jsonify({'error': 'Failed to get requirements'}), 500
 
 
 @app.route('/api/connection/health/<account_id>', methods=['GET'])
