@@ -230,6 +230,106 @@ docker run -d \
 - ✅ Container stays stopped only when manually stopped with `docker stop mastablasta`
 - ✅ FFmpeg included in the container for video clipping
 
+## Authentication & Google Services Setup
+
+MastaBlasta now supports two authentication methods:
+
+### Authentication Methods
+
+#### 1. Email/Password Authentication
+Users can register and sign in with their email and password. This allows access to the platform without requiring a Google account.
+
+**Password Requirements:**
+- At least 8 characters long
+- At least 1 uppercase letter
+- At least 1 lowercase letter
+- At least 1 number
+- At least 1 special character (!@#$%^&*()_+-=[]{}|;:,.<>?)
+
+#### 2. Google One Tap Authentication
+Users can sign in with their Google account using Google One Tap for a seamless authentication experience.
+
+### Google Services Integration
+
+MastaBlasta integrates with Google Calendar and Google Drive for enhanced functionality:
+
+#### Google Calendar Integration (Optional)
+Sync your scheduled posts with Google Calendar to manage your social media content alongside other events.
+
+**Setup:**
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the **Google Calendar API**
+4. Create OAuth 2.0 credentials:
+   - Application type: Web application
+   - Add authorized redirect URI: `http://localhost:33766/api/google-calendar/callback` (or your production URL)
+   - Add authorized JavaScript origins: `http://localhost:5173` (or your frontend URL)
+5. Copy the Client ID and Client Secret to your `.env` file
+6. In the app, go to Content Calendar page and click "Connect Google Calendar"
+
+**Features:**
+- Create calendar events for scheduled posts
+- Update events when post schedules change
+- View social media posts in your Google Calendar
+
+#### Google Drive Integration (Optional)
+Access and use media files from your Google Drive directly in MastaBlasta.
+
+**Setup:**
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Enable the **Google Drive API**
+3. Add the following OAuth scopes:
+   - `https://www.googleapis.com/auth/drive.readonly`
+   - `https://www.googleapis.com/auth/drive.file`
+4. Add authorized redirect URI: `http://localhost:33766/api/google-drive/callback`
+5. Copy the Client ID and Client Secret to your `.env` file (same as Calendar)
+6. In the app, go to Content Library page and click "Connect Google Drive"
+
+**Features:**
+- Browse files and folders from your Google Drive
+- Import images and videos directly from Drive
+- Access your media library without downloading files
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure the following:
+
+```bash
+# Google OAuth Configuration (for One Tap, Calendar, and Drive)
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:33766/api/oauth/google/callback
+
+# Frontend URL (for OAuth callbacks)
+FRONTEND_URL=http://localhost:5173
+
+# Database Configuration
+DATABASE_URL=postgresql://user:password@localhost:5432/mastablasta
+
+# JWT and Encryption Keys
+JWT_SECRET_KEY=your-jwt-secret-key-change-in-production
+ENCRYPTION_KEY=your-fernet-encryption-key
+```
+
+**Note:** All Google services (One Tap, Calendar, Drive) use the same OAuth credentials from the Google Cloud Console.
+
+### Database Migrations
+
+If you're using PostgreSQL, run Alembic migrations to create the database schema:
+
+```bash
+# Set DATABASE_URL environment variable
+export DATABASE_URL="postgresql://user:password@localhost:5432/mastablasta"
+
+# Run migrations
+alembic upgrade head
+```
+
+This will create all necessary tables including:
+- Users table with authentication fields (email/password, Google ID)
+- GoogleServices table for Calendar and Drive integrations
+- Posts, Media, Analytics, and other tables
+
 ### Local Development
 
 #### Backend
