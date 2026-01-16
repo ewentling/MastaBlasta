@@ -9,11 +9,12 @@ A production-ready multi-platform social media posting service that allows easy 
 2. **🔐 Real OAuth** - Actual Twitter, Facebook, Instagram, LinkedIn, YouTube integrations
 3. **📤 Media Management** - Direct file uploads with thumbnails and optimization
 4. **🔒 JWT Authentication** - Secure user accounts with role-based access control
-5. **📊 Real Analytics** - Actual metrics from platform APIs
-6. **🔔 Webhook System** - Event notifications with retry logic
-7. **🔍 Advanced Search** - Full-text search with multiple filters
-8. **⚡ Bulk Operations** - Efficient batch create, update, delete
-9. **🔄 Error Recovery** - Automatic retry with exponential backoff
+5. **🔑 Google One Tap** - Seamless authentication with Google accounts
+6. **📊 Real Analytics** - Actual metrics from platform APIs
+7. **🔔 Webhook System** - Event notifications with retry logic
+8. **🔍 Advanced Search** - Full-text search with multiple filters
+9. **⚡ Bulk Operations** - Efficient batch create, update, delete
+10. **🔄 Error Recovery** - Automatic retry with exponential backoff
 
 **Dual-Mode Operation:**
 - 🧪 **Development Mode**: In-memory storage, simulated OAuth (no setup required)
@@ -837,6 +838,49 @@ Set environment variables:
 - `PORT`: API port (default: 33766)
 - `OPENAI_API_KEY`: OpenAI API key for AI features (optional, required for AI functionality)
 - `GEMINI_API_KEY` or `GOOGLE_API_KEY`: Google Gemini API key for video clipping (optional, required for video clipping feature)
+- `GOOGLE_CLIENT_ID`: Google OAuth Client ID for One Tap authentication (required for user login)
+
+### Google One Tap Authentication Setup
+
+MastaBlasta now uses Google One Tap for seamless user authentication. To set it up:
+
+#### Backend Configuration
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the Google+ API
+4. Go to "Credentials" → "Create Credentials" → "OAuth 2.0 Client ID"
+5. Configure the OAuth consent screen if prompted
+6. Select "Web application" as the application type
+7. Add authorized redirect URIs:
+   - `http://localhost:5000` (for development)
+   - Your production domain (e.g., `https://yourdomain.com`)
+8. Copy the Client ID and set it as an environment variable:
+
+```bash
+export GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+```
+
+#### Frontend Configuration
+
+1. Create a `.env` file in the `frontend/` directory (use `frontend/.env.example` as a template):
+
+```bash
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+```
+
+2. Make sure the Client ID matches the one configured in the backend
+
+#### Testing Authentication
+
+1. Start the backend: `python app.py`
+2. Start the frontend: `cd frontend && npm run dev`
+3. Navigate to `http://localhost:5173` (or your frontend dev server URL)
+4. You should see a login page with a "Sign in with Google" button
+5. Click the button or use the One Tap prompt to authenticate
+6. After successful authentication, you'll be redirected to the dashboard
+
+**Note**: Users will be automatically created in the database upon their first login via Google One Tap.
 
 ### AI Features Setup
 

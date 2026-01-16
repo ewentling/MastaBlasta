@@ -65,7 +65,7 @@ def register():
             session.flush()
 
             # Generate tokens
-            access_token = create_access_token(user.id, user.email, user.role.value)
+            access_token = create_access_token(user.id, user.role.value)
             refresh_token = create_refresh_token(user.id)
 
             return jsonify({
@@ -117,7 +117,7 @@ def login():
             session.flush()
 
             # Generate tokens
-            access_token = create_access_token(user.id, user.email, user.role.value)
+            access_token = create_access_token(user.id, user.role.value)
             refresh_token = create_refresh_token(user.id)
 
             return jsonify({
@@ -141,6 +141,97 @@ def login():
 def get_me():
     """Get current user profile"""
     return jsonify({'user': g.current_user})
+
+
+@integrated_bp.route('/auth/google', methods=['POST'])
+def google_auth():
+    """Authenticate user with Google One Tap"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+
+    try:
+        from google.oauth2 import id_token
+        from google.auth.transport import requests as google_requests
+        from auth import create_access_token, create_refresh_token, generate_api_key
+        from database import db_session_scope
+        from models import User, UserRole
+        import uuid
+        import os
+
+        data = request.get_json()
+        credential = data.get('credential')
+
+        if not credential:
+            return jsonify({'error': 'Missing credential'}), 400
+
+        # Verify the Google ID token
+        google_client_id = os.getenv('GOOGLE_CLIENT_ID')
+        if not google_client_id:
+            return jsonify({'error': 'Google Client ID not configured'}), 500
+
+        try:
+            idinfo = id_token.verify_oauth2_token(
+                credential, 
+                google_requests.Request(), 
+                google_client_id
+            )
+
+            # Extract user info from token
+            email = idinfo.get('email')
+            name = idinfo.get('name', '')
+            google_id = idinfo.get('sub')
+
+            if not email:
+                return jsonify({'error': 'Email not provided by Google'}), 400
+
+            with db_session_scope() as session:
+                # Check if user exists
+                user = session.query(User).filter_by(email=email).first()
+
+                if user:
+                    # Update last login
+                    user.last_login = datetime.utcnow()
+                    if not user.is_active:
+                        return jsonify({'error': 'Account is deactivated'}), 403
+                else:
+                    # Create new user
+                    user = User(
+                        id=str(uuid.uuid4()),
+                        email=email,
+                        password_hash='',  # No password for Google auth users
+                        full_name=name,
+                        role=UserRole.EDITOR,
+                        api_key=generate_api_key(),
+                        is_active=True,
+                        created_at=datetime.utcnow()
+                    )
+                    session.add(user)
+
+                session.flush()
+
+                # Generate tokens
+                access_token = create_access_token(user.id, user.role.value)
+                refresh_token = create_refresh_token(user.id)
+
+                return jsonify({
+                    'user': {
+                        'id': user.id,
+                        'email': user.email,
+                        'name': user.full_name,
+                        'role': user.role.value
+                    },
+                    'access_token': access_token,
+                    'refresh_token': refresh_token,
+                    'api_key': user.api_key
+                }), 200
+
+        except ValueError as e:
+            logger.error(f"Google token verification failed: {e}")
+            return jsonify({'error': 'Invalid Google token'}), 401
+
+    except Exception as e:
+        logger.error(f"Google authentication error: {e}")
+        return jsonify({'error': 'Authentication failed', 'details': str(e)}), 500
 
 
 # ==================== OAUTH ROUTES ====================
