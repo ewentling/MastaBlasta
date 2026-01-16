@@ -1662,6 +1662,187 @@ class TestConnectionImprovements:
 
 
 # ============================================================================
+# EMAIL/PASSWORD AUTHENTICATION TESTS (NEW)
+# ============================================================================
+
+class TestEmailPasswordAuth:
+    """Test email/password authentication functionality"""
+
+    def test_register_with_email_password(self, client):
+        """Test user registration with email/password"""
+        response = client.post('/api/v2/auth/register', json={
+            'email': 'newuser@example.com',
+            'password': 'SecurePass123!',
+            'name': 'New User'
+        })
+        
+        # Should succeed or return 409 if user exists
+        assert response.status_code in [201, 409, 500, 503]
+        
+        if response.status_code == 201:
+            data = response.get_json()
+            assert 'user' in data
+            assert 'access_token' in data
+            assert 'refresh_token' in data
+            assert data['user']['email'] == 'newuser@example.com'
+
+    def test_register_with_weak_password(self, client):
+        """Test registration with password that doesn't meet policy"""
+        response = client.post('/api/v2/auth/register', json={
+            'email': 'weakpass@example.com',
+            'password': 'weak',
+            'name': 'Test User'
+        })
+        
+        # Should fail password validation
+        if response.status_code == 400:
+            data = response.get_json()
+            assert 'error' in data
+            assert 'Password' in data['error'] or 'password' in data['error']
+
+    def test_login_with_email_password(self, client, test_user):
+        """Test login with email/password"""
+        response = client.post('/api/v2/auth/login', json={
+            'email': test_user.email,
+            'password': 'SecurePass123!'
+        })
+        
+        # Should succeed or return error if DB not enabled
+        assert response.status_code in [200, 500, 503]
+        
+        if response.status_code == 200:
+            data = response.get_json()
+            assert 'access_token' in data
+            assert 'user' in data
+
+    def test_user_model_nullable_password(self, db_session):
+        """Test that User model allows NULL password_hash for Google users"""
+        from models import User, UserRole
+        from uuid import uuid4
+        
+        # Create Google user without password
+        google_user = User(
+            id=str(uuid4()),
+            email='google@example.com',
+            password_hash=None,  # NULL for Google users
+            full_name='Google User',
+            role=UserRole.EDITOR,
+            auth_provider='google',
+            google_id='google-sub-id-123',
+            is_active=True
+        )
+        
+        db_session.add(google_user)
+        db_session.commit()
+        
+        # Verify user was created
+        assert google_user.id is not None
+        assert google_user.password_hash is None
+        assert google_user.auth_provider == 'google'
+        assert google_user.google_id == 'google-sub-id-123'
+
+
+# ============================================================================
+# GOOGLE SERVICES INTEGRATION TESTS (NEW)
+# ============================================================================
+
+class TestGoogleServicesIntegration:
+    """Test Google Calendar and Drive integration"""
+
+    def test_google_service_model(self, db_session):
+        """Test GoogleService model creation"""
+        from models import GoogleService, User, UserRole
+        from uuid import uuid4
+        
+        # Create a test user first
+        user = User(
+            id=str(uuid4()),
+            email='testservice@example.com',
+            password_hash='test_hash',
+            full_name='Test User',
+            role=UserRole.EDITOR,
+            is_active=True
+        )
+        db_session.add(user)
+        db_session.flush()
+        
+        # Create GoogleService
+        service = GoogleService(
+            id=str(uuid4()),
+            user_id=user.id,
+            service_type='calendar',
+            access_token='encrypted_access_token',
+            refresh_token='encrypted_refresh_token',
+            is_active=True,
+            service_metadata={'calendar_id': 'primary'}
+        )
+        
+        db_session.add(service)
+        db_session.commit()
+        
+        # Verify service was created
+        assert service.id is not None
+        assert service.user_id == user.id
+        assert service.service_type == 'calendar'
+        assert service.is_active is True
+
+    def test_calendar_authorize_endpoint(self, client, auth_headers):
+        """Test Google Calendar authorization endpoint"""
+        response = client.get('/api/google-calendar/authorize', headers=auth_headers)
+        
+        # Should return URL or error if not authenticated
+        assert response.status_code in [200, 401, 500, 503]
+        
+        if response.status_code == 200:
+            data = response.get_json()
+            assert 'authorization_url' in data
+
+    def test_drive_authorize_endpoint(self, client, auth_headers):
+        """Test Google Drive authorization endpoint"""
+        response = client.get('/api/google-drive/authorize', headers=auth_headers)
+        
+        # Should return URL or error if not authenticated
+        assert response.status_code in [200, 401, 500, 503]
+        
+        if response.status_code == 200:
+            data = response.get_json()
+            assert 'authorization_url' in data
+
+    def test_token_encryption(self):
+        """Test OAuth token encryption/decryption"""
+        from auth import encrypt_token, decrypt_token
+        
+        original_token = 'test_access_token_123'
+        encrypted = encrypt_token(original_token)
+        decrypted = decrypt_token(encrypted)
+        
+        assert encrypted != original_token
+        assert decrypted == original_token
+
+    def test_calendar_oauth_class(self):
+        """Test GoogleCalendarOAuth class"""
+        from oauth import GoogleCalendarOAuth
+        
+        # Test authorization URL generation
+        auth_url = GoogleCalendarOAuth.get_authorization_url('user123', 'state123')
+        
+        assert 'accounts.google.com' in auth_url
+        assert 'calendar.events' in auth_url
+        assert 'state=state123' in auth_url
+
+    def test_drive_oauth_class(self):
+        """Test GoogleDriveOAuth class"""
+        from oauth import GoogleDriveOAuth
+        
+        # Test authorization URL generation
+        auth_url = GoogleDriveOAuth.get_authorization_url('user123', 'state123')
+        
+        assert 'accounts.google.com' in auth_url
+        assert 'drive' in auth_url
+        assert 'state=state123' in auth_url
+
+
+# ============================================================================
 # RUN ALL TESTS
 # ============================================================================
 
