@@ -193,9 +193,13 @@ def google_auth():
 
             with db_session_scope() as session:
                 # Check if user exists by email or google_id
-                user = session.query(User).filter(
-                    (User.email == email) | (User.google_id == google_id)
-                ).first()
+                # Only match by google_id if it's not None
+                if google_id:
+                    user = session.query(User).filter(
+                        (User.email == email) | (User.google_id == google_id)
+                    ).first()
+                else:
+                    user = session.query(User).filter(User.email == email).first()
 
                 if user:
                     # Update last login and google_id if needed

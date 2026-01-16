@@ -49,6 +49,13 @@ class User(Base):
     templates = relationship("Template", back_populates="user", cascade="all, delete-orphan")
     google_services = relationship("GoogleService", back_populates="user", cascade="all, delete-orphan")
 
+    def __init__(self, **kwargs):
+        """Initialize User with validation"""
+        super().__init__(**kwargs)
+        # Validate that at least one authentication method exists
+        if not self.password_hash and not self.google_id:
+            raise ValueError("User must have either password_hash or google_id")
+
     def __repr__(self):
         return f"<User {self.email} ({self.role.value})>"
 

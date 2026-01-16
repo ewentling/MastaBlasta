@@ -9,6 +9,7 @@ import secrets
 import tweepy
 from requests_oauthlib import OAuth2Session
 import logging
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -374,7 +375,7 @@ class GoogleCalendarOAuth:
             'state': state
         }
 
-        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        query_string = urlencode(params)
         return f"{cls.AUTHORIZE_URL}?{query_string}"
 
     @classmethod
@@ -463,7 +464,7 @@ class GoogleDriveOAuth:
             'state': state
         }
 
-        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        query_string = urlencode(params)
         return f"{cls.AUTHORIZE_URL}?{query_string}"
 
     @classmethod
