@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app as flask_app  # noqa: E402
 from models import Base, User, Account, Post, Media  # noqa: E402
-from database import engine, Session  # noqa: E402
 from auth import hash_password, verify_password, create_access_token, encrypt_token, decrypt_token  # noqa: E402
 from security_enhancements import (  # noqa: E402
     PasswordPolicy, AccountSecurity, RateLimiter, WebhookSecurity,
@@ -22,6 +21,13 @@ from security_enhancements import (  # noqa: E402
 
 # Test Configuration
 TEST_DATABASE_URL = os.getenv('TEST_DATABASE_URL', 'sqlite:///:memory:')
+
+# Create separate test engine and session for tests
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy.orm import sessionmaker, scoped_session  # noqa: E402
+
+test_engine = create_engine(TEST_DATABASE_URL, echo=False)
+TestSession = scoped_session(sessionmaker(bind=test_engine))
 
 
 @pytest.fixture(scope='module')
@@ -43,27 +49,28 @@ def client(app):
 def db_session():
     """Create database session for testing"""
     # Create tables
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=test_engine)
 
-    session = Session()
+    session = TestSession()
     yield session
 
     # Cleanup
     session.close()
-    Base.metadata.drop_all(bind=engine)
+    Base.metadata.drop_all(bind=test_engine)
 
 
 @pytest.fixture
 def test_user(db_session):
     """Create test user"""
     from uuid import uuid4
+    from models import UserRole
 
     user = User(
         id=str(uuid4()),
         email='test@example.com',
         password_hash=hash_password('SecurePass123!'),
         full_name='Test User',
-        role='editor',
+        role=UserRole.EDITOR,
         is_active=True
     )
 
@@ -358,13 +365,14 @@ class TestDatabase:
     def test_user_creation(self, db_session):
         """Test user creation in database"""
         from uuid import uuid4
+        from models import UserRole
 
         user = User(
             id=str(uuid4()),
             email='newuser@example.com',
             password_hash=hash_password('Password123!'),
             full_name='New User',
-            role='editor'
+            role=UserRole.EDITOR
         )
 
         db_session.add(user)
@@ -399,6 +407,7 @@ class TestDatabase:
     def test_post_creation_with_media(self, db_session, test_user):
         """Test post creation with media"""
         from uuid import uuid4
+        from models import PostStatus
 
         # Create media
         media = Media(
@@ -417,7 +426,7 @@ class TestDatabase:
             id=str(uuid4()),
             user_id=test_user.id,
             content='Test post',
-            status='draft'
+            status=PostStatus.DRAFT
         )
 
         post.media.append(media)
@@ -431,13 +440,15 @@ class TestDatabase:
     def test_cascade_delete(self, db_session):
         """Test cascade delete removes user data"""
         from uuid import uuid4
+        from models import UserRole, PostStatus
 
         # Create user with posts
         user = User(
             id=str(uuid4()),
             email='deletetest@example.com',
             password_hash=hash_password('Password123!'),
-            full_name='Delete Test'
+            full_name='Delete Test',
+            role=UserRole.EDITOR
         )
 
         db_session.add(user)
@@ -447,7 +458,7 @@ class TestDatabase:
             id=str(uuid4()),
             user_id=user.id,
             content='Test post',
-            status='draft'
+            status=PostStatus.DRAFT
         )
 
         db_session.add(post)

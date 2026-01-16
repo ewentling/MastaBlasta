@@ -675,26 +675,26 @@ class ImageEnhancer:
                                     "type": "text",
                                     "text": "Generate a concise, descriptive alt text for this image that would be useful for screen readers and accessibility. Focus on the main subject, key details, and context. Keep it under 125 characters."
                                 },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_data}"
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/jpeg;base64,{image_data}"
+                                    }
                                 }
-                            }
-                        ]
-                    }
-                ],
-                max_tokens=100
-            )
+                            ]
+                        }
+                    ],
+                    max_tokens=100
+                )
 
-            alt_text = response.choices[0].message.content.strip()
+                alt_text = response.choices[0].message.content.strip()
 
-            return {
-                'success': True,
-                'alt_text': alt_text,
-                'character_count': len(alt_text),
-                'manual_recommended': False
-            }
+                return {
+                    'success': True,
+                    'alt_text': alt_text,
+                    'character_count': len(alt_text),
+                    'manual_recommended': False
+                }
             except openai.BadRequestError as e:
                 # Fallback to gpt-4o if gpt-4-turbo doesn't support vision
                 logger.warning(f"gpt-4-turbo failed, trying gpt-4o: {str(e)}")
