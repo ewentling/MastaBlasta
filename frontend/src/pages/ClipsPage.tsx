@@ -62,7 +62,8 @@ export default function ClipsPage() {
     setSelectedClip(null);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/clips/analyze', {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
+      const response = await axios.post(`${API_BASE_URL}/api/clips/analyze`, {
         video_url: videoUrl,
         num_clips: numClips,
       });
@@ -77,7 +78,8 @@ export default function ClipsPage() {
       }
     } catch (err: any) {
       console.error('Analysis error:', err);
-      setError(err.response?.data?.error || 'Failed to analyze video. Check the URL and try again.');
+      const errorMsg = err.response?.data?.error || err.message || 'Failed to analyze video. Check the URL and try again.';
+      setError(errorMsg);
     } finally {
       setAnalyzing(false);
     }
@@ -96,7 +98,8 @@ export default function ClipsPage() {
     setError(null);
 
     try {
-      const response = await axios.post('http://localhost:5000/api/clips/metadata', {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
+      const response = await axios.post(`${API_BASE_URL}/api/clips/metadata`, {
         clip: selectedClip,
         platform: platform,
       });
@@ -118,7 +121,8 @@ export default function ClipsPage() {
     if (!selectedClip) return;
 
     try {
-      const response = await axios.post('http://localhost:5000/api/clips/download-info', {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
+      const response = await axios.post(`${API_BASE_URL}/api/clips/download-info`, {
         video_url: selectedClip.video_url,
         start_time: selectedClip.start_time,
         end_time: selectedClip.end_time,
@@ -215,24 +219,34 @@ export default function ClipsPage() {
           </div>
         </div>
 
-        <button
-          onClick={handleAnalyze}
-          disabled={analyzing || !videoUrl.trim()}
-          className="primary-button"
-          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          {analyzing ? (
-            <>
-              <Loader size={20} style={{ marginRight: '8px', animation: 'spin 1s linear infinite' }} />
-              Analyzing with Gemini AI...
-            </>
-          ) : (
-            <>
-              <Sparkles size={20} style={{ marginRight: '8px' }} />
-              Analyze Video
-            </>
-          )}
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+          <button
+            onClick={handleAnalyze}
+            disabled={analyzing || !videoUrl.trim()}
+            className="primary-button"
+            style={{ 
+              maxWidth: '300px',
+              padding: '12px 32px',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              fontSize: '16px',
+              fontWeight: 600,
+            }}
+          >
+            {analyzing ? (
+              <>
+                <Loader size={20} style={{ marginRight: '8px', animation: 'spin 1s linear infinite' }} />
+                Analyzing with Gemini AI...
+              </>
+            ) : (
+              <>
+                <Sparkles size={20} style={{ marginRight: '8px' }} />
+                Analyze Video
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Error/Success Messages */}

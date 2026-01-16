@@ -406,6 +406,38 @@ Social listening requires external API access:
 
 **Fallback:** If APIs are not configured, demo data is used for UI testing.
 
+### Video Clipper in Production
+
+The Video Clipper feature uses Google Gemini AI and yt-dlp:
+
+**Requirements:**
+1. **Google Gemini API Key**: Set `GEMINI_API_KEY` or `GOOGLE_API_KEY` in environment
+2. **Python Package**: `google-generativeai` (already in requirements.txt)
+3. **yt-dlp**: For video information extraction (already in requirements.txt)
+
+**Setup:**
+```bash
+# Get API key from Google AI Studio
+# Visit: https://makersuite.google.com/app/apikey
+
+# Add to .env
+GEMINI_API_KEY=your-gemini-api-key
+# OR
+GOOGLE_API_KEY=your-gemini-api-key
+```
+
+**Features:**
+- Analyzes videos from YouTube, Vimeo, and most major platforms
+- AI-powered identification of viral clip opportunities
+- Engagement scoring and platform recommendations
+- Automatic metadata generation (captions, hashtags)
+
+**Error Messages:**
+- "Video clipper service not enabled" → Install dependencies and configure API key
+- "Video is unavailable or private" → Check video URL and permissions
+- "Unsupported video platform" → Use YouTube, Vimeo, or other supported platforms
+- "Video is too short" → Video must be at least 60 seconds
+
 ### Local Development
 
 #### Backend
