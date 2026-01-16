@@ -38,34 +38,115 @@ export default function ChatbotPage() {
       return;
     }
 
+    if (!inputText.trim()) {
+      setGenerationError('Please enter some text to generate content.');
+      return;
+    }
+
     setIsGenerating(true);
     setGenerationError('');
 
     try {
       let type = '';
+      let content = '';
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
 
       switch (activeTab) {
         case 'generate':
           type = 'Post Ideas';
+          // Generate 3 different captions
+          const captions = await Promise.all([
+            fetch(`${API_BASE_URL}/api/ai/generate-caption`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                topic: inputText,
+                platform: selectedPlatform,
+                tone: contentTone
+              })
+            }).then(r => r.json()),
+            fetch(`${API_BASE_URL}/api/ai/generate-caption`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                topic: inputText,
+                platform: selectedPlatform,
+                tone: contentTone === 'professional' ? 'casual' : 'professional'
+              })
+            }).then(r => r.json()),
+            fetch(`${API_BASE_URL}/api/ai/generate-caption`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                topic: inputText,
+                platform: selectedPlatform,
+                tone: 'inspirational'
+              })
+            }).then(r => r.json())
+          ]);
+          
+          content = captions.map((c, i) => 
+            c.success ? `Post Idea ${i + 1}:\n${c.caption}` : `Error generating idea ${i + 1}`
+          ).join('\n\n');
           break;
+
         case 'improve':
           type = 'Improved Content';
+          const improveResponse = await fetch(`${API_BASE_URL}/api/ai/rewrite-content`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: inputText,
+              source_platform: selectedPlatform,
+              target_platform: selectedPlatform
+            })
+          });
+          const improveData = await improveResponse.json();
+          content = improveData.success ? 
+            `✨ Improved Version:\n\n${improveData.rewritten_content}\n\n${improveData.improvements?.join('\n') || ''}` :
+            improveData.error || 'Error improving content';
           break;
+
         case 'hashtags':
           type = 'Hashtags';
+          const hashtagResponse = await fetch(`${API_BASE_URL}/api/ai/suggest-hashtags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: inputText,
+              platform: selectedPlatform,
+              count: 10
+            })
+          });
+          const hashtagData = await hashtagResponse.json();
+          content = hashtagData.success ?
+            hashtagData.hashtags.join(' ') :
+            hashtagData.error || 'Error generating hashtags';
           break;
+
         case 'translate':
           type = 'Translation';
+          const translateResponse = await fetch(`${API_BASE_URL}/api/ai/translate-content`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: inputText,
+              target_language: targetLanguage,
+              platform: selectedPlatform
+            })
+          });
+          const translateData = await translateResponse.json();
+          const langName = languages.find(l => l.code === targetLanguage)?.name || targetLanguage;
+          content = translateData.success ?
+            `[${langName} Translation]\n\n${translateData.translated_content}` :
+            translateData.error || 'Error translating content';
           break;
       }
-
-      // Simulate AI generation (in production, this would call the actual LLM API)
-      const mockGeneration = await simulateAIGeneration(activeTab);
       
       const newContent: GeneratedContent = {
         id: Date.now().toString(),
         type,
-        content: mockGeneration,
+        content,
         timestamp: new Date(),
       };
 
@@ -76,21 +157,6 @@ export default function ChatbotPage() {
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  // Simulated AI generation for demo purposes
-  const simulateAIGeneration = async (type: string): Promise<string> => {
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const mockResponses: Record<string, string> = {
-      generate: `Post Idea 1:\n🚀 Exciting news! ${inputText} is transforming how we work. Here's what you need to know 👇\n\nPost Idea 2:\n💡 Quick tip: ${inputText} can save you hours every week. Let me show you how...\n\nPost Idea 3:\n🎯 Ready to level up? ${inputText} is the game-changer you've been waiting for. Click to learn more!`,
-      improve: `✨ Improved Version:\n\n${inputText}\n\nEnhanced with:\n• More engaging opening\n• Clear call-to-action\n• Relevant emojis for ${selectedPlatform}\n• Optimized length for platform\n• ${contentTone} tone throughout`,
-      hashtags: `#${inputText.replace(/\s+/g, '')} #SocialMedia #Marketing #DigitalMarketing #ContentCreation #${selectedPlatform} #Trending #Viral #Engagement #Growth`,
-      translate: `[${languages.find(l => l.code === targetLanguage)?.name} Translation]\n\n${inputText}\n\n(Translation would appear here with culturally appropriate adaptations)`,
-    };
-
-    return mockResponses[type] || 'Generated content would appear here.';
   };
 
   const copyToClipboard = (text: string) => {

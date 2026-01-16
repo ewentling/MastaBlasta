@@ -297,12 +297,71 @@ Return only the rewritten content, no explanations."""
                 'success': True,
                 'original': content,
                 'rewritten': rewritten,
+                'rewritten_content': rewritten,  # Add this for frontend compatibility
                 'source_platform': source_platform,
                 'target_platform': target_platform,
-                'character_count': len(rewritten)
+                'character_count': len(rewritten),
+                'improvements': [
+                    f'Adapted style to be {style}',
+                    f'Optimized for {target_platform} audience',
+                    'Maintained core message',
+                    'Adjusted format and length'
+                ]
             }
         except Exception as e:
             logger.error(f"AI content rewriting error: {str(e)}")
+            return {'error': str(e), 'success': False}
+
+    def translate_content(self, content: str, target_language: str, platform: str) -> Dict[str, Any]:
+        """Translate content to target language with platform optimization"""
+        if not self.enabled:
+            return {'error': 'AI translation not enabled', 'enabled': False}
+
+        try:
+            language_names = {
+                'es': 'Spanish', 'fr': 'French', 'de': 'German', 'it': 'Italian',
+                'pt': 'Portuguese', 'ja': 'Japanese', 'zh': 'Chinese', 'ko': 'Korean',
+                'ar': 'Arabic', 'ru': 'Russian', 'hi': 'Hindi'
+            }
+            
+            lang_name = language_names.get(target_language, target_language)
+            
+            prompt = f"""Translate this {platform} post to {lang_name}:
+
+"{content}"
+
+Requirements:
+- Natural, culturally appropriate translation
+- Maintain the tone and style
+- Adapt idioms and expressions for {lang_name} speakers
+- Keep emojis if culturally appropriate
+- Optimize for {platform} audience
+
+Return only the translation, no explanations."""
+
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": f"You are an expert translator specializing in social media content for {lang_name}."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=500,
+                temperature=0.7
+            )
+
+            translated = response.choices[0].message.content.strip()
+
+            return {
+                'success': True,
+                'original': content,
+                'translated_content': translated,
+                'target_language': target_language,
+                'language_name': lang_name,
+                'platform': platform,
+                'character_count': len(translated)
+            }
+        except Exception as e:
+            logger.error(f"AI translation error: {str(e)}")
             return {'error': str(e), 'success': False}
 
 
@@ -586,18 +645,64 @@ class ImageEnhancer:
             return {'error': str(e), 'success': False}
 
     def generate_alt_text(self, image_data: str) -> Dict[str, Any]:
-        """Generate alt text for accessibility (placeholder - would use vision API)"""
+        """Generate alt text for accessibility using OpenAI Vision API"""
         if not self.enabled:
             return {'error': 'Alt text generation not enabled', 'enabled': False}
 
-        # Placeholder implementation
-        # In production, would use GPT-4V or similar vision API
-        return {
-            'success': True,
-            'alt_text': 'Image description (Vision API integration required for automatic generation)',
-            'note': 'Integrate OpenAI Vision API or similar for automatic alt text generation',
-            'manual_recommended': True
-        }
+        try:
+            # Check if API key is available
+            if not self.api_key:
+                return {
+                    'error': 'OpenAI API key not configured',
+                    'success': False
+                }
+
+            # Ensure image data is in proper format
+            if image_data.startswith('data:image'):
+                # Extract base64 part
+                image_data = image_data.split(',')[1]
+
+            # Use OpenAI Vision API (GPT-4 Vision)
+            response = openai.chat.completions.create(
+                model="gpt-4-vision-preview",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Generate a concise, descriptive alt text for this image that would be useful for screen readers and accessibility. Focus on the main subject, key details, and context. Keep it under 125 characters."
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_data}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=100
+            )
+
+            alt_text = response.choices[0].message.content.strip()
+
+            return {
+                'success': True,
+                'alt_text': alt_text,
+                'character_count': len(alt_text),
+                'manual_recommended': False
+            }
+        except Exception as e:
+            logger.error(f"Alt text generation error: {str(e)}")
+            # Fallback to basic description
+            return {
+                'success': False,
+                'error': str(e),
+                'alt_text': 'Image description (automatic generation failed)',
+                'note': 'Consider manually adding alt text for better accessibility',
+                'manual_recommended': True
+            }
 
 
 class AIImageGenerator:
@@ -4259,6 +4364,29 @@ def ai_rewrite_content():
         return jsonify({'error': 'Content is required'}), 400
 
     result = ai_content_generator.rewrite_for_platform(content, source_platform, target_platform)
+
+    if not result.get('success'):
+        return jsonify(result), 503 if 'enabled' in result else 500
+
+    return jsonify(result)
+
+
+@app.route('/api/ai/translate-content', methods=['POST'])
+def ai_translate_content():
+    """Translate content to a different language using AI"""
+    data = request.get_json()
+
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    content = data.get('content', '')
+    target_language = data.get('target_language', 'es')
+    platform = data.get('platform', 'twitter')
+
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+
+    result = ai_content_generator.translate_content(content, target_language, platform)
 
     if not result.get('success'):
         return jsonify(result), 503 if 'enabled' in result else 500
