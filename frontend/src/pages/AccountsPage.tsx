@@ -461,8 +461,6 @@ function OAuthModal({
                   {p.display_name} {hasOAuthApp(p.name) ? '✓ Configured' : '⚠️ Not configured'}
                 </option>
               ))}
-                <option key={p.name} value={p.name}>{p.display_name}</option>
-              ))}
             </select>
           </div>
 
@@ -487,7 +485,7 @@ function OAuthModal({
           </button>
           <button 
             type="button" 
-            className="btn btn-primary" 
+            className="btn btn-primary"
             onClick={handleConnect}
             disabled={isConnecting || !selectedPlatform}
           >
@@ -495,7 +493,4 @@ function OAuthModal({
             {isConnecting ? 'Connecting...' : 'Connect'}
           </button>
         </div>
-      </div>
-    </div>
-  );
 }

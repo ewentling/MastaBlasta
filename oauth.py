@@ -1283,6 +1283,7 @@ def get_platform_oauth_requirements(platform: str) -> Dict[str, Any]:
         'twitter': {
             'platform': 'twitter',
             'display_name': 'Twitter/X',
+            'icon': '𝕏',
             'fields': [
                 {'name': 'client_id', 'label': 'Client ID', 'type': 'text', 'required': True},
                 {'name': 'client_secret', 'label': 'Client Secret', 'type': 'password', 'required': True},
@@ -1303,6 +1304,7 @@ def get_platform_oauth_requirements(platform: str) -> Dict[str, Any]:
         'meta': {
             'platform': 'meta',
             'display_name': 'Facebook/Instagram',
+            'icon': '📘',
             'fields': [
                 {'name': 'app_id', 'label': 'App ID', 'type': 'text', 'required': True},
                 {'name': 'app_secret', 'label': 'App Secret', 'type': 'password', 'required': True},
@@ -1322,6 +1324,7 @@ def get_platform_oauth_requirements(platform: str) -> Dict[str, Any]:
         'linkedin': {
             'platform': 'linkedin',
             'display_name': 'LinkedIn',
+            'icon': '💼',
             'fields': [
                 {'name': 'client_id', 'label': 'Client ID', 'type': 'text', 'required': True},
                 {'name': 'client_secret', 'label': 'Client Secret', 'type': 'password', 'required': True},
@@ -1341,6 +1344,7 @@ def get_platform_oauth_requirements(platform: str) -> Dict[str, Any]:
         'google': {
             'platform': 'google',
             'display_name': 'YouTube',
+            'icon': '▶️',
             'fields': [
                 {'name': 'client_id', 'label': 'Client ID', 'type': 'text', 'required': True},
                 {'name': 'client_secret', 'label': 'Client Secret', 'type': 'password', 'required': True},
@@ -1363,6 +1367,7 @@ def get_platform_oauth_requirements(platform: str) -> Dict[str, Any]:
     return requirements.get(platform, {
         'platform': platform,
         'display_name': platform.title(),
+        'icon': '🔗',
         'fields': [],
         'docs_url': None,
         'setup_instructions': ['Platform configuration not available'],
