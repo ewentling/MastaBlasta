@@ -9,6 +9,7 @@ import secrets
 import tweepy
 from requests_oauthlib import OAuth2Session
 import logging
+from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
@@ -350,6 +351,219 @@ class GoogleOAuth:
             }
         except Exception as e:
             logger.error(f"Google token exchange failed: {e}")
+            return None
+
+
+class GoogleCalendarOAuth:
+    """Google Calendar OAuth 2.0 implementation"""
+
+    AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
+    TOKEN_URL = 'https://oauth2.googleapis.com/token'
+    CALENDAR_API_URL = 'https://www.googleapis.com/calendar/v3'
+    SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+
+    @classmethod
+    def get_authorization_url(cls, user_id: str, state: str) -> str:
+        """Generate Google Calendar OAuth authorization URL"""
+        # Build redirect URI properly - ensure we have a base URL
+        base_redirect_uri = GOOGLE_REDIRECT_URI
+        if '/callback' in base_redirect_uri:
+            # Remove the existing callback path
+            base_redirect_uri = base_redirect_uri.rsplit('/callback', 1)[0]
+        elif base_redirect_uri.endswith('/'):
+            base_redirect_uri = base_redirect_uri.rstrip('/')
+        
+        redirect_uri = f"{base_redirect_uri}/calendar"
+        
+        params = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'redirect_uri': redirect_uri,
+            'response_type': 'code',
+            'scope': ' '.join(cls.SCOPES),
+            'access_type': 'offline',
+            'prompt': 'consent',
+            'state': state
+        }
+
+        query_string = urlencode(params)
+        return f"{cls.AUTHORIZE_URL}?{query_string}"
+
+    @classmethod
+    def exchange_code_for_token(cls, code: str) -> Optional[Dict[str, Any]]:
+        """Exchange authorization code for access token"""
+        try:
+            data = {
+                'code': code,
+                'client_id': GOOGLE_CLIENT_ID,
+                'client_secret': GOOGLE_CLIENT_SECRET,
+                'redirect_uri': f"{GOOGLE_REDIRECT_URI.rsplit('/', 1)[0]}/calendar",
+                'grant_type': 'authorization_code'
+            }
+
+            response = requests.post(cls.TOKEN_URL, data=data)
+            response.raise_for_status()
+
+            token_data = response.json()
+            return {
+                'access_token': token_data['access_token'],
+                'refresh_token': token_data.get('refresh_token'),
+                'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
+            }
+        except Exception as e:
+            logger.error(f"Google Calendar token exchange failed: {e}")
+            return None
+
+    @classmethod
+    def create_calendar_event(cls, access_token: str, calendar_id: str, event_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Create a new calendar event"""
+        try:
+            url = f"{cls.CALENDAR_API_URL}/calendars/{calendar_id}/events"
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json'
+            }
+
+            response = requests.post(url, headers=headers, json=event_data)
+            response.raise_for_status()
+
+            return response.json()
+        except Exception as e:
+            logger.error(f"Failed to create calendar event: {e}")
+            return None
+
+    @classmethod
+    def update_calendar_event(cls, access_token: str, calendar_id: str, event_id: str, event_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update an existing calendar event"""
+        try:
+            url = f"{cls.CALENDAR_API_URL}/calendars/{calendar_id}/events/{event_id}"
+            headers = {
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json'
+            }
+
+            response = requests.put(url, headers=headers, json=event_data)
+            response.raise_for_status()
+
+            return response.json()
+        except Exception as e:
+            logger.error(f"Failed to update calendar event: {e}")
+            return None
+
+
+class GoogleDriveOAuth:
+    """Google Drive OAuth 2.0 implementation"""
+
+    AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
+    TOKEN_URL = 'https://oauth2.googleapis.com/token'
+    DRIVE_API_URL = 'https://www.googleapis.com/drive/v3'
+    SCOPES = [
+        'https://www.googleapis.com/auth/drive.readonly',
+        'https://www.googleapis.com/auth/drive.file'
+    ]
+
+    @classmethod
+    def get_authorization_url(cls, user_id: str, state: str) -> str:
+        """Generate Google Drive OAuth authorization URL"""
+        # Build redirect URI properly - ensure we have a base URL
+        base_redirect_uri = GOOGLE_REDIRECT_URI
+        if '/callback' in base_redirect_uri:
+            # Remove the existing callback path
+            base_redirect_uri = base_redirect_uri.rsplit('/callback', 1)[0]
+        elif base_redirect_uri.endswith('/'):
+            base_redirect_uri = base_redirect_uri.rstrip('/')
+        
+        redirect_uri = f"{base_redirect_uri}/drive"
+        
+        params = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'redirect_uri': redirect_uri,
+            'response_type': 'code',
+            'scope': ' '.join(cls.SCOPES),
+            'access_type': 'offline',
+            'prompt': 'consent',
+            'state': state
+        }
+
+        query_string = urlencode(params)
+        return f"{cls.AUTHORIZE_URL}?{query_string}"
+
+    @classmethod
+    def exchange_code_for_token(cls, code: str) -> Optional[Dict[str, Any]]:
+        """Exchange authorization code for access token"""
+        try:
+            data = {
+                'code': code,
+                'client_id': GOOGLE_CLIENT_ID,
+                'client_secret': GOOGLE_CLIENT_SECRET,
+                'redirect_uri': f"{GOOGLE_REDIRECT_URI.rsplit('/', 1)[0]}/drive",
+                'grant_type': 'authorization_code'
+            }
+
+            response = requests.post(cls.TOKEN_URL, data=data)
+            response.raise_for_status()
+
+            token_data = response.json()
+            return {
+                'access_token': token_data['access_token'],
+                'refresh_token': token_data.get('refresh_token'),
+                'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
+            }
+        except Exception as e:
+            logger.error(f"Google Drive token exchange failed: {e}")
+            return None
+
+    @classmethod
+    def list_files(cls, access_token: str, folder_id: str = 'root', page_size: int = 100) -> Optional[Dict[str, Any]]:
+        """List files from Google Drive"""
+        try:
+            url = f"{cls.DRIVE_API_URL}/files"
+            headers = {'Authorization': f'Bearer {access_token}'}
+            params = {
+                'pageSize': page_size,
+                'fields': 'files(id,name,mimeType,size,createdTime,thumbnailLink,webViewLink)',
+                'q': f"'{folder_id}' in parents and trashed=false"
+            }
+
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+
+            return response.json()
+        except Exception as e:
+            logger.error(f"Failed to list Drive files: {e}")
+            return None
+
+    @classmethod
+    def get_file_metadata(cls, access_token: str, file_id: str) -> Optional[Dict[str, Any]]:
+        """Get metadata for a specific file"""
+        try:
+            url = f"{cls.DRIVE_API_URL}/files/{file_id}"
+            headers = {'Authorization': f'Bearer {access_token}'}
+            params = {
+                'fields': 'id,name,mimeType,size,createdTime,modifiedTime,thumbnailLink,webViewLink,webContentLink'
+            }
+
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+
+            return response.json()
+        except Exception as e:
+            logger.error(f"Failed to get file metadata: {e}")
+            return None
+
+    @classmethod
+    def download_file(cls, access_token: str, file_id: str) -> Optional[bytes]:
+        """Download file content from Google Drive"""
+        try:
+            url = f"{cls.DRIVE_API_URL}/files/{file_id}"
+            headers = {'Authorization': f'Bearer {access_token}'}
+            params = {'alt': 'media'}
+
+            response = requests.get(url, headers=headers, params=params)
+            response.raise_for_status()
+
+            return response.content
+        except Exception as e:
+            logger.error(f"Failed to download file: {e}")
             return None
 
 

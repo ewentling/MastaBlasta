@@ -27,6 +27,9 @@ except ImportError:
 
 class VideoClipperService:
     """Service for analyzing videos and generating viral clips using Gemini AI"""
+    
+    # Configuration constants
+    MIN_VIDEO_DURATION = 60  # Minimum video duration in seconds for clip analysis
 
     def __init__(self):
         self.enabled = GEMINI_ENABLED and YT_DLP_ENABLED
@@ -57,7 +60,20 @@ class VideoClipperService:
         if not YT_DLP_ENABLED:
             return {
                 'success': False,
-                'error': 'yt-dlp not installed. Cannot extract video info.'
+                'error': 'yt-dlp not installed. Cannot extract video info. Install with: pip install yt-dlp'
+            }
+
+        if not video_url or not video_url.strip():
+            return {
+                'success': False,
+                'error': 'Video URL is required'
+            }
+
+        # Validate URL format
+        if not (video_url.startswith('http://') or video_url.startswith('https://')):
+            return {
+                'success': False,
+                'error': 'Invalid URL format. URL must start with http:// or https://'
             }
 
         try:
@@ -65,10 +81,19 @@ class VideoClipperService:
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,
+                'socket_timeout': 30,  # Add timeout
+                'retries': 3,  # Add retries
             }
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                logger.info(f"Extracting video info from: {video_url}")
                 info = ydl.extract_info(video_url, download=False)
+
+                if not info:
+                    return {
+                        'success': False,
+                        'error': 'Failed to extract video information. The video may be private or unavailable.'
+                    }
 
                 return {
                     'success': True,
@@ -83,11 +108,29 @@ class VideoClipperService:
                     'url': video_url,
                     'subtitles': self._extract_subtitles(info),
                 }
+        except yt_dlp.utils.DownloadError as e:
+            error_msg = str(e)
+            if 'Video unavailable' in error_msg or 'Private video' in error_msg:
+                return {
+                    'success': False,
+                    'error': 'Video is unavailable or private. Please check the URL and try again.'
+                }
+            elif 'Unsupported URL' in error_msg:
+                return {
+                    'success': False,
+                    'error': 'Unsupported video platform. Supported: YouTube, Vimeo, and most major platforms.'
+                }
+            else:
+                logger.error(f"yt-dlp download error: {error_msg}")
+                return {
+                    'success': False,
+                    'error': f'Failed to access video: {error_msg}'
+                }
         except Exception as e:
             logger.error(f"Error extracting video info: {str(e)}")
             return {
                 'success': False,
-                'error': str(e)
+                'error': f'Error extracting video info: {str(e)}'
             }
 
     def _extract_subtitles(self, info: Dict) -> str:
@@ -121,26 +164,65 @@ class VideoClipperService:
             Dictionary with analysis results and clip suggestions
         """
         if not self.enabled:
+            error_msg = 'Video clipper service not enabled. '
+            if not GEMINI_ENABLED:
+                error_msg += 'Google Generative AI library not installed. Install with: pip install google-generativeai. '
+            if not YT_DLP_ENABLED:
+                error_msg += 'yt-dlp not installed. Install with: pip install yt-dlp. '
+            if not os.getenv('GEMINI_API_KEY') and not os.getenv('GOOGLE_API_KEY'):
+                error_msg += 'GEMINI_API_KEY or GOOGLE_API_KEY not configured in environment variables.'
             return {
                 'success': False,
-                'error': 'Video clipper service not enabled. Check API keys and dependencies.'
+                'error': error_msg.strip()
             }
 
         try:
             # Get video information
+            logger.info(f"Starting video analysis for: {video_url}")
             video_info = self.get_video_info(video_url)
             if not video_info.get('success'):
                 return video_info
 
+            # Check video duration
+            duration = video_info.get('duration', 0)
+            if duration == 0:
+                return {
+                    'success': False,
+                    'error': 'Could not determine video duration. The video may be a live stream or unavailable.'
+                }
+            
+            if duration < self.MIN_VIDEO_DURATION:
+                return {
+                    'success': False,
+                    'error': f'Video is too short ({duration}s). Video must be at least {self.MIN_VIDEO_DURATION} seconds for clip analysis.'
+                }
+
             # Analyze video content with Gemini
+            logger.info(f"Analyzing video with Gemini AI (requesting {num_clips} clips)")
             prompt = self._create_analysis_prompt(video_info, num_clips)
 
-            response = self.model.generate_content(prompt)
-            analysis = response.text
+            try:
+                response = self.model.generate_content(prompt)
+                analysis = response.text
+                logger.info("Successfully received Gemini AI response")
+            except Exception as e:
+                logger.error(f"Gemini API error: {str(e)}")
+                return {
+                    'success': False,
+                    'error': f'AI analysis failed: {str(e)}. Please check your API key and try again.'
+                }
 
             # Parse the analysis results
             clips = self._parse_clip_suggestions(analysis, video_info)
 
+            if not clips or len(clips) == 0:
+                logger.warning("No clips found in analysis")
+                return {
+                    'success': False,
+                    'error': 'Could not identify any viral clip opportunities in this video. Try a different video or adjust parameters.'
+                }
+
+            logger.info(f"Successfully identified {len(clips)} viral clip opportunities")
             return {
                 'success': True,
                 'video_info': {
@@ -155,10 +237,10 @@ class VideoClipperService:
             }
 
         except Exception as e:
-            logger.error(f"Error analyzing video: {str(e)}")
+            logger.error(f"Error analyzing video: {str(e)}", exc_info=True)
             return {
                 'success': False,
-                'error': str(e)
+                'error': f'Unexpected error during analysis: {str(e)}'
             }
 
     def _create_analysis_prompt(self, video_info: Dict, num_clips: int) -> str:

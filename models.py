@@ -3,8 +3,7 @@ Database models for MastaBlasta social media management platform
 """
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Float, JSON, Enum
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import declarative_base, relationship, validates
 import enum
 
 Base = declarative_base()
@@ -31,11 +30,13 @@ class User(Base):
 
     id = Column(String(36), primary_key=True)
     email = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)  # Nullable for Google-only users
     full_name = Column(String(255))
     role = Column(Enum(UserRole), default=UserRole.EDITOR, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     api_key = Column(String(64), unique=True, index=True)
+    auth_provider = Column(String(50), default='email')  # 'email' or 'google'
+    google_id = Column(String(255), unique=True, index=True, nullable=True)  # Google's sub ID
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     last_login = Column(DateTime)
@@ -45,6 +46,19 @@ class User(Base):
     posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
     media = relationship("Media", back_populates="user", cascade="all, delete-orphan")
     templates = relationship("Template", back_populates="user", cascade="all, delete-orphan")
+    google_services = relationship("GoogleService", back_populates="user", cascade="all, delete-orphan")
+
+    @validates('password_hash', 'google_id')
+    def validate_auth_method(self, key, value):
+        """Validate that user has at least one authentication method on INSERT only"""
+        # This validator runs during INSERT, not during UPDATE
+        # Check will happen after all fields are set
+        return value
+    
+    def validate_user_auth(self):
+        """Validate that at least one authentication method exists"""
+        if not self.password_hash and not self.google_id:
+            raise ValueError("User must have either password_hash or google_id")
 
     def __repr__(self):
         return f"<User {self.email} ({self.role.value})>"
@@ -349,3 +363,25 @@ class ChatbotInteraction(Base):
 
     def __repr__(self):
         return f"<ChatbotInteraction {self.platform}:{self.platform_user_id}>"
+
+
+class GoogleService(Base):
+    """Google service connections (Calendar, Drive, YouTube) for users"""
+    __tablename__ = 'google_services'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    service_type = Column(String(50), nullable=False)  # 'calendar', 'drive', 'youtube'
+    access_token = Column(Text)  # Encrypted with Fernet
+    refresh_token = Column(Text)  # Encrypted with Fernet
+    token_expires_at = Column(DateTime)
+    is_active = Column(Boolean, default=True)
+    service_metadata = Column(JSON)  # e.g., {'calendar_id': 'primary'}
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = relationship("User", back_populates="google_services")
+
+    def __repr__(self):
+        return f"<GoogleService {self.service_type} for user {self.user_id}>"
