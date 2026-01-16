@@ -94,61 +94,75 @@ export default function ContentCalendarPage() {
     setShowEventModal(true);
   }, []);
 
-  const handleGoogleCalendarAuth = () => {
-    // Google OAuth2 flow
-    const clientId = googleSettings.enabled ? localStorage.getItem('googleCalendarClientId') || '' : '';
-    const redirectUri = `${window.location.origin}/auth/google/callback`;
-    const scope = 'https://www.googleapis.com/auth/calendar.events';
-    
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-      `client_id=${clientId}&` +
-      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `response_type=code&` +
-      `scope=${encodeURIComponent(scope)}&` +
-      `access_type=offline&` +
-      `prompt=consent`;
-    
-    const popup = window.open(authUrl, 'googleAuth', 'width=600,height=700');
-    
-    // Listen for auth callback
-    window.addEventListener('message', async (event) => {
-      if (event.data.type === 'google_calendar_auth_success') {
-        const { code } = event.data;
-        try {
-          // Exchange code for tokens (backend handles this)
-          const response = await axios.post('http://localhost:5000/api/google-calendar/auth', { code });
-          const { access_token, refresh_token } = response.data;
-          
-          const newSettings = {
+  const handleGoogleCalendarAuth = async () => {
+    try {
+      // Get authorization URL from backend
+      const response = await axios.get('http://localhost:33766/api/google-calendar/authorize', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
+      });
+      
+      const { authorization_url } = response.data;
+      
+      // Open OAuth popup
+      const popup = window.open(authorization_url, 'googleCalendarAuth', 'width=600,height=700');
+      
+      // Listen for auth callback
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data.type === 'calendar_auth_success') {
+          setGoogleSettings({
             ...googleSettings,
             enabled: true,
-            accessToken: access_token,
-            refreshToken: refresh_token,
-          };
-          
-          setGoogleSettings(newSettings);
-          localStorage.setItem('googleCalendarSettings', JSON.stringify(newSettings));
+          });
+          localStorage.setItem('googleCalendarSettings', JSON.stringify({
+            ...googleSettings,
+            enabled: true,
+          }));
+          alert('Successfully connected to Google Calendar!');
           popup?.close();
-        } catch (error) {
-          console.error('Error exchanging auth code:', error);
+          window.removeEventListener('message', handleMessage);
         }
-      }
-    });
+      };
+      
+      window.addEventListener('message', handleMessage);
+    } catch (error) {
+      console.error('Error starting Google Calendar auth:', error);
+      alert('Failed to connect to Google Calendar');
+    }
   };
 
   const syncWithGoogleCalendar = async () => {
-    if (!googleSettings.enabled || !googleSettings.accessToken) {
+    if (!googleSettings.enabled) {
       alert('Please connect your Google Calendar first');
       return;
     }
 
     try {
-      await axios.post('http://localhost:5000/api/google-calendar/sync', {
-        access_token: googleSettings.accessToken,
-        calendar_id: googleSettings.calendarId,
-        events: events,
+      // Transform events to Calendar API format
+      const calendarEvents = events.map(event => ({
+        title: event.title,
+        description: event.description || '',
+        start: event.start.toISOString(),
+        end: event.end.toISOString(),
+        event_id: event.id.startsWith('gcal-') ? event.id.replace('gcal-', '') : undefined
+      }));
+      
+      const response = await axios.post('http://localhost:33766/api/google-calendar/sync', {
+        events: calendarEvents
+      }, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
       });
-      alert('Successfully synced with Google Calendar!');
+      
+      const { synced_count, total_events, errors } = response.data;
+      
+      if (errors && errors.length > 0) {
+        alert(`Synced ${synced_count} of ${total_events} events. Some errors occurred:\n${errors.join('\n')}`);
+      } else {
+        alert(`Successfully synced ${synced_count} events to Google Calendar!`);
+      }
     } catch (error) {
       console.error('Error syncing with Google Calendar:', error);
       alert('Failed to sync with Google Calendar');

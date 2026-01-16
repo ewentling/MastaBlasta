@@ -79,56 +79,62 @@ export default function ContentLibraryPage() {
   };
 
   const loadDriveFiles = async () => {
-    if (!googleSettings.enabled || !googleSettings.accessToken) return;
+    if (!googleSettings.enabled) return;
 
     try {
-      const response = await axios.post('http://localhost:5000/api/google-drive/list', {
-        access_token: googleSettings.accessToken,
+      const response = await axios.post('http://localhost:33766/api/google-drive/list', {
         folder_id: googleSettings.selectedFolderId || 'root',
+        page_size: 100
+      }, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
       });
       setDriveFiles(response.data);
     } catch (error) {
       console.error('Error loading Drive files:', error);
+      alert('Failed to load files from Google Drive');
     }
   };
 
-  const handleGoogleDriveAuth = () => {
-    const clientId = localStorage.getItem('googleDriveClientId') || '';
-    const redirectUri = `${window.location.origin}/auth/google/callback`;
-    const scope = 'https://www.googleapis.com/auth/drive.readonly';
-    
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-      `client_id=${clientId}&` +
-      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `response_type=code&` +
-      `scope=${encodeURIComponent(scope)}&` +
-      `access_type=offline&` +
-      `prompt=consent`;
-    
-    const popup = window.open(authUrl, 'googleAuth', 'width=600,height=700');
-    
-    window.addEventListener('message', async (event) => {
-      if (event.data.type === 'google_drive_auth_success') {
-        const { code } = event.data;
-        try {
-          const response = await axios.post('http://localhost:5000/api/google-drive/auth', { code });
-          const { access_token, refresh_token } = response.data;
-          
-          const newSettings = {
+  const handleGoogleDriveAuth = async () => {
+    try {
+      // Get authorization URL from backend
+      const response = await axios.get('http://localhost:33766/api/google-drive/authorize', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+        }
+      });
+      
+      const { authorization_url } = response.data;
+      
+      // Open OAuth popup
+      const popup = window.open(authorization_url, 'googleDriveAuth', 'width=600,height=700');
+      
+      // Listen for auth callback
+      const handleMessage = (event: MessageEvent) => {
+        if (event.data.type === 'drive_auth_success') {
+          setGoogleSettings({
             ...googleSettings,
             enabled: true,
-            accessToken: access_token,
-            refreshToken: refresh_token,
-          };
-          
-          setGoogleSettings(newSettings);
-          localStorage.setItem('googleDriveSettings', JSON.stringify(newSettings));
+          });
+          localStorage.setItem('googleDriveSettings', JSON.stringify({
+            ...googleSettings,
+            enabled: true,
+          }));
+          alert('Successfully connected to Google Drive!');
           popup?.close();
-        } catch (error) {
-          console.error('Error exchanging auth code:', error);
+          window.removeEventListener('message', handleMessage);
+          // Load files after successful auth
+          loadDriveFiles();
         }
-      }
-    });
+      };
+      
+      window.addEventListener('message', handleMessage);
+    } catch (error) {
+      console.error('Error starting Google Drive auth:', error);
+      alert('Failed to connect to Google Drive');
+    }
   };
 
   const handleSelectFolder = async (folderId: string, folderName: string) => {
