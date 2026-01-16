@@ -65,7 +65,8 @@ export default function ContentCalendarPage() {
 
   const loadScheduledPosts = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/posts/scheduled');
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
+      const response = await axios.get(`${API_BASE_URL}/api/posts/scheduled`);
       const calendarEvents = response.data.map((post: any) => ({
         id: post.id,
         title: post.content.substring(0, 50) + (post.content.length > 50 ? '...' : ''),
@@ -96,8 +97,9 @@ export default function ContentCalendarPage() {
 
   const handleGoogleCalendarAuth = async () => {
     try {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
       // Get authorization URL from backend
-      const response = await axios.get('http://localhost:33766/api/google-calendar/authorize', {
+      const response = await axios.get(`${API_BASE_URL}/api/google-calendar/authorize`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`
         }
@@ -148,7 +150,8 @@ export default function ContentCalendarPage() {
         event_id: event.id.startsWith('gcal-') ? event.id.replace('gcal-', '') : undefined
       }));
       
-      const response = await axios.post('http://localhost:33766/api/google-calendar/sync', {
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
+      const response = await axios.post(`${API_BASE_URL}/api/google-calendar/sync`, {
         events: calendarEvents
       }, {
         headers: {
