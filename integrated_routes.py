@@ -192,20 +192,27 @@ def google_auth():
                 return jsonify({'error': 'Email not provided by Google'}), 400
 
             with db_session_scope() as session:
-                # Check if user exists by email or google_id
-                # Only match by google_id if it's not None
+                # Look up user by google_id first (if present), then fall back to email
+                user = None
                 if google_id:
-                    user = session.query(User).filter(
-                        (User.email == email) | (User.google_id == google_id)
-                    ).first()
+                    # First, try to find a user already linked to this Google account
+                    user = session.query(User).filter(User.google_id == google_id).first()
+                    if not user:
+                        # If no user is linked by google_id, fall back to email, but only
+                        # for accounts that are not yet associated with any google_id
+                        user = session.query(User).filter(
+                            User.email == email,
+                            User.google_id == None  # noqa: E711 - SQLAlchemy IS NULL
+                        ).first()
                 else:
                     user = session.query(User).filter(User.email == email).first()
 
                 if user:
                     # Update last login and google_id if needed
                     user.last_login = datetime.utcnow()
-                    if not user.google_id:
+                    if google_id and not user.google_id:
                         user.google_id = google_id
+                        user.auth_provider = 'google'
                     if not user.is_active:
                         return jsonify({'error': 'Account is deactivated'}), 403
                 else:

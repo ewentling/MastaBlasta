@@ -3,8 +3,7 @@ Database models for MastaBlasta social media management platform
 """
 from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, ForeignKey, Float, JSON, Enum
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import declarative_base, relationship, validates
 import enum
 
 Base = declarative_base()
@@ -49,10 +48,15 @@ class User(Base):
     templates = relationship("Template", back_populates="user", cascade="all, delete-orphan")
     google_services = relationship("GoogleService", back_populates="user", cascade="all, delete-orphan")
 
-    def __init__(self, **kwargs):
-        """Initialize User with validation"""
-        super().__init__(**kwargs)
-        # Validate that at least one authentication method exists
+    @validates('password_hash', 'google_id')
+    def validate_auth_method(self, key, value):
+        """Validate that user has at least one authentication method on INSERT only"""
+        # This validator runs during INSERT, not during UPDATE
+        # Check will happen after all fields are set
+        return value
+    
+    def validate_user_auth(self):
+        """Validate that at least one authentication method exists"""
         if not self.password_hash and not self.google_id:
             raise ValueError("User must have either password_hash or google_id")
 

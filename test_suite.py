@@ -1740,6 +1740,30 @@ class TestEmailPasswordAuth:
         assert google_user.password_hash is None
         assert google_user.auth_provider == 'google'
         assert google_user.google_id == 'google-sub-id-123'
+    
+    def test_user_auth_validation(self, db_session):
+        """Test that User validation requires at least one auth method"""
+        from models import User, UserRole
+        from uuid import uuid4
+        
+        # Attempt to create user with neither password_hash nor google_id
+        invalid_user = User(
+            id=str(uuid4()),
+            email='invalid@example.com',
+            password_hash=None,
+            full_name='Invalid User',
+            role=UserRole.EDITOR,
+            auth_provider='email',
+            google_id=None,
+            is_active=True
+        )
+        
+        # Call the validation method
+        try:
+            invalid_user.validate_user_auth()
+            assert False, "Expected ValueError to be raised"
+        except ValueError as e:
+            assert "password_hash or google_id" in str(e)
 
 
 # ============================================================================

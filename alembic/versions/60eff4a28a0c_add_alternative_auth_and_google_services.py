@@ -4,6 +4,9 @@ Revision ID: 60eff4a28a0c
 Revises: 
 Create Date: 2026-01-16 05:37:35.410701
 
+Note: This is the initial migration for the database schema.
+If you have existing tables, you may need to adjust this migration
+to use ALTER TABLE instead of CREATE TABLE statements.
 """
 from typing import Sequence, Union
 
@@ -13,7 +16,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '60eff4a28a0c'
-down_revision: Union[str, Sequence[str], None] = None
+down_revision: Union[str, Sequence[str], None] = None  # Initial migration
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

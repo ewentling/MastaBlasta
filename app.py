@@ -662,17 +662,19 @@ class ImageEnhancer:
                 # Extract base64 part
                 image_data = image_data.split(',')[1]
 
-            # Use OpenAI Vision API (GPT-4 Vision)
-            response = openai.chat.completions.create(
-                model="gpt-4-vision-preview",
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Generate a concise, descriptive alt text for this image that would be useful for screen readers and accessibility. Focus on the main subject, key details, and context. Keep it under 125 characters."
-                            },
+            # Use OpenAI Vision API (GPT-4 Turbo with vision)
+            # Note: gpt-4-turbo and gpt-4o have vision capabilities
+            try:
+                response = openai.chat.completions.create(
+                    model="gpt-4-turbo",  # Updated to more stable model with vision
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Generate a concise, descriptive alt text for this image that would be useful for screen readers and accessibility. Focus on the main subject, key details, and context. Keep it under 125 characters."
+                                },
                             {
                                 "type": "image_url",
                                 "image_url": {
@@ -693,6 +695,37 @@ class ImageEnhancer:
                 'character_count': len(alt_text),
                 'manual_recommended': False
             }
+            except openai.BadRequestError as e:
+                # Fallback to gpt-4o if gpt-4-turbo doesn't support vision
+                logger.warning(f"gpt-4-turbo failed, trying gpt-4o: {str(e)}")
+                response = openai.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Generate a concise, descriptive alt text for this image that would be useful for screen readers and accessibility. Focus on the main subject, key details, and context. Keep it under 125 characters."
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/jpeg;base64,{image_data}"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    max_tokens=100
+                )
+                alt_text = response.choices[0].message.content.strip()
+                return {
+                    'success': True,
+                    'alt_text': alt_text,
+                    'character_count': len(alt_text),
+                    'manual_recommended': False
+                }
         except Exception as e:
             logger.error(f"Alt text generation error: {str(e)}")
             # Fallback to basic description
@@ -7381,7 +7414,7 @@ def google_calendar_callback():
         from database import db_session_scope
         from models import GoogleService
         from auth import encrypt_token
-        import uuid
+        # uuid is already imported at module level (line 8)
         
         code = request.args.get('code')
         state = request.args.get('state')
@@ -7432,6 +7465,12 @@ def google_calendar_callback():
         
         # Redirect to frontend with success message
         frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        
+        # Validate frontend URL
+        if not frontend_url or not (frontend_url.startswith('http://') or frontend_url.startswith('https://')):
+            logger.error(f"Invalid FRONTEND_URL configured: {frontend_url}")
+            return jsonify({'error': 'Invalid frontend URL configuration'}), 500
+        
         return f"""
         <html>
             <script>
@@ -7573,7 +7612,7 @@ def google_drive_callback():
         from database import db_session_scope
         from models import GoogleService
         from auth import encrypt_token
-        import uuid
+        # uuid is already imported at module level (line 8)
         
         code = request.args.get('code')
         state = request.args.get('state')
@@ -7624,6 +7663,12 @@ def google_drive_callback():
         
         # Redirect to frontend with success message
         frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        
+        # Validate frontend URL
+        if not frontend_url or not (frontend_url.startswith('http://') or frontend_url.startswith('https://')):
+            logger.error(f"Invalid FRONTEND_URL configured: {frontend_url}")
+            return jsonify({'error': 'Invalid frontend URL configuration'}), 500
+        
         return f"""
         <html>
             <script>

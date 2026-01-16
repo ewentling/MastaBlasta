@@ -365,9 +365,19 @@ class GoogleCalendarOAuth:
     @classmethod
     def get_authorization_url(cls, user_id: str, state: str) -> str:
         """Generate Google Calendar OAuth authorization URL"""
+        # Build redirect URI properly - ensure we have a base URL
+        base_redirect_uri = GOOGLE_REDIRECT_URI
+        if '/callback' in base_redirect_uri:
+            # Remove the existing callback path
+            base_redirect_uri = base_redirect_uri.rsplit('/callback', 1)[0]
+        elif base_redirect_uri.endswith('/'):
+            base_redirect_uri = base_redirect_uri.rstrip('/')
+        
+        redirect_uri = f"{base_redirect_uri}/calendar"
+        
         params = {
             'client_id': GOOGLE_CLIENT_ID,
-            'redirect_uri': f"{GOOGLE_REDIRECT_URI.rsplit('/', 1)[0]}/calendar",
+            'redirect_uri': redirect_uri,
             'response_type': 'code',
             'scope': ' '.join(cls.SCOPES),
             'access_type': 'offline',
@@ -454,9 +464,19 @@ class GoogleDriveOAuth:
     @classmethod
     def get_authorization_url(cls, user_id: str, state: str) -> str:
         """Generate Google Drive OAuth authorization URL"""
+        # Build redirect URI properly - ensure we have a base URL
+        base_redirect_uri = GOOGLE_REDIRECT_URI
+        if '/callback' in base_redirect_uri:
+            # Remove the existing callback path
+            base_redirect_uri = base_redirect_uri.rsplit('/callback', 1)[0]
+        elif base_redirect_uri.endswith('/'):
+            base_redirect_uri = base_redirect_uri.rstrip('/')
+        
+        redirect_uri = f"{base_redirect_uri}/drive"
+        
         params = {
             'client_id': GOOGLE_CLIENT_ID,
-            'redirect_uri': f"{GOOGLE_REDIRECT_URI.rsplit('/', 1)[0]}/drive",
+            'redirect_uri': redirect_uri,
             'response_type': 'code',
             'scope': ' '.join(cls.SCOPES),
             'access_type': 'offline',

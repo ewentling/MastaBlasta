@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Sparkles, Copy, RefreshCw, Wand2, Languages, Hash, AlertCircle } from 'lucide-react';
 import { useAI } from '../contexts/AIContext';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
+
 interface GeneratedContent {
   id: string;
   type: string;
@@ -49,7 +51,6 @@ export default function ChatbotPage() {
     try {
       let type = '';
       let content = '';
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
 
       switch (activeTab) {
         case 'generate':

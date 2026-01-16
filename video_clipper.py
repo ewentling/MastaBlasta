@@ -27,6 +27,9 @@ except ImportError:
 
 class VideoClipperService:
     """Service for analyzing videos and generating viral clips using Gemini AI"""
+    
+    # Configuration constants
+    MIN_VIDEO_DURATION = 60  # Minimum video duration in seconds for clip analysis
 
     def __init__(self):
         self.enabled = GEMINI_ENABLED and YT_DLP_ENABLED
@@ -188,10 +191,10 @@ class VideoClipperService:
                     'error': 'Could not determine video duration. The video may be a live stream or unavailable.'
                 }
             
-            if duration < 60:
+            if duration < self.MIN_VIDEO_DURATION:
                 return {
                     'success': False,
-                    'error': f'Video is too short ({duration}s). Video must be at least 60 seconds for clip analysis.'
+                    'error': f'Video is too short ({duration}s). Video must be at least {self.MIN_VIDEO_DURATION} seconds for clip analysis.'
                 }
 
             # Analyze video content with Gemini
