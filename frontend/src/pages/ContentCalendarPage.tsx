@@ -6,6 +6,8 @@ import axios from 'axios';
 import { Calendar as CalendarIcon, Plus, X, Trash2, Edit, Settings, CheckCircle } from 'lucide-react';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
+
 const locales = {
   'en-US': enUS,
 };
@@ -65,7 +67,6 @@ export default function ContentCalendarPage() {
 
   const loadScheduledPosts = async () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
       const response = await axios.get(`${API_BASE_URL}/api/posts/scheduled`);
       const calendarEvents = response.data.map((post: any) => ({
         id: post.id,
@@ -97,7 +98,6 @@ export default function ContentCalendarPage() {
 
   const handleGoogleCalendarAuth = async () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
       // Get authorization URL from backend
       const response = await axios.get(`${API_BASE_URL}/api/google-calendar/authorize`, {
         headers: {
@@ -150,7 +150,6 @@ export default function ContentCalendarPage() {
         event_id: event.id.startsWith('gcal-') ? event.id.replace('gcal-', '') : undefined
       }));
       
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
       const response = await axios.post(`${API_BASE_URL}/api/google-calendar/sync`, {
         events: calendarEvents
       }, {

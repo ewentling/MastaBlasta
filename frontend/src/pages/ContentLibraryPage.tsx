@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Folder, File, Image, Video, FileText, Plus, X, Settings, Download, Trash2, CheckCircle, FolderOpen, Search, Filter } from 'lucide-react';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
+
 interface DriveFile {
   id: string;
   name: string;
@@ -71,7 +73,6 @@ export default function ContentLibraryPage() {
 
   const loadTemplates = async () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
       const response = await axios.get(`${API_BASE_URL}/api/templates`);
       setTemplates(response.data);
     } catch (error) {
@@ -83,7 +84,6 @@ export default function ContentLibraryPage() {
     if (!googleSettings.enabled) return;
 
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
       const response = await axios.post(`${API_BASE_URL}/api/google-drive/list`, {
         folder_id: googleSettings.selectedFolderId || 'root',
         page_size: 100
@@ -101,7 +101,6 @@ export default function ContentLibraryPage() {
 
   const handleGoogleDriveAuth = async () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
       // Get authorization URL from backend
       const response = await axios.get(`${API_BASE_URL}/api/google-drive/authorize`, {
         headers: {
@@ -152,7 +151,6 @@ export default function ContentLibraryPage() {
     
     // Reload files from new folder
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
       const response = await axios.post(`${API_BASE_URL}/api/google-drive/list`, {
         folder_id: folderId,
         page_size: 100
@@ -169,7 +167,6 @@ export default function ContentLibraryPage() {
 
   const handleCreateTemplate = async () => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
       const response = await axios.post(`${API_BASE_URL}/api/templates`, newTemplate);
       setTemplates([...templates, response.data]);
       setShowTemplateModal(false);
@@ -181,7 +178,6 @@ export default function ContentLibraryPage() {
 
   const handleDeleteTemplate = async (templateId: string) => {
     try {
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
       await axios.delete(`${API_BASE_URL}/api/templates/${templateId}`);
       setTemplates(templates.filter(t => t.id !== templateId));
     } catch (error) {
