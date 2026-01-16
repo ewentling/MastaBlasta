@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -16,9 +16,11 @@ import ContentLibraryPage from './pages/ContentLibraryPage';
 import ABTestingPage from './pages/ABTestingPage';
 import ChatbotPage from './pages/ChatbotPage';
 import ClipsPage from './pages/ClipsPage';
+import LoginPage from './pages/LoginPage';
 import SettingsModal from './components/SettingsModal';
 import { ThemeProvider } from './ThemeContext';
 import { AIProvider } from './contexts/AIContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import './App.css';
 
 const queryClient = new QueryClient({
@@ -56,8 +58,13 @@ export const appRoutes: AppRouteConfig[] = [
 function Navigation() {
   const location = useLocation();
   const [showSettings, setShowSettings] = useState(false);
+  const { logout, user } = useAuth();
 
   const isActive = (path: string) => (location.pathname === path ? 'nav-link active' : 'nav-link');
+
+  const handleLogout = () => {
+    logout();
+  };
 
   return (
     <>
@@ -76,9 +83,19 @@ function Navigation() {
           ))}
         </ul>
         <div className="sidebar-footer">
+          {user && (
+            <div className="user-info" style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '14px', borderTop: '1px solid var(--border)' }}>
+              <div style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{user.name}</div>
+              <div style={{ fontSize: '12px' }}>{user.email}</div>
+            </div>
+          )}
           <button className="settings-button" onClick={() => setShowSettings(true)}>
             <Settings size={20} />
             <span>Settings</span>
+          </button>
+          <button className="settings-button" onClick={handleLogout} style={{ color: '#ff4444' }}>
+            <LogOut size={20} />
+            <span>Logout</span>
           </button>
         </div>
       </nav>
@@ -87,25 +104,51 @@ function Navigation() {
   );
 }
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <ThemeProvider>
-      <AIProvider>
-        <QueryClientProvider client={queryClient}>
-          <Router>
-            <div className="app-container">
-              <Navigation />
-              <main className="main-content">
-                <Routes>
-                  {appRoutes.map(({ path, element }) => (
-                    <Route key={path} path={path} element={element} />
-                  ))}
-                </Routes>
-              </main>
-            </div>
-          </Router>
-        </QueryClientProvider>
-      </AIProvider>
+      <AuthProvider>
+        <AIProvider>
+          <QueryClientProvider client={queryClient}>
+            <Router>
+              <Routes>
+                <Route path="/login" element={<LoginPage />} />
+                <Route
+                  path="*"
+                  element={
+                    <ProtectedRoute>
+                      <div className="app-container">
+                        <Navigation />
+                        <main className="main-content">
+                          <Routes>
+                            {appRoutes.map(({ path, element }) => (
+                              <Route key={path} path={path} element={element} />
+                            ))}
+                          </Routes>
+                        </main>
+                      </div>
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </Router>
+          </QueryClientProvider>
+        </AIProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }
