@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import './LoginPage.css';
@@ -38,6 +38,7 @@ function LoginPage() {
   const { login, isAuthenticated } = useAuth();
   const googleButtonRef = useRef<HTMLDivElement>(null);
   const isInitialized = useRef(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -56,6 +57,7 @@ function LoginPage() {
         
         if (!clientId) {
           console.error('Google Client ID not configured');
+          setError('Google authentication is not configured. Please contact the administrator.');
           return;
         }
 
@@ -103,11 +105,12 @@ function LoginPage() {
 
   const handleGoogleResponse = async (response: { credential: string }) => {
     try {
+      setError(null);
       await login(response.credential);
       navigate('/');
     } catch (error) {
       console.error('Login failed:', error);
-      alert('Login failed. Please try again.');
+      setError('Login failed. Please try again or contact support if the problem persists.');
     }
   };
 
@@ -123,6 +126,20 @@ function LoginPage() {
         <div className="login-content">
           <h2>Sign in to continue</h2>
           <p className="login-subtitle">Manage all your social media accounts in one place</p>
+
+          {error && (
+            <div className="error-message" style={{
+              padding: '12px',
+              marginBottom: '20px',
+              backgroundColor: '#fee',
+              border: '1px solid #fcc',
+              borderRadius: '8px',
+              color: '#c33',
+              fontSize: '14px'
+            }}>
+              {error}
+            </div>
+          )}
 
           <div className="google-signin-wrapper">
             <div ref={googleButtonRef} className="google-signin-button"></div>

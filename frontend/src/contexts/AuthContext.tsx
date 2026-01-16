@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (credential: string) => {
     try {
-      const response = await axios.post('http://localhost:5000/api/v2/auth/google', {
+      const response = await axios.post('/api/v2/auth/google', {
         credential
       });
 
