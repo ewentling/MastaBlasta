@@ -1,0 +1,40 @@
+# Exclude test files from Docker image
+test_suite.py
+requirements-test.txt
+
+# Exclude development and git files
+.git
+.gitignore
+.github
+*.md
+README.md
+
+# Exclude Python cache and build artifacts
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+*.whl
+
+# Exclude virtual environments
+venv
+env
+ENV
+
+# Exclude IDE files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Exclude temporary files
+*.tmp
+*.log
+.DS_Store
