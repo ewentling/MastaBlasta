@@ -223,12 +223,13 @@ function LoginPage() {
               onClick={() => setLoginMethod('google')}
               style={{
                 padding: '8px 24px',
-                backgroundColor: loginMethod === 'google' ? '#4285f4' : 'transparent',
-                color: loginMethod === 'google' ? 'white' : 'var(--text-primary)',
-                border: '1px solid #4285f4',
+                backgroundColor: loginMethod === 'google' ? 'var(--color-accentPrimary)' : 'rgba(0, 229, 255, 0.1)',
+                color: loginMethod === 'google' ? 'var(--color-bgPrimary)' : 'var(--color-textPrimary)',
+                border: '1px solid var(--color-accentPrimary)',
                 borderRadius: '8px',
                 cursor: 'pointer',
-                fontWeight: '500'
+                fontWeight: '600',
+                transition: 'all 0.2s ease'
               }}
             >
               Google
@@ -237,12 +238,13 @@ function LoginPage() {
               onClick={() => setLoginMethod('email')}
               style={{
                 padding: '8px 24px',
-                backgroundColor: loginMethod === 'email' ? '#4285f4' : 'transparent',
-                color: loginMethod === 'email' ? 'white' : 'var(--text-primary)',
-                border: '1px solid #4285f4',
+                backgroundColor: loginMethod === 'email' ? 'var(--color-accentPrimary)' : 'rgba(0, 229, 255, 0.1)',
+                color: loginMethod === 'email' ? 'var(--color-bgPrimary)' : 'var(--color-textPrimary)',
+                border: '1px solid var(--color-accentPrimary)',
                 borderRadius: '8px',
                 cursor: 'pointer',
-                fontWeight: '500'
+                fontWeight: '600',
+                transition: 'all 0.2s ease'
               }}
             >
               Email/Password
@@ -256,7 +258,7 @@ function LoginPage() {
           ) : (
             <form onSubmit={handleEmailPasswordLogin} style={{ width: '100%', maxWidth: '400px' }}>
               <div style={{ marginBottom: '16px' }}>
-                <label htmlFor="email" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                <label htmlFor="email" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: 'var(--color-textPrimary)' }}>
                   Email
                 </label>
                 <input
@@ -269,17 +271,20 @@ function LoginPage() {
                   style={{
                     width: '100%',
                     padding: '12px',
-                    border: '1px solid var(--border)',
+                    border: '1px solid var(--glass-border)',
                     borderRadius: '8px',
                     fontSize: '14px',
-                    backgroundColor: 'var(--background)',
-                    color: 'var(--text-primary)'
+                    backgroundColor: 'var(--glass-bg)',
+                    color: 'var(--color-textPrimary)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    transition: 'all 0.2s ease'
                   }}
                 />
               </div>
 
               <div style={{ marginBottom: '20px' }}>
-                <label htmlFor="password" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+                <label htmlFor="password" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: 'var(--color-textPrimary)' }}>
                   Password
                 </label>
                 <input
@@ -292,11 +297,14 @@ function LoginPage() {
                   style={{
                     width: '100%',
                     padding: '12px',
-                    border: '1px solid var(--border)',
+                    border: '1px solid var(--glass-border)',
                     borderRadius: '8px',
                     fontSize: '14px',
-                    backgroundColor: 'var(--background)',
-                    color: 'var(--text-primary)'
+                    backgroundColor: 'var(--glass-bg)',
+                    color: 'var(--color-textPrimary)',
+                    backdropFilter: 'blur(10px)',
+                    WebkitBackdropFilter: 'blur(10px)',
+                    transition: 'all 0.2s ease'
                   }}
                 />
               </div>
@@ -307,23 +315,25 @@ function LoginPage() {
                 style={{
                   width: '100%',
                   padding: '12px',
-                  backgroundColor: '#4285f4',
+                  background: loading ? 'rgba(0, 229, 255, 0.3)' : 'linear-gradient(120deg, #00e5ff 0%, #00b3e6 40%, #7c4dff 100%)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '16px',
-                  fontWeight: '500',
+                  fontWeight: '600',
                   cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.6 : 1
+                  opacity: loading ? 0.6 : 1,
+                  boxShadow: loading ? 'none' : '0 10px 30px rgba(0, 229, 255, 0.35)',
+                  transition: 'all 0.2s ease'
                 }}
               >
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>
 
               <div style={{ marginTop: '16px', textAlign: 'center' }}>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                <p style={{ color: 'var(--color-textSecondary)', fontSize: '14px' }}>
                   Don't have an account?{' '}
-                  <Link to="/register" style={{ color: '#4285f4', textDecoration: 'none', fontWeight: '500' }}>
+                  <Link to="/register" style={{ color: 'var(--color-accentPrimary)', textDecoration: 'none', fontWeight: '600' }}>
                     Sign up
                   </Link>
                 </p>
