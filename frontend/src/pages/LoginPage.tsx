@@ -223,9 +223,9 @@ function LoginPage() {
               onClick={() => setLoginMethod('google')}
               style={{
                 padding: '8px 24px',
-                backgroundColor: loginMethod === 'google' ? '#00e5ff' : 'rgba(0, 229, 255, 0.1)',
-                color: loginMethod === 'google' ? '#01010a' : 'var(--text-primary)',
-                border: '1px solid #00e5ff',
+                backgroundColor: loginMethod === 'google' ? 'var(--color-accentPrimary)' : 'rgba(0, 229, 255, 0.1)',
+                color: loginMethod === 'google' ? 'var(--color-bgPrimary)' : 'var(--text-primary)',
+                border: '1px solid var(--color-accentPrimary)',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 fontWeight: '600',
@@ -238,9 +238,9 @@ function LoginPage() {
               onClick={() => setLoginMethod('email')}
               style={{
                 padding: '8px 24px',
-                backgroundColor: loginMethod === 'email' ? '#00e5ff' : 'rgba(0, 229, 255, 0.1)',
-                color: loginMethod === 'email' ? '#01010a' : 'var(--text-primary)',
-                border: '1px solid #00e5ff',
+                backgroundColor: loginMethod === 'email' ? 'var(--color-accentPrimary)' : 'rgba(0, 229, 255, 0.1)',
+                color: loginMethod === 'email' ? 'var(--color-bgPrimary)' : 'var(--text-primary)',
+                border: '1px solid var(--color-accentPrimary)',
                 borderRadius: '8px',
                 cursor: 'pointer',
                 fontWeight: '600',
@@ -327,7 +327,7 @@ function LoginPage() {
               <div style={{ marginTop: '16px', textAlign: 'center' }}>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
                   Don't have an account?{' '}
-                  <Link to="/register" style={{ color: '#00e5ff', textDecoration: 'none', fontWeight: '600' }}>
+                  <Link to="/register" style={{ color: 'var(--color-accentPrimary)', textDecoration: 'none', fontWeight: '600' }}>
                     Sign up
                   </Link>
                 </p>
