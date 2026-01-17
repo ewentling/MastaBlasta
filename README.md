@@ -200,7 +200,10 @@ The application will be available at `http://localhost:33766`
 
 **Access the Web UI**: Open your browser and navigate to `http://localhost:33766`
 
+**Note**: The UI is automatically built and included in the Docker image. No additional setup is required.
+
 **Included Dependencies**:
+- ✅ Frontend web UI (automatically built)
 - ✅ FFmpeg pre-installed for video clipping functionality
 - ✅ All Python dependencies
 - ✅ Auto-restart on failure
@@ -213,7 +216,7 @@ The application will be available at `http://localhost:33766`
 ### Using Docker
 
 ```bash
-# Build the image
+# Build the image (includes frontend build)
 docker build -t mastablasta .
 
 # Run the container with auto-restart
@@ -224,11 +227,14 @@ docker run -d \
   mastablasta
 ```
 
+**Note**: The Docker build process automatically builds the frontend web UI and includes it in the container. The UI will be accessible immediately after the container starts.
+
 **Auto-Restart Configuration**: The `--restart unless-stopped` flag ensures:
 - ✅ Container automatically starts on system boot
 - ✅ Container restarts automatically on failure
 - ✅ Container stays stopped only when manually stopped with `docker stop mastablasta`
 - ✅ FFmpeg included in the container for video clipping
+- ✅ Frontend web UI pre-built and ready to use
 
 ## Authentication & Google Services Setup
 
@@ -440,7 +446,12 @@ GOOGLE_API_KEY=your-gemini-api-key
 
 ### Local Development
 
-#### Backend
+#### Prerequisites
+- Python 3.11 or higher
+- Node.js 20 or higher (for frontend development)
+- FFmpeg (optional, for video clipping features)
+
+#### Backend Setup
 ```bash
 # Install Python dependencies
 pip install -r requirements.txt
@@ -458,12 +469,26 @@ brew install ffmpeg
 python app.py
 ```
 
-#### Frontend (for development)
+**Note**: For production deployment or to access the web UI locally, you must build the frontend first (see below).
+
+#### Frontend Setup
+The frontend must be built before the backend can serve the web UI:
+
 ```bash
+# Navigate to frontend directory
 cd frontend
+
+# Install dependencies
 npm install
+
+# Build for production (required for backend to serve UI)
+npm run build
+
+# OR run development server (with hot reload)
 npm run dev  # Development server on port 5173
 ```
+
+**Important**: After building the frontend with `npm run build`, the backend at `http://localhost:33766` will serve the web UI. If you skip the build step, you'll need to access the frontend development server at `http://localhost:5173` instead.
 
 ## Web UI
 

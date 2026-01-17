@@ -8663,15 +8663,6 @@ def chatbot_stats():
     })
 
 
-@app.route('/')
-def serve_root():
-    """Serve frontend index.html for root path"""
-    frontend_path = os.path.join(os.path.dirname(__file__), 'frontend', 'dist')
-    if os.path.exists(os.path.join(frontend_path, 'index.html')):
-        return send_from_directory(frontend_path, 'index.html')
-    return jsonify({'error': 'Frontend not built. Run: cd frontend && npm install && npm run build'}), 404
-
-
 @app.route('/<path:path>')
 def serve_frontend(path):
     """Serve frontend static files"""
