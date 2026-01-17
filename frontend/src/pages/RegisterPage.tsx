@@ -206,14 +206,16 @@ function RegisterPage() {
               style={{
                 width: '100%',
                 padding: '12px',
-                backgroundColor: '#4285f4',
+                background: loading ? 'rgba(0, 229, 255, 0.3)' : 'linear-gradient(120deg, #00e5ff 0%, #00b3e6 40%, #7c4dff 100%)',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',
                 fontSize: '16px',
-                fontWeight: '500',
+                fontWeight: '600',
                 cursor: loading ? 'not-allowed' : 'pointer',
-                opacity: loading ? 0.6 : 1
+                opacity: loading ? 0.6 : 1,
+                boxShadow: loading ? 'none' : '0 10px 30px rgba(0, 229, 255, 0.35)',
+                transition: 'all 0.2s ease'
               }}
             >
               {loading ? 'Creating account...' : 'Create Account'}
@@ -223,7 +225,7 @@ function RegisterPage() {
           <div style={{ marginTop: '20px', textAlign: 'center' }}>
             <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
               Already have an account?{' '}
-              <Link to="/login" style={{ color: '#4285f4', textDecoration: 'none', fontWeight: '500' }}>
+              <Link to="/login" style={{ color: '#00e5ff', textDecoration: 'none', fontWeight: '600' }}>
                 Sign in
               </Link>
             </p>

@@ -223,12 +223,13 @@ function LoginPage() {
               onClick={() => setLoginMethod('google')}
               style={{
                 padding: '8px 24px',
-                backgroundColor: loginMethod === 'google' ? '#4285f4' : 'transparent',
-                color: loginMethod === 'google' ? 'white' : 'var(--text-primary)',
-                border: '1px solid #4285f4',
+                backgroundColor: loginMethod === 'google' ? '#00e5ff' : 'rgba(0, 229, 255, 0.1)',
+                color: loginMethod === 'google' ? '#01010a' : 'var(--text-primary)',
+                border: '1px solid #00e5ff',
                 borderRadius: '8px',
                 cursor: 'pointer',
-                fontWeight: '500'
+                fontWeight: '600',
+                transition: 'all 0.2s ease'
               }}
             >
               Google
@@ -237,12 +238,13 @@ function LoginPage() {
               onClick={() => setLoginMethod('email')}
               style={{
                 padding: '8px 24px',
-                backgroundColor: loginMethod === 'email' ? '#4285f4' : 'transparent',
-                color: loginMethod === 'email' ? 'white' : 'var(--text-primary)',
-                border: '1px solid #4285f4',
+                backgroundColor: loginMethod === 'email' ? '#00e5ff' : 'rgba(0, 229, 255, 0.1)',
+                color: loginMethod === 'email' ? '#01010a' : 'var(--text-primary)',
+                border: '1px solid #00e5ff',
                 borderRadius: '8px',
                 cursor: 'pointer',
-                fontWeight: '500'
+                fontWeight: '600',
+                transition: 'all 0.2s ease'
               }}
             >
               Email/Password
@@ -307,14 +309,16 @@ function LoginPage() {
                 style={{
                   width: '100%',
                   padding: '12px',
-                  backgroundColor: '#4285f4',
+                  background: loading ? 'rgba(0, 229, 255, 0.3)' : 'linear-gradient(120deg, #00e5ff 0%, #00b3e6 40%, #7c4dff 100%)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '16px',
-                  fontWeight: '500',
+                  fontWeight: '600',
                   cursor: loading ? 'not-allowed' : 'pointer',
-                  opacity: loading ? 0.6 : 1
+                  opacity: loading ? 0.6 : 1,
+                  boxShadow: loading ? 'none' : '0 10px 30px rgba(0, 229, 255, 0.35)',
+                  transition: 'all 0.2s ease'
                 }}
               >
                 {loading ? 'Signing in...' : 'Sign In'}
@@ -323,7 +327,7 @@ function LoginPage() {
               <div style={{ marginTop: '16px', textAlign: 'center' }}>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
                   Don't have an account?{' '}
-                  <Link to="/register" style={{ color: '#4285f4', textDecoration: 'none', fontWeight: '500' }}>
+                  <Link to="/register" style={{ color: '#00e5ff', textDecoration: 'none', fontWeight: '600' }}>
                     Sign up
                   </Link>
                 </p>
