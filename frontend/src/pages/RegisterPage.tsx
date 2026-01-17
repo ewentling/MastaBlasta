@@ -100,7 +100,7 @@ function RegisterPage() {
 
           <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '400px' }}>
             <div style={{ marginBottom: '16px' }}>
-              <label htmlFor="full_name" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+              <label htmlFor="full_name" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: 'var(--color-textPrimary)' }}>
                 Full Name
               </label>
               <input
@@ -113,17 +113,20 @@ function RegisterPage() {
                 style={{
                   width: '100%',
                   padding: '12px',
-                  border: '1px solid var(--border)',
+                  border: '1px solid var(--glass-border)',
                   borderRadius: '8px',
                   fontSize: '14px',
-                  backgroundColor: 'var(--background)',
-                  color: 'var(--text-primary)'
+                  backgroundColor: 'var(--glass-bg)',
+                  color: 'var(--color-textPrimary)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  transition: 'all 0.2s ease'
                 }}
               />
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-              <label htmlFor="email" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+              <label htmlFor="email" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: 'var(--color-textPrimary)' }}>
                 Email
               </label>
               <input
@@ -136,17 +139,20 @@ function RegisterPage() {
                 style={{
                   width: '100%',
                   padding: '12px',
-                  border: '1px solid var(--border)',
+                  border: '1px solid var(--glass-border)',
                   borderRadius: '8px',
                   fontSize: '14px',
-                  backgroundColor: 'var(--background)',
-                  color: 'var(--text-primary)'
+                  backgroundColor: 'var(--glass-bg)',
+                  color: 'var(--color-textPrimary)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  transition: 'all 0.2s ease'
                 }}
               />
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-              <label htmlFor="password" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+              <label htmlFor="password" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: 'var(--color-textPrimary)' }}>
                 Password
               </label>
               <input
@@ -159,17 +165,20 @@ function RegisterPage() {
                 style={{
                   width: '100%',
                   padding: '12px',
-                  border: '1px solid var(--border)',
+                  border: '1px solid var(--glass-border)',
                   borderRadius: '8px',
                   fontSize: '14px',
-                  backgroundColor: 'var(--background)',
-                  color: 'var(--text-primary)'
+                  backgroundColor: 'var(--glass-bg)',
+                  color: 'var(--color-textPrimary)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  transition: 'all 0.2s ease'
                 }}
               />
             </div>
 
             <div style={{ marginBottom: '16px' }}>
-              <label htmlFor="confirmPassword" style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
+              <label htmlFor="confirmPassword" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: 'var(--color-textPrimary)' }}>
                 Confirm Password
               </label>
               <input
@@ -182,16 +191,19 @@ function RegisterPage() {
                 style={{
                   width: '100%',
                   padding: '12px',
-                  border: '1px solid var(--border)',
+                  border: '1px solid var(--glass-border)',
                   borderRadius: '8px',
                   fontSize: '14px',
-                  backgroundColor: 'var(--background)',
-                  color: 'var(--text-primary)'
+                  backgroundColor: 'var(--glass-bg)',
+                  color: 'var(--color-textPrimary)',
+                  backdropFilter: 'blur(10px)',
+                  WebkitBackdropFilter: 'blur(10px)',
+                  transition: 'all 0.2s ease'
                 }}
               />
             </div>
 
-            <div style={{ marginBottom: '20px', fontSize: '12px', color: 'var(--text-secondary)' }}>
+            <div style={{ marginBottom: '20px', fontSize: '12px', color: 'var(--color-textSecondary)' }}>
               <p style={{ marginBottom: '8px', fontWeight: '500' }}>Password requirements:</p>
               <ul style={{ paddingLeft: '20px', margin: 0 }}>
                 {passwordRequirements.map((req, index) => (
