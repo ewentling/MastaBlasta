@@ -200,13 +200,13 @@ The application will be available at `http://localhost:33766`
 
 **Access the Web UI**: Open your browser and navigate to `http://localhost:33766`
 
-**Note**: The UI is automatically built and included in the Docker image. No additional setup is required.
-
 **Included Dependencies**:
-- ✅ Frontend web UI (automatically built)
+- ✅ Frontend web UI (automatically built during Docker image creation)
 - ✅ FFmpeg pre-installed for video clipping functionality
 - ✅ All Python dependencies
 - ✅ Auto-restart on failure
+
+**Note**: The Docker image automatically builds and includes the frontend web UI. No additional setup or build steps are required - just start the container and access the UI in your browser.
 
 **Auto-Restart Configuration**: The Docker Compose configuration includes `restart: unless-stopped`, which means:
 - ✅ Automatically starts when Docker daemon starts (on system boot)
@@ -469,10 +469,10 @@ brew install ffmpeg
 python app.py
 ```
 
-**Note**: For production deployment or to access the web UI locally, you must build the frontend first (see below).
+**Note**: For local development, you must build the frontend first (see below) to access the web UI through the backend. Docker deployments automatically handle frontend building.
 
 #### Frontend Setup
-The frontend must be built before the backend can serve the web UI:
+For local development, the frontend must be built before the backend can serve the web UI:
 
 ```bash
 # Navigate to frontend directory
@@ -481,14 +481,17 @@ cd frontend
 # Install dependencies
 npm install
 
-# Build for production (required for backend to serve UI)
+# Build for production (creates static files that backend can serve)
 npm run build
 
-# OR run development server (with hot reload)
+# OR run development server (with hot reload, no build required)
 npm run dev  # Development server on port 5173
 ```
 
-**Important**: After building the frontend with `npm run build`, the backend at `http://localhost:33766` will serve the web UI. If you skip the build step, you'll need to access the frontend development server at `http://localhost:5173` instead.
+**Important**: 
+- After building with `npm run build`, the backend at `http://localhost:33766` will serve the web UI
+- Without the build step, the backend has no static files to serve, so you must use the development server at `http://localhost:5173` instead
+- Docker deployments automatically run `npm run build` during image creation, so no manual build is needed
 
 ## Web UI
 
