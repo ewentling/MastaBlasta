@@ -235,7 +235,7 @@ function RegisterPage() {
           </form>
 
           <div style={{ marginTop: '20px', textAlign: 'center' }}>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+            <p style={{ color: 'var(--color-textSecondary)', fontSize: '14px' }}>
               Already have an account?{' '}
               <Link to="/login" style={{ color: 'var(--color-accentPrimary)', textDecoration: 'none', fontWeight: '600' }}>
                 Sign in
