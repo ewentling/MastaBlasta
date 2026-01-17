@@ -201,9 +201,12 @@ The application will be available at `http://localhost:33766`
 **Access the Web UI**: Open your browser and navigate to `http://localhost:33766`
 
 **Included Dependencies**:
+- ✅ Frontend web UI (automatically built during Docker image creation)
 - ✅ FFmpeg pre-installed for video clipping functionality
 - ✅ All Python dependencies
 - ✅ Auto-restart on failure
+
+**Note**: The Docker image automatically builds and includes the frontend web UI. No additional setup or build steps are required - just start the container and access the UI in your browser.
 
 **Auto-Restart Configuration**: The Docker Compose configuration includes `restart: unless-stopped`, which means:
 - ✅ Automatically starts when Docker daemon starts (on system boot)
@@ -213,7 +216,7 @@ The application will be available at `http://localhost:33766`
 ### Using Docker
 
 ```bash
-# Build the image
+# Build the image (includes frontend build)
 docker build -t mastablasta .
 
 # Run the container with auto-restart
@@ -224,11 +227,14 @@ docker run -d \
   mastablasta
 ```
 
+**Note**: The Docker build process automatically builds the frontend web UI and includes it in the container. The UI will be accessible immediately after the container starts.
+
 **Auto-Restart Configuration**: The `--restart unless-stopped` flag ensures:
 - ✅ Container automatically starts on system boot
 - ✅ Container restarts automatically on failure
 - ✅ Container stays stopped only when manually stopped with `docker stop mastablasta`
 - ✅ FFmpeg included in the container for video clipping
+- ✅ Frontend web UI pre-built and ready to use
 
 ## Authentication & Google Services Setup
 
@@ -440,7 +446,12 @@ GOOGLE_API_KEY=your-gemini-api-key
 
 ### Local Development
 
-#### Backend
+#### Prerequisites
+- Python 3.11 or higher
+- Node.js 20 or higher (for frontend development)
+- FFmpeg (optional, for video clipping features)
+
+#### Backend Setup
 ```bash
 # Install Python dependencies
 pip install -r requirements.txt
@@ -458,12 +469,29 @@ brew install ffmpeg
 python app.py
 ```
 
-#### Frontend (for development)
+**Note**: For local development, you must build the frontend first (see below) to access the web UI through the backend. Docker deployments automatically handle frontend building.
+
+#### Frontend Setup
+For local development, the frontend must be built before the backend can serve the web UI:
+
 ```bash
+# Navigate to frontend directory
 cd frontend
+
+# Install dependencies
 npm install
+
+# Build for production (creates static files that backend can serve)
+npm run build
+
+# OR run development server (with hot reload, no build required)
 npm run dev  # Development server on port 5173
 ```
+
+**Important**: 
+- After building with `npm run build`, the backend at `http://localhost:33766` will serve the web UI
+- Without the build step, the backend has no static files to serve, so you must use the development server at `http://localhost:5173` instead
+- Docker deployments automatically run `npm run build` during image creation, so no manual build is needed
 
 ## Web UI
 
