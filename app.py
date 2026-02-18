@@ -123,6 +123,16 @@ if PRODUCTION_MODE:
     logger.info("  - /api/square/create-checkout - Create subscription checkout")
     logger.info("  - /api/square/subscription-status - Get current subscription")
     logger.info("  - /api/square/webhooks - Handle Square webhook events")
+    
+    # Create default admin account if it doesn't exist
+    if DB_ENABLED:
+        try:
+            from auth import create_default_admin
+            from database import db_session_scope
+            with db_session_scope() as session:
+                create_default_admin(session)
+        except Exception as e:
+            logger.error(f"Error creating default admin: {e}")
 
 # Register advanced features (TTS, Social Listening, AI Training)
 try:

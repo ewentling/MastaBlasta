@@ -135,12 +135,59 @@ def login():
                     'role': user.role.value
                 },
                 'access_token': access_token,
-                'refresh_token': refresh_token
+                'refresh_token': refresh_token,
+                'password_must_change': user.password_must_change  # Include password change requirement
             })
 
     except Exception as e:
         logger.error(f"Login error: {e}")
         return jsonify({'error': 'Login failed'}), 500
+
+
+@integrated_bp.route('/auth/change-password', methods=['POST'])
+@auth_required
+def change_password():
+    """Change user password (required for default admin on first login)"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+
+    try:
+        from auth import verify_password, hash_password
+        from database import db_session_scope
+        from models import User
+
+        data = request.get_json()
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+
+        if not old_password or not new_password:
+            return jsonify({'error': 'Old and new passwords required'}), 400
+
+        if len(new_password) < 8:
+            return jsonify({'error': 'New password must be at least 8 characters'}), 400
+
+        with db_session_scope() as session:
+            user = session.query(User).filter_by(id=g.current_user['id']).first()
+
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+
+            # Verify old password
+            if not verify_password(old_password, user.password_hash):
+                return jsonify({'error': 'Current password is incorrect'}), 401
+
+            # Update password
+            user.password_hash = hash_password(new_password)
+            user.password_must_change = False  # Clear the flag
+            session.commit()
+
+            logger.info(f"Password changed for user {user.email}")
+
+            return jsonify({'message': 'Password changed successfully'})
+
+    except Exception as e:
+        logger.error(f"Password change error: {e}")
+        return jsonify({'error': 'Password change failed'}), 500
 
 
 @integrated_bp.route('/auth/me', methods=['GET'])

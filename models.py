@@ -48,6 +48,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=True)  # Nullable for Google-only users
     full_name = Column(String(255))
+    password_must_change = Column(Boolean, default=False)  # Force password change on first login
     role = Column(Enum(UserRole), default=UserRole.EDITOR, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     api_key = Column(String(64), unique=True, index=True)

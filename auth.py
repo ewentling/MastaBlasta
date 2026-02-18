@@ -225,3 +225,50 @@ def require_api_key(db_session):
             return f(*args, **kwargs)
         return decorated_function
     return decorator
+
+
+def create_default_admin(db_session):
+    """
+    Create default admin account for initial deployment.
+    Email: admin@mastablasta.com
+    Password: ChangeMe123!
+    Must be changed on first login.
+    """
+    from models import User, UserRole
+    
+    try:
+        # Check if admin already exists
+        admin = db_session.query(User).filter_by(email='admin@mastablasta.com').first()
+        if admin:
+            logger.info("Default admin account already exists")
+            return
+        
+        # Create default admin
+        admin_id = str(uuid.uuid4())
+        default_password = 'ChangeMe123!'
+        
+        admin = User(
+            id=admin_id,
+            email='admin@mastablasta.com',
+            password_hash=hash_password(default_password),
+            full_name='System Administrator',
+            role=UserRole.ADMIN,
+            is_active=True,
+            password_must_change=True  # Force password change
+        )
+        
+        db_session.add(admin)
+        db_session.commit()
+        
+        logger.warning("=" * 70)
+        logger.warning("🔐 DEFAULT ADMIN ACCOUNT CREATED")
+        logger.warning("=" * 70)
+        logger.warning("   Email: admin@mastablasta.com")
+        logger.warning("   Password: ChangeMe123!")
+        logger.warning("")
+        logger.warning("⚠️  IMPORTANT: This password MUST be changed on first login!")
+        logger.warning("=" * 70)
+        
+    except Exception as e:
+        logger.error(f"Error creating default admin: {e}")
+        db_session.rollback()

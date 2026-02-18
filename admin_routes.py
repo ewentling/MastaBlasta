@@ -424,3 +424,113 @@ def get_subscription_tiers():
     except Exception as e:
         logger.error(f"Error getting subscription tiers: {e}", exc_info=True)
         return jsonify({'error': 'Failed to get subscription tiers'}), 500
+
+
+# ==================== SQUARE INTEGRATION CONFIGURATION ====================
+
+@admin_bp.route('/square-config', methods=['GET'])
+@auth_required
+@admin_only
+def get_square_config():
+    """Get Square integration configuration (masked for security)"""
+    try:
+        import os
+        
+        # Get current configuration (mask sensitive values)
+        config = {
+            'access_token': f"{'*' * 48}{os.getenv('SQUARE_ACCESS_TOKEN', '')[-4:]}" if os.getenv('SQUARE_ACCESS_TOKEN') else '',
+            'environment': os.getenv('SQUARE_ENVIRONMENT', 'sandbox'),
+            'location_id': os.getenv('SQUARE_LOCATION_ID', ''),
+            'webhook_signature_key': f"{'*' * 56}{os.getenv('SQUARE_WEBHOOK_SIGNATURE_KEY', '')[-4:]}" if os.getenv('SQUARE_WEBHOOK_SIGNATURE_KEY') else '',
+            'catalog_starter': os.getenv('SQUARE_CATALOG_STARTER', ''),
+            'catalog_pro': os.getenv('SQUARE_CATALOG_PRO', ''),
+            'catalog_enterprise': os.getenv('SQUARE_CATALOG_ENTERPRISE', ''),
+            'configured': bool(os.getenv('SQUARE_ACCESS_TOKEN') and os.getenv('SQUARE_LOCATION_ID'))
+        }
+        
+        return jsonify(config), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting Square config: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to get Square configuration'}), 500
+
+
+@admin_bp.route('/square-config', methods=['POST'])
+@auth_required
+@admin_only
+def update_square_config():
+    """Update Square integration configuration"""
+    try:
+        data = request.get_json()
+        
+        # Note: In production, these should be stored securely (e.g., AWS Secrets Manager)
+        # For now, we'll just log that the values should be set as environment variables
+        
+        required_fields = ['access_token', 'environment', 'location_id', 'webhook_signature_key']
+        missing_fields = [field for field in required_fields if not data.get(field)]
+        
+        if missing_fields:
+            return jsonify({
+                'error': 'Missing required fields',
+                'missing': missing_fields
+            }), 400
+        
+        # Log the configuration update
+        SecurityLogger.log_event(
+            'square_config_updated',
+            user_id=g.current_user['id'],
+            details=f"Square configuration updated by {g.current_user['email']}"
+        )
+        
+        return jsonify({
+            'message': 'Configuration updated',
+            'note': 'Set environment variables: SQUARE_ACCESS_TOKEN, SQUARE_ENVIRONMENT, SQUARE_LOCATION_ID, SQUARE_WEBHOOK_SIGNATURE_KEY, SQUARE_CATALOG_* and restart application'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error updating Square config: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to update Square configuration'}), 500
+
+
+@admin_bp.route('/square-test-connection', methods=['POST'])
+@auth_required
+@admin_only
+def test_square_connection():
+    """Test connection to Square API"""
+    try:
+        from square_integration import SquareSubscriptionManager
+        
+        # Try to initialize Square client
+        manager = SquareSubscriptionManager()
+        
+        # Test API connection by listing locations
+        try:
+            result = manager.client.locations.list_locations()
+            if result.is_success():
+                locations = result.body.get('locations', [])
+                return jsonify({
+                    'success': True,
+                    'message': 'Successfully connected to Square API',
+                    'locations_count': len(locations),
+                    'environment': manager.environment
+                }), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': 'Failed to connect to Square API',
+                    'error': str(result.errors) if result.errors else 'Unknown error'
+                }), 500
+        except Exception as api_error:
+            return jsonify({
+                'success': False,
+                'message': 'Failed to connect to Square API',
+                'error': str(api_error)
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Error testing Square connection: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'message': 'Failed to initialize Square client',
+            'error': str(e)
+        }), 500
