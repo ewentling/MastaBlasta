@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { X, Brain, Link, CheckCircle, XCircle, Loader } from 'lucide-react';
+import { X, Brain, Link, CheckCircle, XCircle, Loader, Globe } from 'lucide-react';
 import { useTheme, themes } from '../ThemeContext';
 import type { ThemeName } from '../ThemeContext';
 import { useAI, type LLMProvider, type LLMConfig } from '../contexts/AIContext';
+import { getUserTimezone, setUserTimezone, TIMEZONES, getTimezonesByRegion, getTimezoneDisplayName } from '../utils/timezone';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -23,7 +24,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const { llmConfig, setLLMConfig, clearLLMConfig } = useAI();
   
   const [selectedTheme, setSelectedTheme] = useState<ThemeName>(themeName);
-  const [activeTab, setActiveTab] = useState<'theme' | 'ai' | 'integrations'>('theme');
+  const [activeTab, setActiveTab] = useState<'theme' | 'ai' | 'integrations' | 'general'>('general');
+  
+  // Timezone configuration
+  const [selectedTimezone, setSelectedTimezone] = useState(() => getUserTimezone());
   
   // AI configuration state
   const [aiProvider, setAiProvider] = useState<LLMProvider>(llmConfig?.provider || 'gemini');
@@ -92,6 +96,9 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const handleSave = () => {
     setTheme(selectedTheme);
     
+    // Save timezone
+    setUserTimezone(selectedTimezone);
+    
     // Save AI config if API key is provided
     if (aiApiKey.trim()) {
       const config: LLMConfig = {
@@ -139,6 +146,28 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
           borderBottom: '2px solid var(--color-borderLight)',
           marginBottom: '1.5rem'
         }}>
+          <button
+            onClick={() => setActiveTab('general')}
+            style={{
+              flex: 1,
+              padding: '0.75rem 1rem',
+              background: activeTab === 'general' ? 'var(--color-bgTertiary)' : 'transparent',
+              border: 'none',
+              borderBottom: activeTab === 'general' ? '2px solid var(--color-accentPrimary)' : 'none',
+              color: activeTab === 'general' ? 'var(--color-textPrimary)' : 'var(--color-textSecondary)',
+              fontWeight: activeTab === 'general' ? '600' : 'normal',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+              marginBottom: '-2px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+            }}
+          >
+            <Globe size={18} />
+            General
+          </button>
           <button
             onClick={() => setActiveTab('theme')}
             style={{
@@ -203,6 +232,57 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
         
         <div className="modal-body" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+          {activeTab === 'general' && (
+            <div>
+              <div className="form-group" style={{ marginBottom: '2rem' }}>
+                <label className="form-label">Timezone</label>
+                <p style={{ color: 'var(--color-textTertiary)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                  All times will be displayed in your selected timezone
+                </p>
+                
+                <select
+                  value={selectedTimezone}
+                  onChange={(e) => setSelectedTimezone(e.target.value)}
+                  className="form-input"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    background: 'var(--color-bgSecondary)',
+                    border: '1px solid var(--color-borderLight)',
+                    borderRadius: '6px',
+                    color: 'var(--color-textPrimary)',
+                    fontSize: '0.875rem',
+                  }}
+                >
+                  {Object.entries(getTimezonesByRegion()).map(([region, timezones]) => (
+                    <optgroup key={region} label={region}>
+                      {timezones.map(tz => (
+                        <option key={tz.value} value={tz.value}>
+                          {tz.label}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+                
+                <div style={{
+                  marginTop: '1rem',
+                  padding: '0.75rem',
+                  background: 'var(--color-bgTertiary)',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-borderLight)',
+                }}>
+                  <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
+                    <strong>Current selection:</strong> {getTimezoneDisplayName(selectedTimezone)}
+                  </div>
+                  <div style={{ color: 'var(--color-textTertiary)', fontSize: '0.875rem', marginTop: '0.5rem' }}>
+                    This timezone will be used for all scheduled posts, analytics reports, and time displays throughout the application.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {activeTab === 'theme' && (
             <div className="form-group">
               <label className="form-label">Theme</label>
