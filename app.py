@@ -106,6 +106,14 @@ else:
     logger.info("ℹ Using in-memory storage (development mode)")
     logger.info("  Set DATABASE_URL to enable production features")
 
+# Register admin routes for subscription management
+if PRODUCTION_MODE:
+    from admin_routes import admin_bp
+    app.register_blueprint(admin_bp)
+    logger.info("✓ Admin routes registered at /api/admin/*")
+    logger.info("  - /api/admin/users - User and subscription management")
+    logger.info("  - /api/admin/metrics - System-wide metrics")
+
 # Register advanced features (TTS, Social Listening, AI Training)
 try:
     from advanced_features import advanced_bp
