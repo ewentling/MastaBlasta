@@ -214,8 +214,20 @@ class OAuthManager:
             logger.error(f"OAuth callback error for {platform}: {e}")
             return {'error': str(e)}
 
-    def post_to_platform(self, platform: str, account_id: str, content: str, media: List = None, options: Dict = None) -> Dict:
-        """Post content to platform using real API"""
+    def post_to_platform(self, platform: str, account_id: str, content: str, media: List = None, options: Dict = None, user_id: str = None) -> Dict:
+        """Post content to platform using real API
+        
+        Args:
+            platform: Platform name (twitter, facebook, etc.)
+            account_id: Account ID to use for posting
+            content: Post content
+            media: List of media IDs
+            options: Platform-specific options
+            user_id: Current user ID for authorization check
+            
+        Returns:
+            Dict with post result or error
+        """
         if not self.enabled:
             return {'error': 'OAuth not enabled'}
 
@@ -224,6 +236,11 @@ class OAuthManager:
             account = session.query(Account).filter_by(id=account_id).first()
             if not account:
                 return {'error': 'Account not found'}
+            
+            # Security check: Ensure user owns this account
+            if user_id and account.user_id != user_id:
+                logger.warning(f"Security: User {user_id} attempted to access account {account_id} owned by {account.user_id}")
+                return {'error': 'Unauthorized: You do not own this account'}
 
             access_token = decrypt_token(account.oauth_token)
 
