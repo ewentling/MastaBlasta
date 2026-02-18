@@ -511,7 +511,7 @@ class AnalyticsCollector:
 
             elif platform == 'facebook':
                 # Facebook Graph API
-                url = f"https://graph.facebook.com/v18.0/{post_id}?fields=insights.metric(post_impressions,post_engaged_users,post_reactions_like_total)"
+                url = f"https://graph.facebook.com/v20.0/{post_id}?fields=insights.metric(post_impressions,post_engaged_users,post_reactions_like_total)"
                 response = requests.get(url, params={'access_token': access_token})
                 if response.status_code == 200:
                     data = response.json()

@@ -466,17 +466,42 @@ def publish_post(post_id):
     if not post:
         return jsonify({'error': 'Post not found'}), 404
 
+    # Import required modules
+    from database import db_session_scope
+    from models import Account
+    
     # Publish to each platform
     results = {}
     for platform in post['platforms']:
-        # Get account for platform
-        # This would need to fetch account from database
+        # Get account for platform from database
+        with db_session_scope() as session:
+            account = session.query(Account).filter_by(
+                user_id=post['user_id'],
+                platform=platform,
+                is_active=True
+            ).first()
+            
+            if not account:
+                results[platform] = {'error': f'No active {platform} account found for user'}
+                continue
+            
+            account_id = account.id
+            
+            # Get page_id from metadata for Facebook posting if available
+            post_options = post.get('post_options', {})
+            if platform == 'facebook' and account.platform_metadata:
+                pages = account.platform_metadata.get('pages', [])
+                if pages and 'page_id' not in post_options:
+                    # Use first page by default
+                    post_options['page_id'] = pages[0]['page_id']
+        
+        # Post to platform
         result = oauth_manager.post_to_platform(
             platform,
-            'account_id',  # Would need to lookup
+            account_id,
             post['content'],
             post.get('media_ids', []),
-            post.get('post_options', {})
+            post_options
         )
         results[platform] = result
 
@@ -486,7 +511,7 @@ def publish_post(post_id):
                 post_id,
                 platform,
                 result.get('id'),
-                'account_id'
+                account_id
             )
 
     # Update post status

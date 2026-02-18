@@ -110,14 +110,65 @@ class TwitterOAuth:
             logger.error(f"Twitter post failed: {e}")
             return None
 
+    @classmethod
+    def get_authorization_url(cls, user_id: str) -> Dict[str, Any]:
+        """Generate Twitter OAuth authorization URL with user_id for state management"""
+        import secrets
+        state = f"{user_id}:twitter:{secrets.token_urlsafe(16)}"
+        code_verifier = secrets.token_urlsafe(32)
+        
+        oauth = OAuth2Session(
+            TWITTER_CLIENT_ID,
+            redirect_uri=TWITTER_REDIRECT_URI,
+            scope=cls.SCOPES
+        )
+
+        authorization_url, _ = oauth.authorization_url(
+            cls.AUTHORIZE_URL,
+            code_challenge=code_verifier,
+            code_challenge_method='plain',
+            state=state
+        )
+
+        return {
+            'authorization_url': authorization_url,
+            'state': state,
+            'code_verifier': code_verifier
+        }
+
+    @classmethod
+    def handle_callback(cls, code: str, state: str) -> Dict[str, Any]:
+        """Handle OAuth callback and save account to database"""
+        try:
+            # Parse user_id from state
+            parts = state.split(':')
+            if len(parts) < 2:
+                return {'error': 'Invalid state parameter'}
+            
+            user_id = parts[0]
+            
+            # Note: code_verifier should be retrieved from session/cache
+            # For now, this is a limitation - we need to store code_verifier somewhere
+            # This is a simplified implementation
+            return {'error': 'Twitter OAuth requires code_verifier from session - not yet implemented'}
+        
+        except Exception as e:
+            logger.error(f"Twitter callback handling failed: {e}")
+            return {'error': str(e)}
+
+    @classmethod
+    def create_tweet(cls, access_token: str, content: str, media: List = None) -> Dict[str, Any]:
+        """Create a tweet (wrapper for post_tweet)"""
+        return cls.post_tweet(access_token, content, media) or {'error': 'Failed to post tweet'}
+
 
 class MetaOAuth:
     """Meta (Facebook/Instagram) OAuth implementation"""
 
-    AUTHORIZE_URL = 'https://www.facebook.com/v18.0/dialog/oauth'
-    TOKEN_URL = 'https://graph.facebook.com/v18.0/oauth/access_token'
-    GRAPH_API_URL = 'https://graph.facebook.com/v18.0'
-    SCOPES = ['pages_manage_posts', 'pages_read_engagement', 'instagram_basic', 'instagram_content_publish']
+    AUTHORIZE_URL = 'https://www.facebook.com/v20.0/dialog/oauth'
+    TOKEN_URL = 'https://graph.facebook.com/v20.0/oauth/access_token'
+    GRAPH_API_URL = 'https://graph.facebook.com/v20.0'
+    SCOPES = ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list', 'instagram_basic', 'instagram_content_publish']
 
     @classmethod
     def get_authorization_url(cls, state: str, app_id: str = None, redirect_uri: str = None) -> str:
@@ -231,6 +282,212 @@ class MetaOAuth:
             logger.error(f"Instagram post failed: {e}")
             return None
 
+    @classmethod
+    def get_user_pages(cls, access_token: str) -> Optional[List[Dict[str, Any]]]:
+        """Get list of Facebook Pages managed by the user and their Page Access Tokens"""
+        try:
+            url = f"{cls.GRAPH_API_URL}/me/accounts"
+            params = {
+                'access_token': access_token,
+                'fields': 'id,name,access_token,category,instagram_business_account'
+            }
+            
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            
+            data = response.json()
+            pages = []
+            
+            for page in data.get('data', []):
+                page_info = {
+                    'page_id': page['id'],
+                    'page_name': page['name'],
+                    'page_access_token': page['access_token'],  # Never-expiring page token
+                    'category': page.get('category', ''),
+                    'instagram_business_account': page.get('instagram_business_account', {}).get('id')
+                }
+                pages.append(page_info)
+            
+            return pages
+        except Exception as e:
+            logger.error(f"Failed to get user pages: {e}")
+            return None
+
+    @classmethod
+    def get_authorization_url(cls, user_id: str, platform: str = 'facebook') -> Dict[str, Any]:
+        """Generate Meta OAuth authorization URL with user_id for state management
+        
+        Args:
+            user_id: The user ID to associate with this OAuth flow
+            platform: The platform (facebook, instagram, threads)
+        
+        Returns:
+            Dictionary with authorization_url and state
+        """
+        import secrets
+        state = f"{user_id}:{platform}:{secrets.token_urlsafe(16)}"
+        
+        params = {
+            'client_id': META_APP_ID,
+            'redirect_uri': META_REDIRECT_URI,
+            'state': state,
+            'scope': ','.join(cls.SCOPES),
+            'response_type': 'code'
+        }
+        
+        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        return {
+            'authorization_url': f"{cls.AUTHORIZE_URL}?{query_string}",
+            'state': state
+        }
+
+    @classmethod
+    def handle_callback(cls, code: str, state: str, platform: str = 'facebook') -> Dict[str, Any]:
+        """Handle OAuth callback and save account to database
+        
+        Args:
+            code: Authorization code from OAuth callback
+            state: State parameter containing user_id
+            platform: The platform (facebook, instagram, threads)
+        
+        Returns:
+            Dictionary with success status and account info
+        """
+        try:
+            # Parse user_id from state
+            parts = state.split(':')
+            if len(parts) < 2:
+                return {'error': 'Invalid state parameter'}
+            
+            user_id = parts[0]
+            
+            # Exchange code for token
+            token_data = cls.exchange_code_for_token(code)
+            if not token_data:
+                return {'error': 'Failed to exchange code for token'}
+            
+            access_token = token_data['access_token']
+            expires_at = token_data['expires_at']
+            
+            # Get user info
+            user_info_response = requests.get(
+                f"{cls.GRAPH_API_URL}/me",
+                params={'access_token': access_token, 'fields': 'id,name'}
+            )
+            user_info_response.raise_for_status()
+            user_info = user_info_response.json()
+            
+            # Get pages and their tokens
+            pages = cls.get_user_pages(access_token)
+            
+            # Prepare metadata
+            platform_metadata = {
+                'user_info': user_info,
+                'pages': pages or []
+            }
+            
+            # Import here to avoid circular dependencies
+            from database import db_session_scope
+            from models import Account
+            from auth import encrypt_token
+            import uuid
+            
+            # Save to database
+            with db_session_scope() as session:
+                # Check if account already exists
+                existing_account = session.query(Account).filter_by(
+                    user_id=user_id,
+                    platform=platform,
+                    platform_user_id=user_info['id']
+                ).first()
+                
+                if existing_account:
+                    # Update existing account
+                    existing_account.oauth_token = encrypt_token(access_token)
+                    existing_account.token_expires_at = expires_at
+                    existing_account.platform_metadata = platform_metadata
+                    existing_account.is_active = True
+                    existing_account.display_name = user_info.get('name')
+                    account_id = existing_account.id
+                else:
+                    # Create new account
+                    account_id = str(uuid.uuid4())
+                    new_account = Account(
+                        id=account_id,
+                        user_id=user_id,
+                        platform=platform,
+                        platform_user_id=user_info['id'],
+                        platform_username=user_info.get('name', '').replace(' ', '_'),
+                        display_name=user_info.get('name'),
+                        oauth_token=encrypt_token(access_token),
+                        token_expires_at=expires_at,
+                        platform_metadata=platform_metadata,
+                        is_active=True
+                    )
+                    session.add(new_account)
+                
+                session.flush()
+            
+            return {
+                'success': True,
+                'account_id': account_id,
+                'platform': platform,
+                'user_name': user_info.get('name'),
+                'pages_count': len(pages) if pages else 0
+            }
+        
+        except Exception as e:
+            logger.error(f"Meta callback handling failed: {e}")
+            return {'error': str(e)}
+
+    @classmethod
+    def create_facebook_post(cls, access_token: str, content: str, media: List = None, page_id: str = None) -> Dict[str, Any]:
+        """Create a Facebook post
+        
+        Args:
+            access_token: User access token (will use page token from metadata if available)
+            content: Post content
+            media: List of media items
+            page_id: Facebook Page ID to post to
+        
+        Returns:
+            Dictionary with post result
+        """
+        try:
+            if not page_id:
+                return {'error': 'Page ID is required for Facebook posting'}
+            
+            # Use post_to_facebook_page method
+            return cls.post_to_facebook_page(access_token, page_id, content, media[0] if media else None)
+        
+        except Exception as e:
+            logger.error(f"Failed to create Facebook post: {e}")
+            return {'error': str(e)}
+
+    @classmethod
+    def create_instagram_post(cls, access_token: str, content: str, media: List = None) -> Dict[str, Any]:
+        """Create an Instagram post
+        
+        Args:
+            access_token: User access token
+            content: Post caption
+            media: List of media items (first item will be used)
+        
+        Returns:
+            Dictionary with post result
+        """
+        try:
+            if not media or len(media) == 0:
+                return {'error': 'Media is required for Instagram posts'}
+            
+            # Get Instagram account ID from metadata (would need to be passed differently)
+            # For now, return error asking for instagram_account_id in options
+            return {'error': 'Instagram account ID not provided. Pass it in post options.'}
+        
+        except Exception as e:
+            logger.error(f"Failed to create Instagram post: {e}")
+            return {'error': str(e)}
+
 
 class LinkedInOAuth:
     """LinkedIn OAuth 2.0 implementation"""
@@ -329,6 +586,104 @@ class LinkedInOAuth:
             logger.error(f"LinkedIn post failed: {e}")
             return None
 
+    @classmethod
+    def get_authorization_url(cls, user_id: str) -> Dict[str, Any]:
+        """Generate LinkedIn OAuth authorization URL with user_id for state management"""
+        import secrets
+        state = f"{user_id}:linkedin:{secrets.token_urlsafe(16)}"
+        
+        params = {
+            'response_type': 'code',
+            'client_id': LINKEDIN_CLIENT_ID,
+            'redirect_uri': LINKEDIN_REDIRECT_URI,
+            'state': state,
+            'scope': ' '.join(cls.SCOPES)
+        }
+
+        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        return {
+            'authorization_url': f"{cls.AUTHORIZE_URL}?{query_string}",
+            'state': state
+        }
+
+    @classmethod
+    def handle_callback(cls, code: str, state: str) -> Dict[str, Any]:
+        """Handle OAuth callback and save account to database"""
+        try:
+            # Parse user_id from state
+            parts = state.split(':')
+            if len(parts) < 2:
+                return {'error': 'Invalid state parameter'}
+            
+            user_id = parts[0]
+            
+            # Exchange code for token
+            token_data = cls.exchange_code_for_token(code)
+            if not token_data:
+                return {'error': 'Failed to exchange code for token'}
+            
+            # Get user info
+            me_response = requests.get(
+                f"{cls.API_URL}/me",
+                headers={'Authorization': f'Bearer {token_data["access_token"]}'}
+            )
+            me_response.raise_for_status()
+            user_info = me_response.json()
+            
+            # Import here to avoid circular dependencies
+            from database import db_session_scope
+            from models import Account
+            from auth import encrypt_token
+            import uuid
+            
+            # Save to database
+            with db_session_scope() as session:
+                # Check if account already exists
+                existing_account = session.query(Account).filter_by(
+                    user_id=user_id,
+                    platform='linkedin',
+                    platform_user_id=user_info['id']
+                ).first()
+                
+                if existing_account:
+                    # Update existing account
+                    existing_account.oauth_token = encrypt_token(token_data['access_token'])
+                    existing_account.token_expires_at = token_data['expires_at']
+                    existing_account.is_active = True
+                    account_id = existing_account.id
+                else:
+                    # Create new account
+                    account_id = str(uuid.uuid4())
+                    new_account = Account(
+                        id=account_id,
+                        user_id=user_id,
+                        platform='linkedin',
+                        platform_user_id=user_info['id'],
+                        platform_username=f"{user_info.get('localizedFirstName', '')}_{user_info.get('localizedLastName', '')}",
+                        display_name=f"{user_info.get('localizedFirstName', '')} {user_info.get('localizedLastName', '')}",
+                        oauth_token=encrypt_token(token_data['access_token']),
+                        token_expires_at=token_data['expires_at'],
+                        is_active=True
+                    )
+                    session.add(new_account)
+                
+                session.flush()
+            
+            return {
+                'success': True,
+                'account_id': account_id,
+                'platform': 'linkedin'
+            }
+        
+        except Exception as e:
+            logger.error(f"LinkedIn callback handling failed: {e}")
+            return {'error': str(e)}
+
+    @classmethod
+    def create_post(cls, access_token: str, content: str, media: List = None) -> Dict[str, Any]:
+        """Create a LinkedIn post (wrapper for post_share)"""
+        return cls.post_share(access_token, content) or {'error': 'Failed to post to LinkedIn'}
+
 
 class GoogleOAuth:
     """Google (YouTube) OAuth 2.0 implementation"""
@@ -387,6 +742,121 @@ class GoogleOAuth:
         except Exception as e:
             logger.error(f"Google token exchange failed: {e}")
             return None
+
+    @classmethod
+    def get_authorization_url(cls, user_id: str) -> Dict[str, Any]:
+        """Generate Google OAuth authorization URL with user_id for state management"""
+        import secrets
+        state = f"{user_id}:youtube:{secrets.token_urlsafe(16)}"
+        
+        params = {
+            'client_id': GOOGLE_CLIENT_ID,
+            'redirect_uri': GOOGLE_REDIRECT_URI,
+            'response_type': 'code',
+            'scope': ' '.join(cls.SCOPES),
+            'access_type': 'offline',
+            'prompt': 'consent',
+            'state': state
+        }
+
+        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        return {
+            'authorization_url': f"{cls.AUTHORIZE_URL}?{query_string}",
+            'state': state
+        }
+
+    @classmethod
+    def handle_callback(cls, code: str, state: str) -> Dict[str, Any]:
+        """Handle OAuth callback and save account to database"""
+        try:
+            # Parse user_id from state
+            parts = state.split(':')
+            if len(parts) < 2:
+                return {'error': 'Invalid state parameter'}
+            
+            user_id = parts[0]
+            
+            # Exchange code for token
+            token_data = cls.exchange_code_for_token(code)
+            if not token_data:
+                return {'error': 'Failed to exchange code for token'}
+            
+            # Get user info and channel info
+            channel_response = requests.get(
+                f"{cls.YOUTUBE_API_URL}/channels",
+                params={'part': 'snippet', 'mine': 'true'},
+                headers={'Authorization': f'Bearer {token_data["access_token"]}'}
+            )
+            channel_response.raise_for_status()
+            channel_data = channel_response.json()
+            
+            if not channel_data.get('items'):
+                return {'error': 'No YouTube channel found for this account'}
+            
+            channel = channel_data['items'][0]
+            
+            # Import here to avoid circular dependencies
+            from database import db_session_scope
+            from models import Account
+            from auth import encrypt_token
+            import uuid
+            
+            # Save to database
+            with db_session_scope() as session:
+                # Check if account already exists
+                existing_account = session.query(Account).filter_by(
+                    user_id=user_id,
+                    platform='youtube',
+                    platform_user_id=channel['id']
+                ).first()
+                
+                if existing_account:
+                    # Update existing account
+                    existing_account.oauth_token = encrypt_token(token_data['access_token'])
+                    existing_account.refresh_token = encrypt_token(token_data.get('refresh_token', '')) if token_data.get('refresh_token') else None
+                    existing_account.token_expires_at = token_data['expires_at']
+                    existing_account.is_active = True
+                    account_id = existing_account.id
+                else:
+                    # Create new account
+                    account_id = str(uuid.uuid4())
+                    new_account = Account(
+                        id=account_id,
+                        user_id=user_id,
+                        platform='youtube',
+                        platform_user_id=channel['id'],
+                        platform_username=channel['snippet']['title'],
+                        display_name=channel['snippet']['title'],
+                        oauth_token=encrypt_token(token_data['access_token']),
+                        refresh_token=encrypt_token(token_data.get('refresh_token', '')) if token_data.get('refresh_token') else None,
+                        token_expires_at=token_data['expires_at'],
+                        is_active=True
+                    )
+                    session.add(new_account)
+                
+                session.flush()
+            
+            return {
+                'success': True,
+                'account_id': account_id,
+                'platform': 'youtube',
+                'channel_title': channel['snippet']['title']
+            }
+        
+        except Exception as e:
+            logger.error(f"Google callback handling failed: {e}")
+            return {'error': str(e)}
+
+    @classmethod
+    def upload_video(cls, access_token: str, title: str, video_file: str, options: Dict = None) -> Dict[str, Any]:
+        """Upload a video to YouTube"""
+        try:
+            # This is a simplified placeholder
+            # Full implementation would require video upload handling
+            return {'error': 'YouTube video upload not yet fully implemented'}
+        except Exception as e:
+            logger.error(f"YouTube upload failed: {e}")
+            return {'error': str(e)}
 
 
 class GoogleCalendarOAuth:
@@ -673,7 +1143,7 @@ class ConnectionHealthMonitor:
                 client.get_me()
             elif platform == 'meta' and access_token:
                 response = requests.get(
-                    'https://graph.facebook.com/v18.0/me',
+                    'https://graph.facebook.com/v20.0/me',
                     headers={'Authorization': f'Bearer {access_token}'}
                 )
                 response.raise_for_status()
@@ -781,7 +1251,7 @@ class PlatformAccountValidator:
                 }
             elif platform == 'meta':
                 response = requests.get(
-                    'https://graph.facebook.com/v18.0/me',
+                    'https://graph.facebook.com/v20.0/me',
                     params={
                         'access_token': access_token,
                         'fields': 'id,name,accounts{id,name,access_token}'
@@ -854,7 +1324,7 @@ class PlatformAccountValidator:
                 permissions['can_read'] = True
             elif platform == 'meta':
                 response = requests.get(
-                    'https://graph.facebook.com/v18.0/me/permissions',
+                    'https://graph.facebook.com/v20.0/me/permissions',
                     params={'access_token': access_token}
                 )
                 response.raise_for_status()
