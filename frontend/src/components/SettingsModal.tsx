@@ -35,9 +35,18 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const [llmTestMessage, setLlmTestMessage] = useState('');
 
   // Google Drive configuration state
-  const [googleDriveEnabled, setGoogleDriveEnabled] = useState(false);
-  const [googleClientId, setGoogleClientId] = useState('');
-  const [googleApiKey, setGoogleApiKey] = useState('');
+  const [googleDriveEnabled, setGoogleDriveEnabled] = useState(() => {
+    const saved = localStorage.getItem('google-drive-config');
+    return saved ? JSON.parse(saved).enabled : false;
+  });
+  const [googleClientId, setGoogleClientId] = useState(() => {
+    const saved = localStorage.getItem('google-drive-config');
+    return saved ? JSON.parse(saved).clientId : '';
+  });
+  const [googleApiKey, setGoogleApiKey] = useState(() => {
+    const saved = localStorage.getItem('google-drive-config');
+    return saved ? JSON.parse(saved).apiKey : '';
+  });
   const [googleTestStatus, setGoogleTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [googleTestMessage, setGoogleTestMessage] = useState('');
 
