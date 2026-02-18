@@ -32,7 +32,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ onPasswordCha
     setIsLoading(true);
 
     try {
-      const token = localStorage.getItem('access_token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch('/api/v2/auth/change-password', {
         method: 'POST',
         headers: {

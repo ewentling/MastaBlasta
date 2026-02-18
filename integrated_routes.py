@@ -179,7 +179,7 @@ def change_password():
             # Update password
             user.password_hash = hash_password(new_password)
             user.password_must_change = False  # Clear the flag
-            session.commit()
+            # Commit will happen automatically when context exits
 
             logger.info(f"Password changed for user {user.email}")
 

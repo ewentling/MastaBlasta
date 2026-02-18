@@ -101,7 +101,7 @@ export default function ContentCalendarPage() {
       // Get authorization URL from backend
       const response = await axios.get(`${API_BASE_URL}/api/google-calendar/authorize`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
       
@@ -154,7 +154,7 @@ export default function ContentCalendarPage() {
         events: calendarEvents
       }, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
       
