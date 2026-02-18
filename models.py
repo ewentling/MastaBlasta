@@ -26,7 +26,6 @@ class PostStatus(enum.Enum):
 
 class SubscriptionTier(enum.Enum):
     """Subscription tier levels"""
-    FREE = "free"
     STARTER = "starter"
     PRO = "pro"
     ENTERPRISE = "enterprise"
@@ -435,17 +434,19 @@ class Subscription(Base):
 
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False, unique=True, index=True)
-    tier = Column(Enum(SubscriptionTier), default=SubscriptionTier.FREE, nullable=False)
+    tier = Column(Enum(SubscriptionTier), default=SubscriptionTier.STARTER, nullable=False)
     status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.TRIAL, nullable=False)
     
-    # Trial and billing periods
+    # Trial and billing periods (no trials in Square model - pending payment)
     trial_ends_at = Column(DateTime, nullable=True)
     current_period_start = Column(DateTime, nullable=True)
     current_period_end = Column(DateTime, nullable=True)
     
-    # Payment information (placeholders for future payment integration)
-    payment_method = Column(String(50), nullable=True)  # 'stripe', 'paypal', etc.
-    payment_provider_customer_id = Column(String(255), nullable=True)  # Stripe customer ID, etc.
+    # Square payment integration
+    payment_method = Column(String(50), default='square', nullable=False)  # Always 'square'
+    square_subscription_id = Column(String(255), nullable=True, unique=True, index=True)  # Square subscription ID
+    square_customer_id = Column(String(255), nullable=True, index=True)  # Square customer ID
+    payment_provider_customer_id = Column(String(255), nullable=True)  # Backward compatibility
     last_payment_date = Column(DateTime, nullable=True)
     last_payment_amount = Column(Float, nullable=True)
     

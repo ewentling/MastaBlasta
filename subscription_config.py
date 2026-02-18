@@ -8,28 +8,8 @@ from typing import Dict, Any
 class TierLimits:
     """Subscription tier limits and features"""
     
-    # Define limits for each tier
+    # Define limits for each tier (NO FREE TIER - all paid via Square)
     TIER_CONFIGS: Dict[SubscriptionTier, Dict[str, Any]] = {
-        SubscriptionTier.FREE: {
-            'name': 'Free',
-            'price': 0,
-            'posts_per_month': 10,
-            'accounts_per_platform': 1,
-            'scheduled_posts_limit': 5,
-            'storage_mb': 100,
-            'api_calls_per_day': 100,
-            'features': {
-                'basic_analytics': True,
-                'advanced_analytics': False,
-                'ai_features': False,
-                'social_listening': False,
-                'custom_branding': False,
-                'priority_support': False,
-                'api_access': False,
-                'team_collaboration': False,
-                'webhooks': False,
-            }
-        },
         SubscriptionTier.STARTER: {
             'name': 'Starter',
             'price': 29,

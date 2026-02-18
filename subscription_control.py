@@ -13,26 +13,19 @@ logger = logging.getLogger(__name__)
 
 
 def get_user_subscription(db_session: Session, user_id: str) -> Subscription:
-    """Get subscription for a user, create FREE if doesn't exist"""
+    """
+    Get subscription for a user.
+    
+    NOTE: With Square integration, subscriptions are NOT auto-created.
+    Users must complete Square checkout to get a subscription.
+    Returns None if no subscription exists (user must subscribe).
+    """
     subscription = db_session.query(Subscription).filter_by(user_id=user_id).first()
     
+    # NO auto-creation - users must pay via Square
     if not subscription:
-        # Create a default FREE subscription for new users
-        from uuid import uuid4
-        trial_end = datetime.now(timezone.utc) + timedelta(days=SubscriptionHelper.get_trial_period_days())
-        
-        subscription = Subscription(
-            id=str(uuid4()),
-            user_id=user_id,
-            tier=SubscriptionTier.FREE,
-            status=SubscriptionStatus.TRIAL,
-            trial_ends_at=trial_end,
-            current_period_start=datetime.now(timezone.utc),
-            current_period_end=trial_end
-        )
-        db_session.add(subscription)
-        db_session.commit()
-        logger.info(f"Created FREE trial subscription for user {user_id}")
+        logger.warning(f"No subscription found for user {user_id} - payment required")
+        return None
     
     return subscription
 

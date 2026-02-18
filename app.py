@@ -113,6 +113,16 @@ if PRODUCTION_MODE:
     logger.info("✓ Admin routes registered at /api/admin/*")
     logger.info("  - /api/admin/users - User and subscription management")
     logger.info("  - /api/admin/metrics - System-wide metrics")
+    
+    # Register Square integration routes
+    from square_routes import square_bp
+    from square_webhooks import square_webhooks_bp
+    app.register_blueprint(square_bp)
+    app.register_blueprint(square_webhooks_bp)
+    logger.info("✓ Square subscription routes registered at /api/square/*")
+    logger.info("  - /api/square/create-checkout - Create subscription checkout")
+    logger.info("  - /api/square/subscription-status - Get current subscription")
+    logger.info("  - /api/square/webhooks - Handle Square webhook events")
 
 # Register advanced features (TTS, Social Listening, AI Training)
 try:
