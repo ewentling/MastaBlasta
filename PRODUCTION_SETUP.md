@@ -59,12 +59,14 @@ export DATABASE_URL="postgresql://username:password@hostname:5432/mastablasta"
 # Install dependencies
 pip install -r requirements.txt
 
-# Initialize database schema
-python3 -c "from database import init_db; init_db()"
-
-# Or use migrations (recommended for production)
+# Run database migrations (RECOMMENDED - ensures schema is up to date)
 alembic upgrade head
+
+# Alternative: Initialize database schema directly (may miss schema updates)
+# python3 -c "from database import init_db; init_db()"
 ```
+
+**Note:** If you're updating from an older version, always use `alembic upgrade head` to apply schema updates. See `DATABASE_MIGRATION_FIX.md` for troubleshooting migration issues.
 
 ## Media Management Setup
 
