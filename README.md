@@ -193,12 +193,53 @@ See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 ### Using Docker Compose (Recommended)
 
 ```bash
+# Start all services
 docker-compose up -d
 ```
 
-The application will be available at `http://localhost:33766`
+**What gets started:**
+- MastaBlasta backend (Flask API)
+- PostgreSQL database
+- Frontend web UI (React)
 
 **Access the Web UI**: Open your browser and navigate to `http://localhost:33766`
+
+## 🔗 Social Platform Connection
+
+MastaBlasta supports easy "click to connect" OAuth integration for:
+- **Facebook** - Post to Pages with automatic Page token management
+- **Instagram** - Post to Business/Creator accounts
+- **Twitter/X** - Tweet and thread support
+- **LinkedIn** - Personal and company page posting
+- **YouTube** - Video uploads
+
+### Quick Setup Guides
+
+- **📘 [Facebook OAuth Setup Guide](FACEBOOK_OAUTH_SETUP.md)** - Complete guide for admins
+  - Register Facebook app
+  - Configure OAuth credentials
+  - Request permissions
+  - API integration for n8n
+  
+- **⚡ [Quick Facebook Connect (Users)](QUICK_FACEBOOK_CONNECT.md)** - Simple guide for end users
+  - One-click account connection
+  - No technical knowledge required
+  - Troubleshooting tips
+
+- **🔧 [All Platforms Setup](PLATFORM_SETUP.md)** - Setup guide for all platforms
+
+### For Users: Connecting Your Account
+
+1. Login to MastaBlasta
+2. Go to **Accounts** page
+3. Click **"Quick Connect"**
+4. Select your platform (e.g., Facebook)
+5. Authorize in the popup
+6. Done! Start posting 🎉
+
+See [QUICK_FACEBOOK_CONNECT.md](QUICK_FACEBOOK_CONNECT.md) for detailed instructions.
+
+---
 
 **Included Dependencies**:
 - ✅ Frontend web UI (automatically built during Docker image creation)
