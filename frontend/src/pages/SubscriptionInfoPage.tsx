@@ -107,7 +107,7 @@ const SubscriptionInfoPage: React.FC = () => {
   ];
 
   const handleSubscribe = async (tierName: string) => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('accessToken');
     
     if (!token) {
       // Not logged in - prompt to login/register

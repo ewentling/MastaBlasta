@@ -89,7 +89,7 @@ export default function ContentLibraryPage() {
         page_size: 100
       }, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
       setDriveFiles(response.data);
@@ -104,7 +104,7 @@ export default function ContentLibraryPage() {
       // Get authorization URL from backend
       const response = await axios.get(`${API_BASE_URL}/api/google-drive/authorize`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
       
@@ -156,7 +156,7 @@ export default function ContentLibraryPage() {
         page_size: 100
       }, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
       setDriveFiles(response.data);
