@@ -138,7 +138,15 @@ class TwitterOAuth:
 
     @classmethod
     def handle_callback(cls, code: str, state: str) -> Dict[str, Any]:
-        """Handle OAuth callback and save account to database"""
+        """Handle OAuth callback and save account to database
+        
+        Note: This is a simplified implementation that doesn't handle code_verifier.
+        Twitter OAuth PKCE requires code_verifier to be stored in session/cache during
+        the authorization request and retrieved during callback. This limitation means
+        Twitter OAuth flow needs additional session management implementation.
+        
+        TODO: Implement proper session storage for code_verifier
+        """
         try:
             # Parse user_id from state
             parts = state.split(':')
@@ -148,9 +156,8 @@ class TwitterOAuth:
             user_id = parts[0]
             
             # Note: code_verifier should be retrieved from session/cache
-            # For now, this is a limitation - we need to store code_verifier somewhere
-            # This is a simplified implementation
-            return {'error': 'Twitter OAuth requires code_verifier from session - not yet implemented'}
+            # This is a limitation that requires session management
+            return {'error': 'Twitter OAuth requires code_verifier from session - session management not yet implemented'}
         
         except Exception as e:
             logger.error(f"Twitter callback handling failed: {e}")
@@ -302,7 +309,7 @@ class MetaOAuth:
                 page_info = {
                     'page_id': page['id'],
                     'page_name': page['name'],
-                    'page_access_token': page['access_token'],  # Never-expiring page token
+                    'page_access_token': page['access_token'],  # Long-lived page token
                     'category': page.get('category', ''),
                     'instagram_business_account': page.get('instagram_business_account', {}).get('id')
                 }
@@ -335,7 +342,8 @@ class MetaOAuth:
             'response_type': 'code'
         }
         
-        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        from urllib.parse import urlencode
+        query_string = urlencode(params)
         return {
             'authorization_url': f"{cls.AUTHORIZE_URL}?{query_string}",
             'state': state
@@ -457,8 +465,16 @@ class MetaOAuth:
             if not page_id:
                 return {'error': 'Page ID is required for Facebook posting'}
             
+            # Validate media is a list or string if provided
+            media_url = None
+            if media:
+                if isinstance(media, list):
+                    media_url = media[0] if media else None
+                elif isinstance(media, str):
+                    media_url = media
+            
             # Use post_to_facebook_page method
-            return cls.post_to_facebook_page(access_token, page_id, content, media[0] if media else None)
+            return cls.post_to_facebook_page(access_token, page_id, content, media_url)
         
         except Exception as e:
             logger.error(f"Failed to create Facebook post: {e}")
@@ -477,12 +493,12 @@ class MetaOAuth:
             Dictionary with post result
         """
         try:
-            if not media or len(media) == 0:
+            if not media:
                 return {'error': 'Media is required for Instagram posts'}
             
             # Get Instagram account ID from metadata (would need to be passed differently)
-            # For now, return error asking for instagram_account_id in options
-            return {'error': 'Instagram account ID not provided. Pass it in post options.'}
+            # Instagram business account ID should be passed in post options as 'instagram_account_id'
+            return {'error': 'Instagram account ID not provided. Pass instagram_account_id in post options.'}
         
         except Exception as e:
             logger.error(f"Failed to create Instagram post: {e}")
@@ -600,7 +616,8 @@ class LinkedInOAuth:
             'scope': ' '.join(cls.SCOPES)
         }
 
-        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        from urllib.parse import urlencode
+        query_string = urlencode(params)
         return {
             'authorization_url': f"{cls.AUTHORIZE_URL}?{query_string}",
             'state': state
@@ -759,7 +776,8 @@ class GoogleOAuth:
             'state': state
         }
 
-        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        from urllib.parse import urlencode
+        query_string = urlencode(params)
         return {
             'authorization_url': f"{cls.AUTHORIZE_URL}?{query_string}",
             'state': state
@@ -813,13 +831,16 @@ class GoogleOAuth:
                 if existing_account:
                     # Update existing account
                     existing_account.oauth_token = encrypt_token(token_data['access_token'])
-                    existing_account.refresh_token = encrypt_token(token_data.get('refresh_token', '')) if token_data.get('refresh_token') else None
+                    refresh_token = token_data.get('refresh_token')
+                    if refresh_token:  # Only update if new refresh token is provided
+                        existing_account.refresh_token = encrypt_token(refresh_token)
                     existing_account.token_expires_at = token_data['expires_at']
                     existing_account.is_active = True
                     account_id = existing_account.id
                 else:
                     # Create new account
                     account_id = str(uuid.uuid4())
+                    refresh_token = token_data.get('refresh_token')
                     new_account = Account(
                         id=account_id,
                         user_id=user_id,
@@ -828,7 +849,7 @@ class GoogleOAuth:
                         platform_username=channel['snippet']['title'],
                         display_name=channel['snippet']['title'],
                         oauth_token=encrypt_token(token_data['access_token']),
-                        refresh_token=encrypt_token(token_data.get('refresh_token', '')) if token_data.get('refresh_token') else None,
+                        refresh_token=encrypt_token(refresh_token) if refresh_token else None,
                         token_expires_at=token_data['expires_at'],
                         is_active=True
                     )

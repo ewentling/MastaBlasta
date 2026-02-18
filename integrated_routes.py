@@ -479,7 +479,7 @@ def publish_post(post_id):
                 user_id=post['user_id'],
                 platform=platform,
                 is_active=True
-            ).first()
+            ).order_by(Account.created_at.desc()).first()
             
             if not account:
                 results[platform] = {'error': f'No active {platform} account found for user'}
@@ -488,14 +488,15 @@ def publish_post(post_id):
             account_id = account.id
             
             # Get page_id from metadata for Facebook posting if available
-            post_options = post.get('post_options', {})
+            # Extract metadata before session closes to avoid detached instance issues
+            post_options = post.get('post_options', {}).copy()
             if platform == 'facebook' and account.platform_metadata:
                 pages = account.platform_metadata.get('pages', [])
                 if pages and 'page_id' not in post_options:
                     # Use first page by default
                     post_options['page_id'] = pages[0]['page_id']
         
-        # Post to platform
+        # Post to platform (outside session context)
         result = oauth_manager.post_to_platform(
             platform,
             account_id,
