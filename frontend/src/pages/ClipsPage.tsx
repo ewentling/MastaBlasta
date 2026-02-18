@@ -80,7 +80,20 @@ export default function ClipsPage() {
     } catch (err: any) {
       console.error('Analysis error:', err);
       const errorMsg = err.response?.data?.error || err.message || 'Failed to analyze video. Check the URL and try again.';
-      setError(errorMsg);
+      
+      // Check if it's a YouTube bot detection error
+      if (errorMsg.includes('Sign in to confirm') || errorMsg.includes('not a bot') || errorMsg.includes('youtube')) {
+        setError(
+          '⚠️ YouTube Access Restricted: YouTube has detected automated access and is blocking this request. ' +
+          'This is a common issue with YouTube\'s anti-bot measures. Please try one of these alternatives:\n\n' +
+          '1. Use public or unlisted videos (not private)\n' +
+          '2. Try videos from different channels\n' +
+          '3. Use alternative platforms like Vimeo or direct video file URLs\n' +
+          '4. Contact your administrator to configure YouTube API access with proper authentication'
+        );
+      } else {
+        setError(errorMsg);
+      }
     } finally {
       setAnalyzing(false);
     }
@@ -171,6 +184,32 @@ export default function ClipsPage() {
             Video Clipper
           </h1>
           <p>Extract viral clips from videos using AI-powered analysis</p>
+        </div>
+      </div>
+
+      {/* YouTube Help Section */}
+      <div className="card" style={{ marginBottom: '24px', backgroundColor: '#fef3c7', border: '1px solid #fbbf24' }}>
+        <h3 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          ⚠️ YouTube Access Issues
+        </h3>
+        <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
+          <p style={{ marginBottom: '12px' }}>
+            <strong>Why This Happens:</strong> YouTube has strict anti-bot measures that may block automated video access. 
+            This is especially common with private videos or when accessed without proper API authentication.
+          </p>
+          <p style={{ marginBottom: '12px' }}>
+            <strong>What You Can Do:</strong>
+          </p>
+          <ul style={{ marginLeft: '20px', marginBottom: '12px' }}>
+            <li>✅ Use <strong>public or unlisted videos</strong> instead of private ones</li>
+            <li>✅ Try videos from <strong>different channels or creators</strong></li>
+            <li>✅ Use alternative platforms like <strong>Vimeo, Wistia, or direct video URLs</strong></li>
+            <li>✅ For production use, ask your admin to configure <strong>YouTube Data API v3 access</strong></li>
+          </ul>
+          <p style={{ fontSize: '13px', color: '#78716c' }}>
+            💡 <strong>Alternative:</strong> You can download videos manually and upload the file directly, or use 
+            platforms like Vimeo that are more automation-friendly.
+          </p>
         </div>
       </div>
 
