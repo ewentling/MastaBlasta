@@ -236,8 +236,33 @@ class TwitterOAuth:
 
     @classmethod
     def create_tweet(cls, access_token: str, content: str, media: List = None) -> Dict[str, Any]:
-        """Create a tweet (wrapper for post_tweet)"""
-        return cls.post_tweet(access_token, content, media) or {'error': 'Failed to post tweet'}
+        """Create a tweet
+        
+        This method provides a standardized interface for tweet creation, consistent with
+        other OAuth class methods. It wraps post_tweet() with additional error handling.
+        
+        Args:
+            access_token: Twitter OAuth access token
+            content: Tweet text content
+            media: Optional list of media IDs to attach
+            
+        Returns:
+            Dictionary with tweet data on success, or error information on failure
+            
+        Note:
+            This wrapper ensures consistent return format and provides a named method
+            that clearly indicates its purpose for external API consumers.
+        """
+        try:
+            result = cls.post_tweet(access_token, content, media)
+            if result:
+                return result
+            else:
+                logger.error("Tweet creation returned None/empty result")
+                return {'error': 'Failed to post tweet - no response from Twitter API'}
+        except Exception as e:
+            logger.error(f"Exception in create_tweet: {str(e)}", exc_info=True)
+            return {'error': f'Failed to post tweet: {str(e)}'}
 
 
 class MetaOAuth:

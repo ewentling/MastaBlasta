@@ -347,9 +347,25 @@ class MediaManager:
         return None
 
     def list_media(self, user_id: str, limit: int = 50, offset: int = 0) -> List[Dict]:
-        """List media for user"""
+        """List media for user
+        
+        Args:
+            user_id: User ID to list media for
+            limit: Maximum number of results (default: 50)
+            offset: Offset for pagination (default: 0)
+            
+        Returns:
+            List of media dictionaries
+            
+        Raises:
+            RuntimeError: If media manager is disabled
+        """
         if not self.enabled:
-            return []
+            logger.warning(f"Media list requested for user {user_id} but MediaManager is disabled")
+            raise RuntimeError(
+                "Media management is not available. Database may be disabled or not configured. "
+                "Please check your configuration and ensure the database is accessible."
+            )
 
         with db_session_scope() as session:
             media_list = session.query(Media).filter_by(user_id=user_id).order_by(Media.created_at.desc()).limit(limit).offset(offset).all()
