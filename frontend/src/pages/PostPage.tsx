@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAI } from '../contexts/AIContext';
 import { PlatformPreviews } from '../components/PlatformPreviews';
 import type { CreatePostRequest, SchedulePostRequest } from '../types';
+import { getMinDateTime, toISOString, formatDateTime, isInPast } from '../utils/timezone';
 
 export default function PostPage() {
   const navigate = useNavigate();
@@ -104,7 +105,7 @@ export default function PostPage() {
       return;
     }
 
-    if (isScheduled && new Date(scheduledTime) <= new Date()) {
+    if (isScheduled && isInPast(scheduledTime)) {
       setResult({ success: false, message: 'Scheduled time must be in the future' });
       setTimeout(() => setResult(null), 3000);
       return;
@@ -119,7 +120,7 @@ export default function PostPage() {
     };
     
     if (isScheduled) {
-      (postData as SchedulePostRequest).scheduled_time = new Date(scheduledTime).toISOString();
+      (postData as SchedulePostRequest).scheduled_time = toISOString(new Date(scheduledTime));
     }
     
     postMutation.mutate(postData);
@@ -646,14 +647,14 @@ export default function PostPage() {
                   className="form-input"
                   value={scheduledTime}
                   onChange={(e) => setScheduledTime(e.target.value)}
-                  min={new Date().toISOString().slice(0, 16)}
+                  min={getMinDateTime()}
                   required={isScheduled}
                   style={{ maxWidth: '300px' }}
                 />
                 <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: 'var(--color-textSecondary)' }}>
                   {scheduledTime && (
                     <>
-                      Will be published on {new Date(scheduledTime).toLocaleString()}
+                      Will be published: {formatDateTime.full(scheduledTime)}
                     </>
                   )}
                 </div>

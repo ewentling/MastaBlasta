@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart2, TrendingUp, Users, Eye, Heart, MessageCircle, Share2, Smile, Frown, Meh, Download } from 'lucide-react';
 import * as api from '../api';
+import { formatDateTime } from '../utils/timezone';
 
 export default function AnalyticsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState(30);
@@ -51,7 +52,7 @@ export default function AnalyticsPage() {
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', `analytics_${selectedPeriod}days_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `analytics_${selectedPeriod}days_${formatDateTime.dateShort(new Date()).replace(/\//g, '-')}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();
