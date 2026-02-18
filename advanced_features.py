@@ -290,8 +290,6 @@ def list_trained_models():
             'help': 'Install ML dependencies: pip install scikit-learn pandas numpy',
             'health_check': '/api/advanced/health'
         }), 503
-    if not AI_TRAINING_AVAILABLE:
-        return jsonify({'error': 'AI training not available'}), 503
 
     try:
         models = ai_trainer.list_models()

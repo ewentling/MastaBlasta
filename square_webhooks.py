@@ -77,9 +77,8 @@ def handle_webhook():
         if not verify_square_signature(payload, signature):
             logger.warning("Invalid Square webhook signature")
             SecurityLogger.log_suspicious_activity(
-                request.remote_addr,
-                "Invalid Square webhook signature",
-                request.headers.get('User-Agent', '')
+                user_id=None,
+                activity=f"Invalid Square webhook signature from {request.remote_addr}"
             )
             return jsonify({'error': 'Invalid signature'}), 401
         
@@ -128,7 +127,7 @@ def handle_subscription_created(data: dict):
             ).first()
             
             if subscription:
-                # Update with Square subscription ID
+                # Update existing subscription with Square subscription ID
                 subscription.square_subscription_id = square_subscription_id
                 subscription.status = SubscriptionStatus.ACTIVE
                 db_session.commit()
@@ -137,7 +136,22 @@ def handle_subscription_created(data: dict):
                 SecurityLogger.log_event('subscription_created', subscription.user_id, 
                                         f"Square subscription created: {square_subscription_id}")
             else:
-                logger.warning(f"No subscription found for Square customer: {square_customer_id}")
+                # Try to find subscription by Square subscription ID or create new one
+                # This handles the case where webhook arrives before we have local record
+                subscription = db_session.query(Subscription).filter_by(
+                    square_subscription_id=square_subscription_id
+                ).first()
+                
+                if not subscription:
+                    # Create a new subscription using Square customer reference_id (user_id)
+                    # Note: This requires the Square customer to have reference_id set to user_id
+                    logger.warning(f"No subscription found for Square customer: {square_customer_id}")
+                    # We could create one here if we had the user_id in the reference_id
+                    # For now, log and return - checkout should create the subscription record first
+                else:
+                    subscription.status = SubscriptionStatus.ACTIVE
+                    db_session.commit()
+                    logger.info(f"Activated subscription: {square_subscription_id}")
         
         return jsonify({'status': 'processed'}), 200
         

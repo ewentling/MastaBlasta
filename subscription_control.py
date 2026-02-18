@@ -95,6 +95,15 @@ def require_subscription(feature_name: str = None):
                 # Get or create subscription
                 subscription = get_user_subscription(db_session, user_id)
                 
+                # Handle case where subscription is None
+                if subscription is None:
+                    logger.warning(f"No subscription found for user {user_id}")
+                    return jsonify({
+                        'error': 'Subscription required',
+                        'message': 'No active subscription found. Please subscribe to continue.',
+                        'subscription_status': 'none'
+                    }), 403
+                
                 # Check if subscription is active
                 is_active, message = check_subscription_active(subscription)
                 if not is_active:

@@ -75,7 +75,11 @@ class TierLimits:
     @classmethod
     def get_tier_config(cls, tier: SubscriptionTier) -> Dict[str, Any]:
         """Get configuration for a subscription tier"""
-        return cls.TIER_CONFIGS.get(tier, cls.TIER_CONFIGS[SubscriptionTier.FREE])
+        if tier not in cls.TIER_CONFIGS:
+            # Default to STARTER tier if tier is unknown
+            logger.warning(f"Unknown subscription tier: {tier}, defaulting to STARTER")
+            return cls.TIER_CONFIGS[SubscriptionTier.STARTER]
+        return cls.TIER_CONFIGS[tier]
     
     @classmethod
     def get_limit(cls, tier: SubscriptionTier, limit_name: str) -> int:

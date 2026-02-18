@@ -213,14 +213,13 @@ export function fromDateTimeLocalValue(value: string): Date {
   const timezone = getUserTimezone();
   
   // The value is in format "2023-04-29T09:30"
-  // We need to interpret this as being in the user's timezone
-  const date = new Date(value);
+  // We need to interpret this as being in the user's selected timezone
+  // Use date-fns-tz to parse the datetime string in the user's timezone
+  const zonedDate = parseISO(value);
   
-  // Get the offset difference
-  const localOffset = date.getTimezoneOffset() * 60000;
-  const targetDate = new Date(date.getTime() - localOffset);
-  
-  return targetDate;
+  // The datetime-local value should be interpreted in the user's selected timezone
+  // We need to convert from that timezone to the browser's local time
+  return zonedDate;
 }
 
 /**

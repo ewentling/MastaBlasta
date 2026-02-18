@@ -74,10 +74,22 @@ def create_checkout():
                 user, tier, db_session
             )
             
-            # Store customer_id for webhook matching
-            if existing_sub:
+            # Create or update subscription record for webhook matching
+            if not existing_sub:
+                # Create new pending subscription
+                new_sub = Subscription(
+                    user_id=user_id,
+                    tier=tier,
+                    status=SubscriptionStatus.TRIAL,  # Will be updated by webhook
+                    square_customer_id=checkout_data['customer_id']
+                )
+                db_session.add(new_sub)
+            else:
+                # Update existing subscription with customer_id
                 existing_sub.square_customer_id = checkout_data['customer_id']
-                db_session.commit()
+                existing_sub.tier = tier
+            
+            db_session.commit()
             
             SecurityLogger.log_event('checkout_created', user_id, 
                                     f"Created checkout for tier: {tier.value}")

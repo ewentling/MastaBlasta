@@ -338,6 +338,11 @@ class SecurityHeaders:
         )
         
         return response
+    
+    @staticmethod
+    def set_security_headers(response):
+        """Alias for add_security_headers for backward compatibility"""
+        return SecurityHeaders.add_security_headers(response)
 
 
 class SecurityLogger:
@@ -415,7 +420,8 @@ __all__ = [
     'InputSanitizer',
     'SecurityHeaders',
     'SecurityLogger',
-    'RefreshTokenRotation'
+    'RefreshTokenRotation',
+    'init_security_middleware'
 ]
 
 
@@ -436,23 +442,6 @@ class RefreshTokenRotation:
         """Check if token has been used"""
         token_hash = hashlib.sha256(token.encode()).hexdigest()
         return token_hash in cls.used_refresh_tokens
-
-
-class SecurityHeaders:
-    """Security headers middleware"""
-
-    @staticmethod
-    def set_security_headers(response):
-        """Set security headers on response"""
-        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-        response.headers['X-Content-Type-Options'] = 'nosniff'
-        response.headers['X-Frame-Options'] = 'SAMEORIGIN'
-        response.headers['X-XSS-Protection'] = '1; mode=block'
-        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
-        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
-        response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
-
-        return response
 
 
 def init_security_middleware(app):
@@ -482,19 +471,3 @@ def init_security_middleware(app):
         response = CORSConfig.set_cors_headers(response)
         return response
 
-
-# Export all security classes and functions
-__all__ = [
-    'PasswordPolicy',
-    'AccountSecurity',
-    'RateLimiter',
-    'HTTPSEnforcer',
-    'CORSConfig',
-    'WebhookSecurity',
-    'InputSanitizer',
-    'SecurityLogger',
-    'RefreshTokenRotation',
-    'SecurityHeaders',
-    'init_security_middleware',
-    'rate_limit_middleware',
-]
