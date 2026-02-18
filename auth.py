@@ -2,6 +2,7 @@
 Authentication and authorization utilities
 """
 import os
+import sys
 import uuid
 import bcrypt
 import jwt
@@ -10,7 +11,52 @@ from functools import wraps
 from flask import request, jsonify
 from typing import Optional, Dict, Any, Callable
 from cryptography.fernet import Fernet
+import logging
 
+logger = logging.getLogger(__name__)
+
+# Security: Validate critical environment variables
+def _validate_production_secrets():
+    """Validate that production secrets are properly configured"""
+    is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('ENVIRONMENT') == 'production'
+    
+    jwt_key = os.getenv('JWT_SECRET_KEY')
+    encryption_key = os.getenv('ENCRYPTION_KEY')
+    
+    # Check for insecure defaults
+    insecure_defaults = [
+        'dev-secret-key-change-in-production',
+        'change-me',
+        'secret',
+        'password',
+        'default'
+    ]
+    
+    if is_production:
+        # CRITICAL: In production, secrets MUST be set and secure
+        if not jwt_key or jwt_key in insecure_defaults or len(jwt_key) < 32:
+            logger.critical("🔴 SECURITY ERROR: JWT_SECRET_KEY not properly configured for production!")
+            logger.critical("   Set a secure random key: export JWT_SECRET_KEY=\"$(openssl rand -hex 32)\"")
+            sys.exit(1)
+            
+        if not encryption_key or encryption_key in insecure_defaults or len(encryption_key) < 32:
+            logger.critical("🔴 SECURITY ERROR: ENCRYPTION_KEY not properly configured for production!")
+            logger.critical("   Set a secure random key: export ENCRYPTION_KEY=\"$(openssl rand -hex 32)\"")
+            sys.exit(1)
+            
+        logger.info("✅ Production secrets validated successfully")
+    else:
+        # Development: Warn if using insecure defaults
+        if not jwt_key or jwt_key in insecure_defaults:
+            logger.warning("⚠️  WARNING: Using default JWT_SECRET_KEY in development")
+            logger.warning("   For production, set: export JWT_SECRET_KEY=\"$(openssl rand -hex 32)\"")
+            
+        if not encryption_key or encryption_key in insecure_defaults:
+            logger.warning("⚠️  WARNING: Using default ENCRYPTION_KEY in development")
+            logger.warning("   For production, set: export ENCRYPTION_KEY=\"$(openssl rand -hex 32)\"")
+
+# Validate secrets on import (fail fast)
+_validate_production_secrets()
 
 # JWT Configuration
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'dev-secret-key-change-in-production')

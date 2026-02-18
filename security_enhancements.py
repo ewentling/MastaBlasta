@@ -183,10 +183,24 @@ class CORSConfig:
 
     @classmethod
     def set_cors_headers(cls, response):
-        """Set CORS headers"""
+        """Set CORS headers with security logging"""
         origin = request.headers.get('Origin')
+        is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('ENVIRONMENT') == 'production'
 
-        if origin in cls.ALLOWED_ORIGINS or os.getenv('FLASK_ENV') == 'development':
+        if is_production:
+            # Production: Strict whitelist only
+            if origin in cls.ALLOWED_ORIGINS:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-API-Key'
+                response.headers['Access-Control-Max-Age'] = '3600'
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+            else:
+                # Log rejected CORS request
+                logger.warning(f"CORS request rejected from origin: {origin}")
+                SecurityLogger.log_event('cors_rejected', details={'origin': origin})
+        else:
+            # Development: Permissive but logged
             response.headers['Access-Control-Allow-Origin'] = origin or '*'
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-API-Key'
@@ -284,6 +298,48 @@ class InputSanitizer:
         return not any(pattern in url.lower() for pattern in blocked_patterns)
 
 
+class SecurityHeaders:
+    """Security headers middleware"""
+    
+    @staticmethod
+    def add_security_headers(response):
+        """Add comprehensive security headers to response"""
+        # Strict Transport Security (HSTS) - Force HTTPS for 1 year
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
+        
+        # Content Security Policy - Prevent XSS
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https: blob:; "
+            "font-src 'self' data:; "
+            "connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
+        
+        # Prevent MIME type sniffing
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        
+        # Prevent clickjacking
+        response.headers['X-Frame-Options'] = 'DENY'
+        
+        # XSS Protection (legacy browsers)
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        
+        # Referrer Policy - Don't leak referrers
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        
+        # Permissions Policy - Disable unnecessary features
+        response.headers['Permissions-Policy'] = (
+            'geolocation=(), microphone=(), camera=(), payment=()'
+        )
+        
+        return response
+
+
 class SecurityLogger:
     """Security event logging"""
 
@@ -328,14 +384,39 @@ class SecurityLogger:
         SecurityLogger.log_event('api_key_generated', user_id=user_id)
 
     @staticmethod
-    def log_oauth_token_refresh(user_id: str, platform: str):
-        """Log OAuth token refresh"""
-        SecurityLogger.log_event('oauth_token_refresh', user_id=user_id, details={'platform': platform})
-
-    @staticmethod
-    def log_unauthorized_access(user_id: str = None, endpoint: str = None):
+    def log_unauthorized_access(user_id: str, resource: str):
         """Log unauthorized access attempt"""
-        SecurityLogger.log_event('unauthorized_access', user_id=user_id, details={'endpoint': endpoint})
+        SecurityLogger.log_event('unauthorized_access', user_id=user_id, details={'resource': resource})
+    
+    @staticmethod
+    def log_suspicious_activity(user_id: str, activity: str):
+        """Log suspicious activity"""
+        SecurityLogger.log_event('suspicious_activity', user_id=user_id, details={'activity': activity})
+    
+    @staticmethod
+    def log_oauth_success(user_id: str, platform: str):
+        """Log successful OAuth connection"""
+        SecurityLogger.log_event('oauth_success', user_id=user_id, details={'platform': platform})
+    
+    @staticmethod
+    def log_oauth_failure(user_id: str, platform: str, error: str):
+        """Log failed OAuth attempt"""
+        SecurityLogger.log_event('oauth_failure', user_id=user_id, details={'platform': platform, 'error': error})
+
+
+# Export all security classes for easy import
+__all__ = [
+    'PasswordPolicy',
+    'AccountSecurity',
+    'RateLimiter',
+    'HTTPSEnforcer',
+    'CORSConfig',
+    'WebhookSecurity',
+    'InputSanitizer',
+    'SecurityHeaders',
+    'SecurityLogger',
+    'RefreshTokenRotation'
+]
 
 
 class RefreshTokenRotation:
