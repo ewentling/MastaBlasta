@@ -206,38 +206,59 @@ docker-compose up -d
 
 ## 🔗 Social Platform Connection
 
-MastaBlasta supports easy "click to connect" OAuth integration for:
-- **Facebook** - Post to Pages with automatic Page token management
-- **Instagram** - Post to Business/Creator accounts
-- **Twitter/X** - Tweet and thread support
-- **LinkedIn** - Personal and company page posting
-- **YouTube** - Video uploads
+MastaBlasta supports easy "click to connect" OAuth integration for all major social platforms.
 
-### Quick Setup Guides
+### Platform Setup Guides
 
-- **📘 [Facebook OAuth Setup Guide](FACEBOOK_OAUTH_SETUP.md)** - Complete guide for admins
-  - Register Facebook app
-  - Configure OAuth credentials
-  - Request permissions
-  - API integration for n8n
-  
-- **⚡ [Quick Facebook Connect (Users)](QUICK_FACEBOOK_CONNECT.md)** - Simple guide for end users
-  - One-click account connection
-  - No technical knowledge required
-  - Troubleshooting tips
+Each platform has comprehensive documentation for both administrators and end users:
 
-- **🔧 [All Platforms Setup](PLATFORM_SETUP.md)** - Setup guide for all platforms
+#### Facebook
+- **📘 [Facebook OAuth Setup](FACEBOOK_OAUTH_SETUP.md)** - Complete admin guide  
+- **⚡ [Quick Facebook Connect](QUICK_FACEBOOK_CONNECT.md)** - User guide  
+- Post to Facebook Pages with automatic Page token management
+
+#### Twitter/X
+- **📘 [Twitter OAuth Setup](TWITTER_OAUTH_SETUP.md)** - Complete admin guide  
+- **⚡ [Quick Twitter Connect](QUICK_TWITTER_CONNECT.md)** - User guide  
+- Tweet and thread support with OAuth 2.0 + PKCE
+
+#### LinkedIn
+- **📘 [LinkedIn OAuth Setup](LINKEDIN_OAUTH_SETUP.md)** - Complete admin guide  
+- **⚡ [Quick LinkedIn Connect](QUICK_LINKEDIN_CONNECT.md)** - User guide  
+- Professional content posting with Share on LinkedIn
+
+#### Instagram
+- **📘 [Instagram OAuth Setup](INSTAGRAM_OAUTH_SETUP.md)** - Complete admin guide  
+- **⚡ [Quick Instagram Connect](QUICK_INSTAGRAM_CONNECT.md)** - User guide  
+- Post photos/videos to Business/Creator accounts
+
+#### YouTube
+- **📘 [YouTube OAuth Setup](YOUTUBE_OAUTH_SETUP.md)** - Complete admin guide  
+- **⚡ [Quick YouTube Connect](QUICK_YOUTUBE_CONNECT.md)** - User guide  
+- Upload videos with metadata management
+
+#### All Platforms
+- **🔧 [Platform Setup Guide](PLATFORM_SETUP.md)** - Overview of all platforms
 
 ### For Users: Connecting Your Account
 
 1. Login to MastaBlasta
 2. Go to **Accounts** page
 3. Click **"Quick Connect"**
-4. Select your platform (e.g., Facebook)
+4. Select your platform
 5. Authorize in the popup
 6. Done! Start posting 🎉
 
-See [QUICK_FACEBOOK_CONNECT.md](QUICK_FACEBOOK_CONNECT.md) for detailed instructions.
+### For Administrators: Setting Up OAuth
+
+Each platform requires OAuth app registration:
+1. Create developer account on the platform
+2. Register your application
+3. Get Client ID and Client Secret
+4. Configure in MastaBlasta (environment or per-user)
+5. Users can then connect with one click
+
+See platform-specific guides above for detailed instructions.
 
 ---
 
