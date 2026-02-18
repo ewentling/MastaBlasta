@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountsApi, postsApi } from '../api';
 import { Calendar, Trash2, Check, X, Edit2, Save } from 'lucide-react';
+import { formatDateTime, toDateTimeLocalValue, getMinDateTime } from '../utils/timezone';
 
 export default function ScheduledPostsPage() {
   const queryClient = useQueryClient();
@@ -142,11 +143,11 @@ export default function ScheduledPostsPage() {
                       ) : (
                         <>
                           <div>
-                            📅 {new Date(post.scheduled_for!).toLocaleString()}
+                            📅 {formatDateTime.full(post.scheduled_for!)}
                           </div>
                           <button
                             className="btn btn-secondary btn-small"
-                            onClick={() => handleQuickEdit(post.id, new Date(post.scheduled_for!).toISOString().slice(0, 16))}
+                            onClick={() => handleQuickEdit(post.id, toDateTimeLocalValue(post.scheduled_for!))}
                             style={{ padding: '0.25rem 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
                           >
                             <Edit2 size={12} />
@@ -241,9 +242,8 @@ function SchedulePostModal({
     );
   };
 
-  // Get minimum datetime (now + 5 minutes)
-  const minDateTime = new Date(Date.now() + 5 * 60 * 1000);
-  const minDate = minDateTime.toISOString().split('T')[0];
+  // Get minimum datetime (now + 5 minutes) in user's timezone
+  const minDate = getMinDateTime().split('T')[0];
 
   return (
     <div className="modal-overlay" onClick={onClose}>

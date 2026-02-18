@@ -193,12 +193,74 @@ See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 ### Using Docker Compose (Recommended)
 
 ```bash
+# Start all services
 docker-compose up -d
 ```
 
-The application will be available at `http://localhost:33766`
+**What gets started:**
+- MastaBlasta backend (Flask API)
+- PostgreSQL database
+- Frontend web UI (React)
 
 **Access the Web UI**: Open your browser and navigate to `http://localhost:33766`
+
+## 🔗 Social Platform Connection
+
+MastaBlasta supports easy "click to connect" OAuth integration for all major social platforms.
+
+### Platform Setup Guides
+
+Each platform has comprehensive documentation for both administrators and end users:
+
+#### Facebook
+- **📘 [Facebook OAuth Setup](FACEBOOK_OAUTH_SETUP.md)** - Complete admin guide  
+- **⚡ [Quick Facebook Connect](QUICK_FACEBOOK_CONNECT.md)** - User guide  
+- Post to Facebook Pages with automatic Page token management
+
+#### Twitter/X
+- **📘 [Twitter OAuth Setup](TWITTER_OAUTH_SETUP.md)** - Complete admin guide  
+- **⚡ [Quick Twitter Connect](QUICK_TWITTER_CONNECT.md)** - User guide  
+- Tweet and thread support with OAuth 2.0 + PKCE
+
+#### LinkedIn
+- **📘 [LinkedIn OAuth Setup](LINKEDIN_OAUTH_SETUP.md)** - Complete admin guide  
+- **⚡ [Quick LinkedIn Connect](QUICK_LINKEDIN_CONNECT.md)** - User guide  
+- Professional content posting with Share on LinkedIn
+
+#### Instagram
+- **📘 [Instagram OAuth Setup](INSTAGRAM_OAUTH_SETUP.md)** - Complete admin guide  
+- **⚡ [Quick Instagram Connect](QUICK_INSTAGRAM_CONNECT.md)** - User guide  
+- Post photos/videos to Business/Creator accounts
+
+#### YouTube
+- **📘 [YouTube OAuth Setup](YOUTUBE_OAUTH_SETUP.md)** - Complete admin guide  
+- **⚡ [Quick YouTube Connect](QUICK_YOUTUBE_CONNECT.md)** - User guide  
+- Upload videos with metadata management
+
+#### All Platforms
+- **🔧 [Platform Setup Guide](PLATFORM_SETUP.md)** - Overview of all platforms
+
+### For Users: Connecting Your Account
+
+1. Login to MastaBlasta
+2. Go to **Accounts** page
+3. Click **"Quick Connect"**
+4. Select your platform
+5. Authorize in the popup
+6. Done! Start posting 🎉
+
+### For Administrators: Setting Up OAuth
+
+Each platform requires OAuth app registration:
+1. Create developer account on the platform
+2. Register your application
+3. Get Client ID and Client Secret
+4. Configure in MastaBlasta (environment or per-user)
+5. Users can then connect with one click
+
+See platform-specific guides above for detailed instructions.
+
+---
 
 **Included Dependencies**:
 - ✅ Frontend web UI (automatically built during Docker image creation)

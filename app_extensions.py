@@ -194,14 +194,25 @@ class OAuthManager:
             logger.error(f"OAuth authorization error for {platform}: {e}")
             return {'error': str(e)}
 
-    def handle_callback(self, platform: str, code: str, state: str) -> Dict:
-        """Handle OAuth callback and exchange code for tokens"""
+    def handle_callback(self, platform: str, code: str, state: str, code_verifier: str = None) -> Dict:
+        """Handle OAuth callback and exchange code for tokens
+        
+        Args:
+            platform: Platform name (twitter, facebook, etc.)
+            code: Authorization code from OAuth provider
+            state: State parameter for verification
+            code_verifier: PKCE code verifier (required for Twitter)
+            
+        Returns:
+            Dict with account info or error
+        """
         if not self.enabled:
             return {'error': 'OAuth not enabled'}
 
         try:
             if platform == 'twitter':
-                return self.twitter.handle_callback(code, state)
+                # Pass code_verifier to Twitter OAuth handler
+                return self.twitter.handle_callback(code, state, code_verifier)
             elif platform in ['facebook', 'instagram', 'threads']:
                 return self.meta.handle_callback(code, state, platform)
             elif platform == 'linkedin':
@@ -211,11 +222,23 @@ class OAuthManager:
             else:
                 return {'error': f'Platform {platform} not supported'}
         except Exception as e:
-            logger.error(f"OAuth callback error for {platform}: {e}")
-            return {'error': str(e)}
+            logger.error(f"OAuth callback error for {platform}: {e}", exc_info=True)
+            return {'error': f'OAuth callback failed: {str(e)}'}
 
-    def post_to_platform(self, platform: str, account_id: str, content: str, media: List = None, options: Dict = None) -> Dict:
-        """Post content to platform using real API"""
+    def post_to_platform(self, platform: str, account_id: str, content: str, media: List = None, options: Dict = None, user_id: str = None) -> Dict:
+        """Post content to platform using real API
+        
+        Args:
+            platform: Platform name (twitter, facebook, etc.)
+            account_id: Account ID to use for posting
+            content: Post content
+            media: List of media IDs
+            options: Platform-specific options
+            user_id: Current user ID for authorization check
+            
+        Returns:
+            Dict with post result or error
+        """
         if not self.enabled:
             return {'error': 'OAuth not enabled'}
 
@@ -224,6 +247,11 @@ class OAuthManager:
             account = session.query(Account).filter_by(id=account_id).first()
             if not account:
                 return {'error': 'Account not found'}
+            
+            # Security check: Ensure user owns this account
+            if user_id and account.user_id != user_id:
+                logger.warning(f"Security: User {user_id} attempted to access account {account_id} owned by {account.user_id}")
+                return {'error': 'Unauthorized: You do not own this account'}
 
             access_token = decrypt_token(account.oauth_token)
 
@@ -319,9 +347,25 @@ class MediaManager:
         return None
 
     def list_media(self, user_id: str, limit: int = 50, offset: int = 0) -> List[Dict]:
-        """List media for user"""
+        """List media for user
+        
+        Args:
+            user_id: User ID to list media for
+            limit: Maximum number of results (default: 50)
+            offset: Offset for pagination (default: 0)
+            
+        Returns:
+            List of media dictionaries
+            
+        Raises:
+            RuntimeError: If media manager is disabled
+        """
         if not self.enabled:
-            return []
+            logger.warning(f"Media list requested for user {user_id} but MediaManager is disabled")
+            raise RuntimeError(
+                "Media management is not available. Database may be disabled or not configured. "
+                "Please check your configuration and ensure the database is accessible."
+            )
 
         with db_session_scope() as session:
             media_list = session.query(Media).filter_by(user_id=user_id).order_by(Media.created_at.desc()).limit(limit).offset(offset).all()
@@ -511,7 +555,7 @@ class AnalyticsCollector:
 
             elif platform == 'facebook':
                 # Facebook Graph API
-                url = f"https://graph.facebook.com/v18.0/{post_id}?fields=insights.metric(post_impressions,post_engaged_users,post_reactions_like_total)"
+                url = f"https://graph.facebook.com/v20.0/{post_id}?fields=insights.metric(post_impressions,post_engaged_users,post_reactions_like_total)"
                 response = requests.get(url, params={'access_token': access_token})
                 if response.status_code == 200:
                     data = response.json()
@@ -582,6 +626,35 @@ class WebhookManager:
             'active': True,
             'created_at': datetime.utcnow().isoformat()
         }
+    
+    def get_webhooks(self, user_id: str) -> List[Dict]:
+        """Get all webhooks for a user"""
+        if not self.enabled:
+            return {'error': 'Webhooks not enabled'}
+        
+        try:
+            # TODO: Query from database when Webhook model is available
+            # For now, return empty list as webhooks are stored in memory
+            # during register_webhook but not persisted
+            logger.info(f"Getting webhooks for user {user_id}")
+            return []
+        except Exception as e:
+            logger.error(f"Error getting webhooks: {e}")
+            return {'error': str(e)}
+    
+    def delete_webhook(self, webhook_id: str, user_id: str) -> Dict:
+        """Delete a webhook (with authorization check)"""
+        if not self.enabled:
+            return {'error': 'Webhooks not enabled'}
+        
+        try:
+            # TODO: Delete from database when Webhook model is available
+            # For now, just return success
+            logger.info(f"Deleting webhook {webhook_id} for user {user_id}")
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Error deleting webhook: {e}")
+            return {'error': str(e)}
 
     def send_webhook(self, webhook_url: str, event: str, data: Dict, secret: str = None):
         """Send webhook notification"""

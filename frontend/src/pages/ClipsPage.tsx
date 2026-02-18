@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
-import { Video, Scissors, Sparkles, Download, Calendar, Check, X, Loader, ExternalLink, Clock, Target, TrendingUp, Copy, Play } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Video, Scissors, Sparkles, Download, Calendar, Check, X, Loader, ExternalLink, Clock, Target, TrendingUp, Copy, Play, Save, Send, Type, Maximize2, Square, Smartphone, Monitor } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
 
@@ -38,7 +39,30 @@ interface ClipMetadata {
   platform: string;
 }
 
+interface CaptionStyle {
+  text: string;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+  underline: boolean;
+  strokeWidth: number;
+  strokeColor: string;
+  shadowEnabled: boolean;
+  backgroundColor: string;
+  backgroundOpacity: number;
+  position: 'top' | 'center' | 'bottom';
+}
+
+interface ClipConfiguration {
+  clip: Clip;
+  aspectRatio: string;
+  captionStyle: CaptionStyle;
+}
+
 export default function ClipsPage() {
+  const navigate = useNavigate();
   const [videoUrl, setVideoUrl] = useState('');
   const [numClips, setNumClips] = useState(3);
   const [analyzing, setAnalyzing] = useState(false);
@@ -50,6 +74,27 @@ export default function ClipsPage() {
   const [downloadInfo, setDownloadInfo] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  
+  // New state for enhancements
+  const [showCaptionEditor, setShowCaptionEditor] = useState(false);
+  const [clipConfigurations, setClipConfigurations] = useState<Map<number, ClipConfiguration>>(new Map());
+  const [currentCaptionStyle, setCurrentCaptionStyle] = useState<CaptionStyle>({
+    text: '',
+    fontFamily: 'Arial',
+    fontSize: 32,
+    color: '#FFFFFF',
+    bold: false,
+    italic: false,
+    underline: false,
+    strokeWidth: 2,
+    strokeColor: '#000000',
+    shadowEnabled: true,
+    backgroundColor: '#000000',
+    backgroundOpacity: 0.5,
+    position: 'bottom'
+  });
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState<string>('16:9');
+  const [editingClipIndex, setEditingClipIndex] = useState<number | null>(null);
 
   const handleAnalyze = async () => {
     if (!videoUrl.trim()) {
@@ -80,7 +125,20 @@ export default function ClipsPage() {
     } catch (err: any) {
       console.error('Analysis error:', err);
       const errorMsg = err.response?.data?.error || err.message || 'Failed to analyze video. Check the URL and try again.';
-      setError(errorMsg);
+      
+      // Check if it's a YouTube bot detection error
+      if (errorMsg.includes('Sign in to confirm') || errorMsg.includes('not a bot') || errorMsg.includes('youtube')) {
+        setError(
+          '⚠️ YouTube Access Restricted: YouTube has detected automated access and is blocking this request. ' +
+          'This is a common issue with YouTube\'s anti-bot measures. Please try one of these alternatives:\n\n' +
+          '1. Use public or unlisted videos (not private)\n' +
+          '2. Try videos from different channels\n' +
+          '3. Use alternative platforms like Vimeo or direct video file URLs\n' +
+          '4. Contact your administrator to configure YouTube API access with proper authentication'
+        );
+      } else {
+        setError(errorMsg);
+      }
     } finally {
       setAnalyzing(false);
     }
@@ -162,6 +220,105 @@ export default function ClipsPage() {
     return 'Moderate Potential';
   };
 
+  // New handler functions for enhancements
+  const handleSaveClip = (clip: Clip, index: number) => {
+    const config: ClipConfiguration = {
+      clip,
+      aspectRatio: clipConfigurations.get(index)?.aspectRatio || selectedAspectRatio,
+      captionStyle: clipConfigurations.get(index)?.captionStyle || currentCaptionStyle
+    };
+    
+    const dataStr = JSON.stringify(config, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `clip-${index + 1}-config.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    
+    setSuccessMessage('Clip configuration saved!');
+    setTimeout(() => setSuccessMessage(null), 3000);
+  };
+
+  const handlePostClip = (clip: Clip, index: number) => {
+    const config = clipConfigurations.get(index);
+    const caption = config?.captionStyle.text || clip.title;
+    const platforms = clip.platforms;
+    
+    // Navigate to PostPage with pre-filled data
+    navigate('/post', {
+      state: {
+        content: caption,
+        platforms: platforms,
+        clipData: {
+          ...clip,
+          aspectRatio: config?.aspectRatio || selectedAspectRatio,
+          captionStyle: config?.captionStyle
+        }
+      }
+    });
+  };
+
+  const handleOpenCaptionEditor = (clip: Clip, index: number) => {
+    setEditingClipIndex(index);
+    const existingConfig = clipConfigurations.get(index);
+    if (existingConfig) {
+      setCurrentCaptionStyle(existingConfig.captionStyle);
+      setSelectedAspectRatio(existingConfig.aspectRatio);
+    } else {
+      setCurrentCaptionStyle({
+        text: clip.title,
+        fontFamily: 'Arial',
+        fontSize: 32,
+        color: '#FFFFFF',
+        bold: false,
+        italic: false,
+        underline: false,
+        strokeWidth: 2,
+        strokeColor: '#000000',
+        shadowEnabled: true,
+        backgroundColor: '#000000',
+        backgroundOpacity: 0.5,
+        position: 'bottom'
+      });
+    }
+    setShowCaptionEditor(true);
+  };
+
+  const handleApplyCaptionStyle = () => {
+    if (editingClipIndex !== null) {
+      const newConfigs = new Map(clipConfigurations);
+      newConfigs.set(editingClipIndex, {
+        clip: clips[editingClipIndex],
+        aspectRatio: selectedAspectRatio,
+        captionStyle: currentCaptionStyle
+      });
+      setClipConfigurations(newConfigs);
+      setSuccessMessage('Caption styling applied!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    }
+    setShowCaptionEditor(false);
+    setEditingClipIndex(null);
+  };
+
+  const getAspectRatioStyle = (ratio: string) => {
+    const styles: any = {
+      '16:9': { paddingTop: '56.25%' }, // 9/16 = 0.5625
+      '9:16': { paddingTop: '177.78%' }, // 16/9 = 1.7778
+      '1:1': { paddingTop: '100%' },
+      '4:5': { paddingTop: '125%' } // 5/4 = 1.25
+    };
+    return styles[ratio] || styles['16:9'];
+  };
+
+  const aspectRatios = [
+    { value: '16:9', label: 'Landscape', icon: Monitor, description: 'YouTube, LinkedIn' },
+    { value: '9:16', label: 'Portrait', icon: Smartphone, description: 'TikTok, Reels, Shorts' },
+    { value: '1:1', label: 'Square', icon: Square, description: 'Instagram, Twitter' },
+    { value: '4:5', label: 'Portrait+', icon: Maximize2, description: 'Instagram Feed' }
+  ];
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -171,6 +328,45 @@ export default function ClipsPage() {
             Video Clipper
           </h1>
           <p>Extract viral clips from videos using AI-powered analysis</p>
+        </div>
+      </div>
+
+      {/* YouTube Help Section */}
+      <div className="card" style={{ marginBottom: '24px', backgroundColor: '#fef3c7', border: '1px solid #fbbf24' }}>
+        <h3 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          ⚠️ YouTube Access Issues
+        </h3>
+        <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
+          <p style={{ marginBottom: '12px' }}>
+            <strong>Why This Happens:</strong> YouTube has strict anti-bot measures that may block automated video access. 
+            This is especially common with private videos or when accessed without proper API authentication.
+          </p>
+          <p style={{ marginBottom: '12px' }}>
+            <strong>What You Can Do:</strong>
+          </p>
+          <ul style={{ marginLeft: '20px', marginBottom: '12px' }}>
+            <li>✅ Use <strong>public or unlisted videos</strong> instead of private ones</li>
+            <li>✅ Try videos from <strong>different channels or creators</strong></li>
+            <li>✅ Use alternative platforms like <strong>Vimeo, Wistia, or direct video URLs</strong></li>
+            <li>✅ For production use, ask your admin to configure <strong>YouTube Data API v3 access</strong></li>
+          </ul>
+          <div style={{ backgroundColor: '#dbeafe', padding: '12px', borderRadius: '6px', marginBottom: '12px', border: '1px solid #3b82f6' }}>
+            <p style={{ marginBottom: '8px', fontWeight: '600', color: '#1e40af' }}>
+              ℹ️ About YouTube Account Connections
+            </p>
+            <p style={{ fontSize: '13px', color: '#1e3a8a', marginBottom: '8px' }}>
+              <strong>Connecting your YouTube account in the Accounts page will NOT fix video clipping issues.</strong>
+            </p>
+            <p style={{ fontSize: '13px', color: '#1e3a8a' }}>
+              YouTube account connections are used for <strong>uploading/posting videos to YOUR channel</strong>, not for 
+              analyzing/downloading videos from other channels. The video clipper uses a different system (yt-dlp) that 
+              works independently of YouTube account connections.
+            </p>
+          </div>
+          <p style={{ fontSize: '13px', color: '#78716c' }}>
+            💡 <strong>Alternative:</strong> You can download videos manually and upload the file directly, or use 
+            platforms like Vimeo that are more automation-friendly.
+          </p>
         </div>
       </div>
 
@@ -309,75 +505,264 @@ export default function ClipsPage() {
             Suggested Clips ({clips.length})
           </h2>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-            {clips.map((clip, index) => (
-              <div
-                key={index}
-                onClick={() => handleSelectClip(clip)}
-                style={{
-                  padding: '16px',
-                  border: selectedClip === clip ? '2px solid #6366f1' : '1px solid var(--border-color)',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                  backgroundColor: selectedClip === clip ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
-                }}
-                className="clip-card"
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
-                  <h3 style={{ fontSize: '16px', margin: 0 }}>Clip {index + 1}</h3>
-                  <div
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      backgroundColor: getEngagementColor(clip.engagement_score) + '20',
-                      color: getEngagementColor(clip.engagement_score),
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+            {clips.map((clip, index) => {
+              const config = clipConfigurations.get(index);
+              const aspectRatio = config?.aspectRatio || '16:9';
+              
+              return (
+                <div
+                  key={index}
+                  style={{
+                    border: selectedClip === clip ? '2px solid #6366f1' : '1px solid var(--border-color)',
+                    borderRadius: '12px',
+                    overflow: 'hidden',
+                    transition: 'all 0.2s',
+                    backgroundColor: selectedClip === clip ? 'rgba(99, 102, 241, 0.05)' : 'transparent',
+                  }}
+                  className="clip-card"
+                >
+                  {/* Video Preview */}
+                  <div 
+                    style={{ 
+                      position: 'relative',
+                      width: '100%',
+                      backgroundColor: '#000',
+                      cursor: 'pointer'
                     }}
+                    onClick={() => handleSelectClip(clip)}
                   >
-                    {clip.engagement_score}%
+                    <div style={{ position: 'relative', ...getAspectRatioStyle(aspectRatio) }}>
+                      {clip.thumbnail && (
+                        <>
+                          <img
+                            src={clip.thumbnail}
+                            alt={clip.title}
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover'
+                            }}
+                          />
+                          <div style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            backgroundColor: 'rgba(0,0,0,0.7)',
+                            borderRadius: '50%',
+                            padding: '16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                            <Play size={32} color="#fff" fill="#fff" />
+                          </div>
+                        </>
+                      )}
+                      {/* Caption Preview */}
+                      {config?.captionStyle.text && (
+                        <div style={{
+                          position: 'absolute',
+                          left: 0,
+                          right: 0,
+                          [config.captionStyle.position]: '20px',
+                          padding: '12px 16px',
+                          textAlign: 'center',
+                          fontFamily: config.captionStyle.fontFamily,
+                          fontSize: `${config.captionStyle.fontSize * 0.4}px`,
+                          color: config.captionStyle.color,
+                          fontWeight: config.captionStyle.bold ? 'bold' : 'normal',
+                          fontStyle: config.captionStyle.italic ? 'italic' : 'normal',
+                          textDecoration: config.captionStyle.underline ? 'underline' : 'none',
+                          textShadow: config.captionStyle.shadowEnabled ? '2px 2px 4px rgba(0,0,0,0.8)' : 'none',
+                          WebkitTextStroke: `${config.captionStyle.strokeWidth * 0.4}px ${config.captionStyle.strokeColor}`,
+                          backgroundColor: `${config.captionStyle.backgroundColor}${Math.round(config.captionStyle.backgroundOpacity * 255).toString(16).padStart(2, '0')}`
+                        }}>
+                          {config.captionStyle.text}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Aspect Ratio Badge */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '8px',
+                      left: '8px',
+                      backgroundColor: 'rgba(0,0,0,0.7)',
+                      color: '#fff',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: 600
+                    }}>
+                      {aspectRatio}
+                    </div>
                   </div>
-                </div>
 
-                <p style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px' }}>
-                  {clip.title}
-                </p>
-
-                <div style={{ fontSize: '12px', color: '#666', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-                    <Clock size={14} style={{ marginRight: '4px' }} />
-                    {clip.start_timestamp} - {clip.end_timestamp} ({clip.duration}s)
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <Target size={14} style={{ marginRight: '4px' }} />
-                    {getEngagementLabel(clip.engagement_score)}
-                  </div>
-                </div>
-
-                <p style={{ fontSize: '13px', color: '#444', marginBottom: '12px', lineHeight: '1.4' }}>
-                  {clip.viral_reason}
-                </p>
-
-                {clip.tags && clip.tags.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                    {clip.tags.map((tag, i) => (
-                      <span
-                        key={i}
+                  {/* Clip Info */}
+                  <div style={{ padding: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
+                      <h3 style={{ fontSize: '16px', margin: 0, flex: 1 }}>Clip {index + 1}</h3>
+                      <div
                         style={{
-                          padding: '2px 8px',
-                          backgroundColor: '#f3f4f6',
-                          borderRadius: '4px',
-                          fontSize: '11px',
+                          padding: '4px 8px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          backgroundColor: getEngagementColor(clip.engagement_score) + '20',
+                          color: getEngagementColor(clip.engagement_score),
                         }}
                       >
-                        {tag}
-                      </span>
-                    ))}
+                        {clip.engagement_score}%
+                      </div>
+                    </div>
+
+                    <p style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px' }}>
+                      {clip.title}
+                    </p>
+
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+                        <Clock size={14} style={{ marginRight: '4px' }} />
+                        {clip.start_timestamp} - {clip.end_timestamp} ({clip.duration}s)
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <Target size={14} style={{ marginRight: '4px' }} />
+                        {getEngagementLabel(clip.engagement_score)}
+                      </div>
+                    </div>
+
+                    {/* Aspect Ratio Selector */}
+                    <div style={{ marginBottom: '12px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '6px' }}>Aspect Ratio:</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
+                        {aspectRatios.map((ar) => {
+                          const Icon = ar.icon;
+                          const isSelected = (config?.aspectRatio || selectedAspectRatio) === ar.value;
+                          return (
+                            <button
+                              key={ar.value}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newConfigs = new Map(clipConfigurations);
+                                newConfigs.set(index, {
+                                  clip,
+                                  aspectRatio: ar.value,
+                                  captionStyle: config?.captionStyle || currentCaptionStyle
+                                });
+                                setClipConfigurations(newConfigs);
+                              }}
+                              style={{
+                                padding: '6px 4px',
+                                border: isSelected ? '2px solid #6366f1' : '1px solid var(--border-color)',
+                                borderRadius: '6px',
+                                backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                fontSize: '10px',
+                                transition: 'all 0.2s'
+                              }}
+                              title={ar.description}
+                            >
+                              <Icon size={16} style={{ marginBottom: '2px' }} />
+                              {ar.value}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '12px' }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenCaptionEditor(clip, index);
+                        }}
+                        className="secondary-button"
+                        style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column',
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          padding: '8px 4px',
+                          fontSize: '11px',
+                          gap: '4px'
+                        }}
+                        title="Add/Edit Caption"
+                      >
+                        <Type size={16} />
+                        Caption
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSaveClip(clip, index);
+                        }}
+                        className="secondary-button"
+                        style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column',
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          padding: '8px 4px',
+                          fontSize: '11px',
+                          gap: '4px'
+                        }}
+                        title="Save Clip Configuration"
+                      >
+                        <Save size={16} />
+                        Save
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePostClip(clip, index);
+                        }}
+                        className="primary-button"
+                        style={{ 
+                          display: 'flex', 
+                          flexDirection: 'column',
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          padding: '8px 4px',
+                          fontSize: '11px',
+                          gap: '4px'
+                        }}
+                        title="Post This Clip"
+                      >
+                        <Send size={16} />
+                        Post
+                      </button>
+                    </div>
+
+                    {clip.tags && clip.tags.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '12px' }}>
+                        {clip.tags.map((tag, i) => (
+                          <span
+                            key={i}
+                            style={{
+                              padding: '2px 8px',
+                              backgroundColor: '#f3f4f6',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                            }}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -601,6 +986,303 @@ export default function ClipsPage() {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Caption Editor Modal */}
+      {showCaptionEditor && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }} onClick={() => setShowCaptionEditor(false)}>
+          <div
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '16px',
+              maxWidth: '900px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              padding: '24px'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center' }}>
+              <Type size={24} style={{ marginRight: '8px' }} />
+              Caption Editor
+            </h2>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+              {/* Editor Panel */}
+              <div>
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>Caption Text</label>
+                  <textarea
+                    value={currentCaptionStyle.text}
+                    onChange={(e) => setCurrentCaptionStyle({ ...currentCaptionStyle, text: e.target.value })}
+                    placeholder="Enter your caption..."
+                    style={{
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)',
+                      fontSize: '14px',
+                      resize: 'vertical'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px' }}>Font</label>
+                    <select
+                      value={currentCaptionStyle.fontFamily}
+                      onChange={(e) => setCurrentCaptionStyle({ ...currentCaptionStyle, fontFamily: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '8px',
+                        borderRadius: '6px',
+                        border: '1px solid var(--border-color)',
+                        fontSize: '14px'
+                      }}
+                    >
+                      <option value="Arial">Arial</option>
+                      <option value="Helvetica">Helvetica</option>
+                      <option value="Times New Roman">Times New Roman</option>
+                      <option value="Courier New">Courier New</option>
+                      <option value="Georgia">Georgia</option>
+                      <option value="Verdana">Verdana</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px' }}>
+                      Size: {currentCaptionStyle.fontSize}px
+                    </label>
+                    <input
+                      type="range"
+                      min="12"
+                      max="72"
+                      value={currentCaptionStyle.fontSize}
+                      onChange={(e) => setCurrentCaptionStyle({ ...currentCaptionStyle, fontSize: parseInt(e.target.value) })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px' }}>Text Style</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={() => setCurrentCaptionStyle({ ...currentCaptionStyle, bold: !currentCaptionStyle.bold })}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        border: currentCaptionStyle.bold ? '2px solid #6366f1' : '1px solid var(--border-color)',
+                        backgroundColor: currentCaptionStyle.bold ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      B
+                    </button>
+                    <button
+                      onClick={() => setCurrentCaptionStyle({ ...currentCaptionStyle, italic: !currentCaptionStyle.italic })}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        border: currentCaptionStyle.italic ? '2px solid #6366f1' : '1px solid var(--border-color)',
+                        backgroundColor: currentCaptionStyle.italic ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+                        fontStyle: 'italic',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      I
+                    </button>
+                    <button
+                      onClick={() => setCurrentCaptionStyle({ ...currentCaptionStyle, underline: !currentCaptionStyle.underline })}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: '6px',
+                        border: currentCaptionStyle.underline ? '2px solid #6366f1' : '1px solid var(--border-color)',
+                        backgroundColor: currentCaptionStyle.underline ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+                        textDecoration: 'underline',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      U
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px' }}>Text Color</label>
+                    <input
+                      type="color"
+                      value={currentCaptionStyle.color}
+                      onChange={(e) => setCurrentCaptionStyle({ ...currentCaptionStyle, color: e.target.value })}
+                      style={{ width: '100%', height: '40px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px' }}>
+                      Stroke: {currentCaptionStyle.strokeWidth}px
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="5"
+                      value={currentCaptionStyle.strokeWidth}
+                      onChange={(e) => setCurrentCaptionStyle({ ...currentCaptionStyle, strokeWidth: parseInt(e.target.value) })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px' }}>Stroke Color</label>
+                  <input
+                    type="color"
+                    value={currentCaptionStyle.strokeColor}
+                    onChange={(e) => setCurrentCaptionStyle({ ...currentCaptionStyle, strokeColor: e.target.value })}
+                    style={{ width: '100%', height: '40px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={currentCaptionStyle.shadowEnabled}
+                      onChange={(e) => setCurrentCaptionStyle({ ...currentCaptionStyle, shadowEnabled: e.target.checked })}
+                    />
+                    <span style={{ fontWeight: 600, fontSize: '14px' }}>Drop Shadow</span>
+                  </label>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px' }}>Background Color</label>
+                  <input
+                    type="color"
+                    value={currentCaptionStyle.backgroundColor}
+                    onChange={(e) => setCurrentCaptionStyle({ ...currentCaptionStyle, backgroundColor: e.target.value })}
+                    style={{ width: '100%', height: '40px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px' }}>
+                    Background Opacity: {Math.round(currentCaptionStyle.backgroundOpacity * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={currentCaptionStyle.backgroundOpacity}
+                    onChange={(e) => setCurrentCaptionStyle({ ...currentCaptionStyle, backgroundOpacity: parseFloat(e.target.value) })}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, fontSize: '14px' }}>Position</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                    {(['top', 'center', 'bottom'] as const).map((pos) => (
+                      <button
+                        key={pos}
+                        onClick={() => setCurrentCaptionStyle({ ...currentCaptionStyle, position: pos })}
+                        style={{
+                          padding: '8px',
+                          borderRadius: '6px',
+                          border: currentCaptionStyle.position === pos ? '2px solid #6366f1' : '1px solid var(--border-color)',
+                          backgroundColor: currentCaptionStyle.position === pos ? 'rgba(99, 102, 241, 0.1)' : 'transparent',
+                          cursor: 'pointer',
+                          textTransform: 'capitalize'
+                        }}
+                      >
+                        {pos}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Preview Panel */}
+              <div>
+                <h3 style={{ marginBottom: '12px' }}>Preview</h3>
+                <div style={{
+                  position: 'relative',
+                  width: '100%',
+                  paddingTop: '56.25%',
+                  backgroundColor: '#000',
+                  borderRadius: '8px',
+                  overflow: 'hidden'
+                }}>
+                  {currentCaptionStyle.text && (
+                    <div style={{
+                      position: 'absolute',
+                      left: 0,
+                      right: 0,
+                      [currentCaptionStyle.position]: '20px',
+                      padding: '12px 16px',
+                      textAlign: 'center',
+                      fontFamily: currentCaptionStyle.fontFamily,
+                      fontSize: `${currentCaptionStyle.fontSize}px`,
+                      color: currentCaptionStyle.color,
+                      fontWeight: currentCaptionStyle.bold ? 'bold' : 'normal',
+                      fontStyle: currentCaptionStyle.italic ? 'italic' : 'normal',
+                      textDecoration: currentCaptionStyle.underline ? 'underline' : 'none',
+                      textShadow: currentCaptionStyle.shadowEnabled ? '2px 2px 4px rgba(0,0,0,0.8)' : 'none',
+                      WebkitTextStroke: `${currentCaptionStyle.strokeWidth}px ${currentCaptionStyle.strokeColor}`,
+                      backgroundColor: `${currentCaptionStyle.backgroundColor}${Math.round(currentCaptionStyle.backgroundOpacity * 255).toString(16).padStart(2, '0')}`
+                    }}>
+                      {currentCaptionStyle.text}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginTop: '16px', fontSize: '13px', color: '#666' }}>
+                  <p style={{ marginBottom: '8px' }}>💡 <strong>Tips:</strong></p>
+                  <ul style={{ marginLeft: '20px', lineHeight: '1.6' }}>
+                    <li>Use high contrast for readability</li>
+                    <li>Add stroke/shadow for text on busy backgrounds</li>
+                    <li>Keep captions short and punchy</li>
+                    <li>Bottom position works best for most content</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--border-color)' }}>
+              <button
+                onClick={() => setShowCaptionEditor(false)}
+                className="secondary-button"
+                style={{ padding: '10px 24px' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyCaptionStyle}
+                className="primary-button"
+                style={{ padding: '10px 24px' }}
+              >
+                Apply Caption
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

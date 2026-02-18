@@ -24,6 +24,22 @@ class PostStatus(enum.Enum):
     FAILED = "failed"
 
 
+class SubscriptionTier(enum.Enum):
+    """Subscription tier levels"""
+    STARTER = "starter"
+    PRO = "pro"
+    ENTERPRISE = "enterprise"
+
+
+class SubscriptionStatus(enum.Enum):
+    """Subscription status"""
+    TRIAL = "trial"
+    ACTIVE = "active"
+    CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    SUSPENDED = "suspended"
+
+
 class User(Base):
     """User model for authentication and authorization"""
     __tablename__ = 'users'
@@ -32,6 +48,7 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=True)  # Nullable for Google-only users
     full_name = Column(String(255))
+    password_must_change = Column(Boolean, default=False)  # Force password change on first login
     role = Column(Enum(UserRole), default=UserRole.EDITOR, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     api_key = Column(String(64), unique=True, index=True)
@@ -410,3 +427,92 @@ class OAuthAppConfig(Base):
 
     def __repr__(self):
         return f"<OAuthAppConfig {self.platform} for user {self.user_id}>"
+
+
+class Subscription(Base):
+    """User subscription model for access control and billing"""
+    __tablename__ = 'subscriptions'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, unique=True, index=True)
+    tier = Column(Enum(SubscriptionTier), default=SubscriptionTier.STARTER, nullable=False)
+    status = Column(Enum(SubscriptionStatus), default=SubscriptionStatus.TRIAL, nullable=False)
+    
+    # Trial and billing periods (no trials in Square model - pending payment)
+    trial_ends_at = Column(DateTime, nullable=True)
+    current_period_start = Column(DateTime, nullable=True)
+    current_period_end = Column(DateTime, nullable=True)
+    
+    # Square payment integration
+    payment_method = Column(String(50), default='square', nullable=False)  # Always 'square'
+    square_subscription_id = Column(String(255), nullable=True, unique=True, index=True)  # Square subscription ID
+    square_customer_id = Column(String(255), nullable=True, index=True)  # Square customer ID
+    payment_provider_customer_id = Column(String(255), nullable=True)  # Backward compatibility
+    last_payment_date = Column(DateTime, nullable=True)
+    last_payment_amount = Column(Float, nullable=True)
+    
+    # Cancellation
+    cancelled_at = Column(DateTime, nullable=True)
+    cancellation_reason = Column(Text, nullable=True)
+    
+    # Admin notes
+    admin_notes = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = relationship("User", backref="subscription")
+    usage_metrics = relationship("UsageMetrics", back_populates="subscription", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<Subscription {self.tier.value}/{self.status.value} for user {self.user_id}>"
+
+    def is_active(self):
+        """Check if subscription is currently active"""
+        return self.status in [SubscriptionStatus.TRIAL, SubscriptionStatus.ACTIVE]
+    
+    def is_expired(self):
+        """Check if subscription has expired"""
+        if self.status == SubscriptionStatus.EXPIRED:
+            return True
+        if self.current_period_end and datetime.now(timezone.utc) > self.current_period_end:
+            return True
+        if self.status == SubscriptionStatus.TRIAL and self.trial_ends_at and datetime.now(timezone.utc) > self.trial_ends_at:
+            return True
+        return False
+
+
+class UsageMetrics(Base):
+    """Track user usage for subscription enforcement"""
+    __tablename__ = 'usage_metrics'
+
+    id = Column(String(36), primary_key=True)
+    subscription_id = Column(String(36), ForeignKey('subscriptions.id'), nullable=False, index=True)
+    
+    # Time period for these metrics
+    period_start = Column(DateTime, nullable=False, index=True)
+    period_end = Column(DateTime, nullable=False)
+    
+    # Usage counters
+    posts_created = Column(Integer, default=0, nullable=False)
+    posts_scheduled = Column(Integer, default=0, nullable=False)
+    posts_published = Column(Integer, default=0, nullable=False)
+    api_calls = Column(Integer, default=0, nullable=False)
+    storage_used_mb = Column(Float, default=0.0, nullable=False)
+    
+    # Feature usage
+    ai_requests = Column(Integer, default=0, nullable=False)
+    analytics_views = Column(Integer, default=0, nullable=False)
+    social_listening_queries = Column(Integer, default=0, nullable=False)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    subscription = relationship("Subscription", back_populates="usage_metrics")
+
+    def __repr__(self):
+        return f"<UsageMetrics {self.period_start} - {self.period_end} for subscription {self.subscription_id}>"

@@ -5,7 +5,7 @@ New endpoints that use production infrastructure
 These routes implement the 9 improvements by using the managers from app_extensions.py
 """
 
-from flask import Blueprint, request, jsonify, g, send_file
+from flask import Blueprint, request, jsonify, g, send_file, session
 from datetime import datetime
 import logging
 import os
@@ -135,12 +135,59 @@ def login():
                     'role': user.role.value
                 },
                 'access_token': access_token,
-                'refresh_token': refresh_token
+                'refresh_token': refresh_token,
+                'password_must_change': user.password_must_change  # Include password change requirement
             })
 
     except Exception as e:
         logger.error(f"Login error: {e}")
         return jsonify({'error': 'Login failed'}), 500
+
+
+@integrated_bp.route('/auth/change-password', methods=['POST'])
+@auth_required
+def change_password():
+    """Change user password (required for default admin on first login)"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+
+    try:
+        from auth import verify_password, hash_password
+        from database import db_session_scope
+        from models import User
+
+        data = request.get_json()
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+
+        if not old_password or not new_password:
+            return jsonify({'error': 'Old and new passwords required'}), 400
+
+        if len(new_password) < 8:
+            return jsonify({'error': 'New password must be at least 8 characters'}), 400
+
+        with db_session_scope() as session:
+            user = session.query(User).filter_by(id=g.current_user['id']).first()
+
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+
+            # Verify old password
+            if not verify_password(old_password, user.password_hash):
+                return jsonify({'error': 'Current password is incorrect'}), 401
+
+            # Update password
+            user.password_hash = hash_password(new_password)
+            user.password_must_change = False  # Clear the flag
+            session.commit()
+
+            logger.info(f"Password changed for user {user.email}")
+
+            return jsonify({'message': 'Password changed successfully'})
+
+    except Exception as e:
+        logger.error(f"Password change error: {e}")
+        return jsonify({'error': 'Password change failed'}), 500
 
 
 @integrated_bp.route('/auth/me', methods=['GET'])
@@ -268,6 +315,11 @@ def oauth_authorize(platform):
 
     if 'error' in result:
         return jsonify(result), 400
+    
+    # Store code_verifier in session for Twitter PKCE flow
+    if platform == 'twitter' and 'code_verifier' in result:
+        session[f'twitter_code_verifier_{g.current_user["id"]}'] = result['code_verifier']
+        logger.info(f"Stored code_verifier in session for user {g.current_user['id']}")
 
     return jsonify(result)
 
@@ -280,8 +332,29 @@ def oauth_callback(platform):
 
     if not code or not state:
         return jsonify({'error': 'Missing code or state'}), 400
+    
+    # For Twitter, retrieve code_verifier from session
+    code_verifier = None
+    if platform == 'twitter':
+        # Extract user_id from state to get the right code_verifier
+        parts = state.split(':')
+        if len(parts) >= 1:
+            user_id = parts[0]
+            session_key = f'twitter_code_verifier_{user_id}'
+            code_verifier = session.get(session_key)
+            
+            if code_verifier:
+                logger.info(f"Retrieved code_verifier from session for user {user_id}")
+                # Clean up the session after use
+                session.pop(session_key, None)
+            else:
+                logger.warning(f"No code_verifier found in session for user {user_id}")
+                return jsonify({
+                    'error': 'Session expired or invalid',
+                    'details': 'Please try connecting your Twitter account again'
+                }), 400
 
-    result = oauth_manager.handle_callback(platform, code, state)
+    result = oauth_manager.handle_callback(platform, code, state, code_verifier=code_verifier)
 
     if 'error' in result:
         return jsonify(result), 400
@@ -460,23 +533,85 @@ def delete_post(post_id):
 @integrated_bp.route('/posts/<post_id>/publish', methods=['POST'])
 @auth_required
 def publish_post(post_id):
-    """Publish post to platforms"""
+    """Publish post to platforms
+    
+    Supports selecting specific accounts by friendly name (display_name).
+    Request body can include:
+    {
+        "account_names": {
+            "platform": "display_name",
+            ...
+        }
+    }
+    """
     post = db_manager.get_post(post_id)
 
     if not post:
         return jsonify({'error': 'Post not found'}), 404
+    
+    # Security check: Ensure user owns this post
+    if post['user_id'] != g.current_user['id']:
+        return jsonify({'error': 'Unauthorized: You can only publish your own posts'}), 403
 
+    # Import required modules
+    from database import db_session_scope
+    from models import Account
+    
+    # Get account_names mapping from request body if provided
+    request_data = request.get_json() or {}
+    account_names = request_data.get('account_names', {})
+    
     # Publish to each platform
     results = {}
     for platform in post['platforms']:
-        # Get account for platform
-        # This would need to fetch account from database
+        # Get account for platform from database
+        with db_session_scope() as session:
+            # Build query for user's accounts on this platform
+            query = session.query(Account).filter_by(
+                user_id=post['user_id'],
+                platform=platform,
+                is_active=True
+            )
+            
+            # If account_names specified for this platform, filter by display_name
+            if platform in account_names:
+                display_name = account_names[platform]
+                query = query.filter_by(display_name=display_name)
+                account = query.first()
+                
+                if not account:
+                    results[platform] = {
+                        'error': f'No active {platform} account found with display name "{display_name}"'
+                    }
+                    continue
+            else:
+                # No specific account requested, use most recent
+                account = query.order_by(Account.created_at.desc()).first()
+                
+                if not account:
+                    results[platform] = {'error': f'No active {platform} account found for user'}
+                    continue
+            
+            account_id = account.id
+            
+            # Get page_id from metadata for Facebook posting if available
+            # Extract metadata before session closes to avoid detached instance issues
+            post_options = post.get('post_options', {}).copy()
+            if platform == 'facebook' and account.platform_metadata:
+                pages = account.platform_metadata.get('pages', [])
+                if pages and 'page_id' not in post_options:
+                    # Use first page by default
+                    post_options['page_id'] = pages[0]['page_id']
+        
+        # Post to platform (outside session context)
+        # Security: oauth_manager will verify user owns the account_id
         result = oauth_manager.post_to_platform(
             platform,
-            'account_id',  # Would need to lookup
+            account_id,
             post['content'],
             post.get('media_ids', []),
-            post.get('post_options', {})
+            post_options,
+            g.current_user['id']  # Pass user_id for security check
         )
         results[platform] = result
 
@@ -486,7 +621,7 @@ def publish_post(post_id):
                 post_id,
                 platform,
                 result.get('id'),
-                'account_id'
+                account_id
             )
 
     # Update post status
@@ -599,17 +734,48 @@ def register_webhook():
 @integrated_bp.route('/webhooks', methods=['GET'])
 @auth_required
 def list_webhooks():
-    """List registered webhooks"""
-    # Implementation would query database for user's webhooks
-    return jsonify({'webhooks': []})
+    """List registered webhooks for the authenticated user"""
+    try:
+        # Get webhooks from webhook manager
+        webhooks = webhook_manager.get_webhooks(g.current_user['id'])
+        
+        if isinstance(webhooks, dict) and 'error' in webhooks:
+            return jsonify(webhooks), 500
+        
+        return jsonify({
+            'webhooks': webhooks,
+            'count': len(webhooks)
+        })
+    except Exception as e:
+        logger.error(f"Error listing webhooks: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to list webhooks',
+            'details': str(e)
+        }), 500
 
 
 @integrated_bp.route('/webhooks/<webhook_id>', methods=['DELETE'])
 @auth_required
 def delete_webhook(webhook_id):
-    """Delete webhook"""
-    # Implementation would delete from database
-    return jsonify({'message': 'Webhook deleted'})
+    """Delete a webhook (with authorization check)"""
+    try:
+        # Delete webhook with authorization check
+        result = webhook_manager.delete_webhook(webhook_id, g.current_user['id'])
+        
+        if 'error' in result:
+            status_code = 404 if 'not found' in result['error'].lower() else 400
+            return jsonify(result), status_code
+        
+        return jsonify({
+            'success': True,
+            'message': 'Webhook deleted successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error deleting webhook {webhook_id}: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to delete webhook',
+            'details': str(e)
+        }), 500
 
 
 # ==================== ANALYTICS ROUTES ====================
@@ -646,14 +812,89 @@ def get_post_analytics(post_id):
 @integrated_bp.route('/analytics/overview', methods=['GET'])
 @auth_required
 def get_analytics_overview():
-    """Get analytics overview for user"""
-    # Implementation would aggregate user's post analytics
-    return jsonify({
-        'total_posts': 0,
-        'total_engagement': 0,
-        'platforms': {},
-        'period': '30d'
-    })
+    """Get analytics overview for user with real data aggregation"""
+    if not DB_ENABLED:
+        return jsonify({
+            'error': 'Analytics not available',
+            'details': 'Database not enabled'
+        }), 503
+    
+    try:
+        from database import db_session_scope
+        from models import Post, PostAnalytics, PostAccount
+        from sqlalchemy import func
+        
+        with db_session_scope() as session:
+            # Get posts for the user
+            posts = session.query(Post).filter_by(user_id=g.current_user['id']).all()
+            post_ids = [p.id for p in posts]
+            
+            if not post_ids:
+                # User has no posts yet
+                return jsonify({
+                    'total_posts': 0,
+                    'total_engagement': 0,
+                    'platforms': {},
+                    'period': '30d',
+                    'message': 'No posts yet'
+                })
+            
+            # Get analytics for user's posts
+            analytics = session.query(PostAnalytics).filter(
+                PostAnalytics.post_id.in_(post_ids)
+            ).all()
+            
+            # Calculate total engagement
+            total_engagement = sum(
+                (a.likes or 0) + (a.comments or 0) + (a.shares or 0) 
+                for a in analytics
+            )
+            
+            # Calculate per-platform metrics
+            platforms = {}
+            for post in posts:
+                # Get accounts used for this post
+                post_accounts = session.query(PostAccount).filter_by(post_id=post.id).all()
+                
+                for pa in post_accounts:
+                    platform = pa.platform
+                    if platform not in platforms:
+                        platforms[platform] = {
+                            'posts': 0,
+                            'engagement': 0,
+                            'status': {}
+                        }
+                    
+                    platforms[platform]['posts'] += 1
+                    
+                    # Track post statuses
+                    status = pa.status
+                    if status not in platforms[platform]['status']:
+                        platforms[platform]['status'][status] = 0
+                    platforms[platform]['status'][status] += 1
+            
+            # Add engagement per platform from analytics
+            for a in analytics:
+                platform = a.platform
+                if platform in platforms:
+                    platforms[platform]['engagement'] += (
+                        (a.likes or 0) + (a.comments or 0) + (a.shares or 0)
+                    )
+            
+            return jsonify({
+                'total_posts': len(posts),
+                'total_engagement': total_engagement,
+                'platforms': platforms,
+                'period': '30d',
+                'analytics_count': len(analytics)
+            })
+    
+    except Exception as e:
+        logger.error(f"Error getting analytics overview: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to get analytics overview',
+            'details': str(e)
+        }), 500
 
 
 # ==================== RETRY & RECOVERY ROUTES ====================
@@ -682,6 +923,143 @@ def retry_single_post(post_id):
     db_manager.update_post(post_id, {'status': 'scheduled'})
 
     return jsonify({'message': 'Post scheduled for retry'})
+
+
+# ==================== ACCOUNTS ROUTES ====================
+
+@integrated_bp.route('/accounts', methods=['GET'])
+@auth_required
+def list_accounts():
+    """List all accounts for the authenticated user
+    
+    Returns account information including display_name (friendly name)
+    that can be used to select specific accounts when posting.
+    
+    Response includes:
+    - id: Account ID
+    - platform: Platform name (twitter, facebook, etc.)
+    - display_name: Friendly name for the account
+    - platform_username: Username on the platform
+    - is_active: Whether account is active
+    """
+    from database import db_session_scope
+    from models import Account
+    
+    try:
+        with db_session_scope() as session:
+            accounts = session.query(Account).filter_by(
+                user_id=g.current_user['id'],
+                is_active=True
+            ).order_by(Account.platform, Account.created_at.desc()).all()
+            
+            account_list = [{
+                'id': acc.id,
+                'platform': acc.platform,
+                'display_name': acc.display_name,
+                'platform_username': acc.platform_username,
+                'platform_user_id': acc.platform_user_id,
+                'is_active': acc.is_active,
+                'created_at': acc.created_at.isoformat() if acc.created_at else None
+            } for acc in accounts]
+            
+        return jsonify({
+            'accounts': account_list,
+            'count': len(account_list)
+        })
+    except Exception as e:
+        logger.error(f"Error listing accounts: {e}")
+        return jsonify({'error': 'Failed to list accounts'}), 500
+
+
+@integrated_bp.route('/accounts/<account_id>', methods=['GET'])
+@auth_required
+def get_account_details(account_id):
+    """Get details for a specific account
+    
+    Security: Only returns account if it belongs to the authenticated user
+    """
+    from database import db_session_scope
+    from models import Account
+    
+    try:
+        with db_session_scope() as session:
+            account = session.query(Account).filter_by(
+                id=account_id,
+                user_id=g.current_user['id']  # Security: user can only access their own accounts
+            ).first()
+            
+            if not account:
+                return jsonify({'error': 'Account not found or unauthorized'}), 404
+            
+            account_data = {
+                'id': account.id,
+                'platform': account.platform,
+                'display_name': account.display_name,
+                'platform_username': account.platform_username,
+                'platform_user_id': account.platform_user_id,
+                'is_active': account.is_active,
+                'token_expires_at': account.token_expires_at.isoformat() if account.token_expires_at else None,
+                'created_at': account.created_at.isoformat() if account.created_at else None,
+                'updated_at': account.updated_at.isoformat() if account.updated_at else None
+            }
+            
+            # Include platform metadata (without sensitive tokens)
+            if account.platform_metadata:
+                account_data['platform_metadata'] = account.platform_metadata
+                
+        return jsonify({'account': account_data})
+    except Exception as e:
+        logger.error(f"Error getting account details: {e}")
+        return jsonify({'error': 'Failed to get account details'}), 500
+
+
+@integrated_bp.route('/accounts/<account_id>', methods=['PATCH'])
+@auth_required
+def update_account_display_name(account_id):
+    """Update account display name (friendly name)
+    
+    Request body:
+    {
+        "display_name": "New Friendly Name"
+    }
+    
+    Security: Only allows updating accounts owned by authenticated user
+    """
+    from database import db_session_scope
+    from models import Account
+    
+    data = request.get_json()
+    if not data or 'display_name' not in data:
+        return jsonify({'error': 'display_name is required'}), 400
+    
+    try:
+        with db_session_scope() as session:
+            account = session.query(Account).filter_by(
+                id=account_id,
+                user_id=g.current_user['id']  # Security: user can only update their own accounts
+            ).first()
+            
+            if not account:
+                return jsonify({'error': 'Account not found or unauthorized'}), 404
+            
+            account.display_name = data['display_name']
+            session.flush()
+            
+            account_data = {
+                'id': account.id,
+                'platform': account.platform,
+                'display_name': account.display_name,
+                'platform_username': account.platform_username
+            }
+            
+        return jsonify({
+            'success': True,
+            'account': account_data,
+            'message': 'Account display name updated successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error updating account: {e}")
+        return jsonify({'error': 'Failed to update account'}), 500
 
 
 # ==================== STATUS & HEALTH ROUTES ====================

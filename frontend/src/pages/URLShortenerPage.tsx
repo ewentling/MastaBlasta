@@ -44,6 +44,51 @@ export default function URLShortenerPage() {
         <p>Shorten URLs with click tracking and UTM parameters</p>
       </div>
 
+      {/* Help Section */}
+      <div className="card" style={{ marginBottom: '1.5rem', backgroundColor: 'var(--color-bgTertiary)' }}>
+        <h3 style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <ExternalLink size={24} />
+          What is URL Shortening?
+        </h3>
+        <p style={{ marginBottom: '1rem', color: 'var(--color-textSecondary)' }}>
+          URL shortening transforms long, complex URLs into short, memorable links that are easier to share and track. 
+          Each shortened link tracks clicks, referrers, and other analytics to measure your marketing campaigns' success.
+        </p>
+        
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginTop: '1.5rem' }}>
+          <div>
+            <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-accentPrimary)' }}>📊 How It Works</h4>
+            <ol style={{ marginLeft: '1.25rem', fontSize: '0.875rem', lineHeight: '1.6' }}>
+              <li>Enter your long URL</li>
+              <li>Add optional UTM parameters for tracking</li>
+              <li>Get a short, shareable link</li>
+              <li>Track clicks and analytics in real-time</li>
+            </ol>
+          </div>
+          
+          <div>
+            <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-accentPrimary)' }}>💡 Use Cases</h4>
+            <ul style={{ marginLeft: '1.25rem', fontSize: '0.875rem', lineHeight: '1.6' }}>
+              <li>Track social media campaign performance</li>
+              <li>Measure email newsletter click-through rates</li>
+              <li>Create QR codes for print materials</li>
+              <li>A/B test different marketing messages</li>
+            </ul>
+          </div>
+          
+          <div>
+            <h4 style={{ marginBottom: '0.5rem', color: 'var(--color-accentPrimary)' }}>✨ Features</h4>
+            <ul style={{ marginLeft: '1.25rem', fontSize: '0.875rem', lineHeight: '1.6' }}>
+              <li>Click tracking with detailed analytics</li>
+              <li>UTM parameter support</li>
+              <li>Custom short codes</li>
+              <li>Referrer tracking</li>
+              <li>Date-based statistics</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       <div className="card">
         <div className="card-header">
           <h3>Shortened URLs</h3>

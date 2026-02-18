@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { postsApi, accountsApi } from '../api';
 import { BarChart3, Users, Send, Calendar, Plus, Sparkles, TrendingUp, Zap, Activity } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { formatDateTime } from '../utils/timezone';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -249,7 +250,7 @@ export default function DashboardPage() {
                       <span>{post.platforms.join(', ')}</span>
                       <span>•</span>
                       <time dateTime={post.created_at}>
-                        {new Date(post.created_at).toLocaleDateString()}
+                        {formatDateTime.date(post.created_at)}
                       </time>
                     </div>
                   </div>

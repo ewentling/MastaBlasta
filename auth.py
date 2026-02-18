@@ -2,6 +2,7 @@
 Authentication and authorization utilities
 """
 import os
+import sys
 import uuid
 import bcrypt
 import jwt
@@ -10,7 +11,52 @@ from functools import wraps
 from flask import request, jsonify
 from typing import Optional, Dict, Any, Callable
 from cryptography.fernet import Fernet
+import logging
 
+logger = logging.getLogger(__name__)
+
+# Security: Validate critical environment variables
+def _validate_production_secrets():
+    """Validate that production secrets are properly configured"""
+    is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('ENVIRONMENT') == 'production'
+    
+    jwt_key = os.getenv('JWT_SECRET_KEY')
+    encryption_key = os.getenv('ENCRYPTION_KEY')
+    
+    # Check for insecure defaults
+    insecure_defaults = [
+        'dev-secret-key-change-in-production',
+        'change-me',
+        'secret',
+        'password',
+        'default'
+    ]
+    
+    if is_production:
+        # CRITICAL: In production, secrets MUST be set and secure
+        if not jwt_key or jwt_key in insecure_defaults or len(jwt_key) < 32:
+            logger.critical("🔴 SECURITY ERROR: JWT_SECRET_KEY not properly configured for production!")
+            logger.critical("   Set a secure random key: export JWT_SECRET_KEY=\"$(openssl rand -hex 32)\"")
+            sys.exit(1)
+            
+        if not encryption_key or encryption_key in insecure_defaults or len(encryption_key) < 32:
+            logger.critical("🔴 SECURITY ERROR: ENCRYPTION_KEY not properly configured for production!")
+            logger.critical("   Set a secure random key: export ENCRYPTION_KEY=\"$(openssl rand -hex 32)\"")
+            sys.exit(1)
+            
+        logger.info("✅ Production secrets validated successfully")
+    else:
+        # Development: Warn if using insecure defaults
+        if not jwt_key or jwt_key in insecure_defaults:
+            logger.warning("⚠️  WARNING: Using default JWT_SECRET_KEY in development")
+            logger.warning("   For production, set: export JWT_SECRET_KEY=\"$(openssl rand -hex 32)\"")
+            
+        if not encryption_key or encryption_key in insecure_defaults:
+            logger.warning("⚠️  WARNING: Using default ENCRYPTION_KEY in development")
+            logger.warning("   For production, set: export ENCRYPTION_KEY=\"$(openssl rand -hex 32)\"")
+
+# Validate secrets on import (fail fast)
+_validate_production_secrets()
 
 # JWT Configuration
 JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -179,3 +225,50 @@ def require_api_key(db_session):
             return f(*args, **kwargs)
         return decorated_function
     return decorator
+
+
+def create_default_admin(db_session):
+    """
+    Create default admin account for initial deployment.
+    Email: admin@mastablasta.com
+    Password: ChangeMe123!
+    Must be changed on first login.
+    """
+    from models import User, UserRole
+    
+    try:
+        # Check if admin already exists
+        admin = db_session.query(User).filter_by(email='admin@mastablasta.com').first()
+        if admin:
+            logger.info("Default admin account already exists")
+            return
+        
+        # Create default admin
+        admin_id = str(uuid.uuid4())
+        default_password = 'ChangeMe123!'
+        
+        admin = User(
+            id=admin_id,
+            email='admin@mastablasta.com',
+            password_hash=hash_password(default_password),
+            full_name='System Administrator',
+            role=UserRole.ADMIN,
+            is_active=True,
+            password_must_change=True  # Force password change
+        )
+        
+        db_session.add(admin)
+        db_session.commit()
+        
+        logger.warning("=" * 70)
+        logger.warning("🔐 DEFAULT ADMIN ACCOUNT CREATED")
+        logger.warning("=" * 70)
+        logger.warning("   Email: admin@mastablasta.com")
+        logger.warning("   Password: ChangeMe123!")
+        logger.warning("")
+        logger.warning("⚠️  IMPORTANT: This password MUST be changed on first login!")
+        logger.warning("=" * 70)
+        
+    except Exception as e:
+        logger.error(f"Error creating default admin: {e}")
+        db_session.rollback()

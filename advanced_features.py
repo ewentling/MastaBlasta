@@ -33,13 +33,45 @@ except ImportError as e:
 advanced_bp = Blueprint('advanced', __name__, url_prefix='/api/advanced')
 
 
+# ==================== HEALTH CHECK ====================
+
+@advanced_bp.route('/health', methods=['GET'])
+def health_check():
+    """Check availability of advanced features"""
+    return jsonify({
+        'features': {
+            'tts': {
+                'available': TTS_AVAILABLE,
+                'status': 'enabled' if TTS_AVAILABLE else 'disabled',
+                'message': 'TTS providers available' if TTS_AVAILABLE else 'TTS providers not installed - install tts_providers module'
+            },
+            'social_listening': {
+                'available': SOCIAL_LISTENING_AVAILABLE,
+                'status': 'enabled' if SOCIAL_LISTENING_AVAILABLE else 'disabled',
+                'message': 'Social listening available' if SOCIAL_LISTENING_AVAILABLE else 'Social listening not installed - install social_listening module'
+            },
+            'ai_training': {
+                'available': AI_TRAINING_AVAILABLE,
+                'status': 'enabled' if AI_TRAINING_AVAILABLE else 'disabled',
+                'message': 'AI training available' if AI_TRAINING_AVAILABLE else 'AI training not installed - install ai_training module'
+            }
+        },
+        'overall_status': 'ok' if any([TTS_AVAILABLE, SOCIAL_LISTENING_AVAILABLE, AI_TRAINING_AVAILABLE]) else 'no_features_available'
+    })
+
+
 # ==================== TTS PROVIDERS ====================
 
 @advanced_bp.route('/tts/providers', methods=['GET'])
 def list_tts_providers():
     """List available TTS providers and their status"""
     if not TTS_AVAILABLE:
-        return jsonify({'error': 'TTS providers not available'}), 503
+        return jsonify({
+            'error': 'TTS providers not available',
+            'details': 'TTS module not installed or import failed',
+            'help': 'Install TTS dependencies: pip install gtts elevenlabs openai pydub',
+            'health_check': '/api/advanced/health'
+        }), 503
 
     providers_status = {}
     for name, provider in tts_manager.providers.items():
@@ -113,7 +145,12 @@ def get_tts_voices(provider):
 def create_monitor():
     """Create a new social listening monitor"""
     if not SOCIAL_LISTENING_AVAILABLE:
-        return jsonify({'error': 'Social listening not available'}), 503
+        return jsonify({
+            'error': 'Social listening not available',
+            'details': 'Social listening module not installed or import failed',
+            'help': 'Install social listening dependencies',
+            'health_check': '/api/advanced/health'
+        }), 503
 
     data = request.json
     monitor_id = data.get('monitor_id')
@@ -247,7 +284,12 @@ def get_alerts():
 def list_trained_models():
     """List all trained models"""
     if not AI_TRAINING_AVAILABLE:
-        return jsonify({'error': 'AI training not available'}), 503
+        return jsonify({
+            'error': 'AI training not available',
+            'details': 'AI training module not installed or import failed',
+            'help': 'Install ML dependencies: pip install scikit-learn pandas numpy',
+            'health_check': '/api/advanced/health'
+        }), 503
 
     try:
         models = ai_trainer.list_models()

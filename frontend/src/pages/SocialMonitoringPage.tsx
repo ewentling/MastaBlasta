@@ -531,6 +531,165 @@ export default function SocialMonitoringPage() {
           onClose={() => setViewingMonitor(null)}
         />
       )}
+
+      {showCreateTemplateModal && (
+        <CreateTemplateModal
+          onClose={() => setShowCreateTemplateModal(false)}
+          onSave={async (data) => {
+            try {
+              await axios.post('/api/response-templates', data);
+              setShowCreateTemplateModal(false);
+              loadTemplates();
+            } catch (error) {
+              console.error('Error creating template:', error);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CreateTemplateModal({
+  onClose,
+  onSave,
+}: {
+  onClose: () => void;
+  onSave: (data: any) => void;
+}) {
+  const [name, setName] = useState('');
+  const [template, setTemplate] = useState('');
+  const [category, setCategory] = useState('general');
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [autoReply, setAutoReply] = useState(false);
+
+  const platforms = ['twitter', 'facebook', 'instagram', 'linkedin'];
+  const categories = ['greeting', 'question', 'complaint', 'thanks', 'general'];
+
+  const togglePlatform = (platform: string) => {
+    if (selectedPlatforms.includes(platform)) {
+      setSelectedPlatforms(selectedPlatforms.filter(p => p !== platform));
+    } else {
+      setSelectedPlatforms([...selectedPlatforms, platform]);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave({
+      name,
+      template,
+      category,
+      platforms: selectedPlatforms,
+      auto_reply: autoReply,
+    });
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>Create Response Template</h3>
+          <button className="close-button" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-body">
+            <div className="form-group">
+              <label className="form-label">Template Name *</label>
+              <input
+                type="text"
+                className="form-input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., Customer Thank You"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Template Content *</label>
+              <textarea
+                className="form-input"
+                value={template}
+                onChange={(e) => setTemplate(e.target.value)}
+                placeholder="Thank you for reaching out! We appreciate your message and will get back to you soon."
+                rows={4}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Category *</label>
+              <select
+                className="form-input"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                required
+              >
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>
+                    {cat.charAt(0).toUpperCase() + cat.slice(1)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Platforms *</label>
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                {platforms.map(platform => (
+                  <label
+                    key={platform}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      padding: '0.5rem 0.75rem',
+                      border: '1px solid var(--color-borderLight)',
+                      borderRadius: '6px',
+                      backgroundColor: selectedPlatforms.includes(platform) ? 'var(--color-accentPrimary)' : 'transparent',
+                      color: selectedPlatforms.includes(platform) ? 'white' : 'var(--color-textPrimary)',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedPlatforms.includes(platform)}
+                      onChange={() => togglePlatform(platform)}
+                      style={{ display: 'none' }}
+                    />
+                    {platform.charAt(0).toUpperCase() + platform.slice(1)}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={autoReply}
+                  onChange={(e) => setAutoReply(e.target.checked)}
+                  style={{ width: '1rem', height: '1rem' }}
+                />
+                <span className="form-label" style={{ marginBottom: 0 }}>Enable Auto-Reply</span>
+              </label>
+              <p style={{ fontSize: '0.75rem', color: 'var(--color-textTertiary)', marginTop: '0.5rem' }}>
+                Automatically send this response when matching interactions are detected
+              </p>
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary">
+              <Plus size={18} />
+              Create Template
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Bell, X, Check, AlertCircle, Info, Clock } from 'lucide-react';
-import { useNavigate } from 'router-dom';
+import { useNavigate } from 'react-router-dom';
+import { formatDateTime, isInPast } from '../utils/timezone';
 
 interface Notification {
   id: string;
@@ -30,7 +31,7 @@ export default function NotificationCenter() {
       const scheduled = JSON.parse(localStorage.getItem('scheduled_posts') || '[]');
       const now = Date.now();
       scheduled.forEach((post: any) => {
-        if (new Date(post.scheduled_time).getTime() <= now && !post.notified) {
+        if (isInPast(post.scheduled_time) && !post.notified) {
           addNotification({
             type: 'info',
             title: 'Scheduled Post Ready',
@@ -225,7 +226,7 @@ export default function NotificationCenter() {
                         )}
                         <span style={{ fontSize: '0.75rem', color: 'var(--color-textSecondary)' }}>
                           <Clock size={12} style={{ display: 'inline', marginRight: '0.25rem' }} />
-                          {new Date(notification.timestamp).toLocaleTimeString()}
+                          {formatDateTime.time(notification.timestamp)}
                         </span>
                       </div>
                     </div>

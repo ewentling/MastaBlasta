@@ -32,7 +32,49 @@ except ImportError:
     logger.warning("AI libraries not installed. AI features will be disabled.")
 
 app = Flask(__name__)
-CORS(app)
+
+# Security: Validate SECRET_KEY
+SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('ENVIRONMENT') == 'production'
+
+if is_production and (not SECRET_KEY or SECRET_KEY == 'dev-secret-key-change-in-production' or len(SECRET_KEY) < 32):
+    logger.critical("🔴 SECURITY ERROR: SECRET_KEY not properly configured for production!")
+    logger.critical("   Set a secure random key: export SECRET_KEY=\"$(openssl rand -hex 32)\"")
+    import sys
+    sys.exit(1)
+
+app.config['SECRET_KEY'] = SECRET_KEY
+app.config['SESSION_TYPE'] = 'filesystem'
+
+# Enhanced session security
+if is_production:
+    # Production: Force secure cookies
+    app.config['SESSION_COOKIE_SECURE'] = True
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+    logger.info("✅ Production session security enabled (Secure, HttpOnly, SameSite=Strict)")
+else:
+    # Development: Configurable but default to secure
+    app.config['SESSION_COOKIE_SECURE'] = os.environ.get('SESSION_COOKIE_SECURE', 'False').lower() == 'true'
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+    logger.warning("⚠️  Development mode: Session cookies not requiring HTTPS")
+
+# Enhanced CORS security
+ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', '').split(',')
+if is_production:
+    # Production: Strict CORS
+    if not ALLOWED_ORIGINS or ALLOWED_ORIGINS == ['']:
+        logger.critical("🔴 SECURITY ERROR: ALLOWED_ORIGINS not configured for production!")
+        logger.critical("   Set: export ALLOWED_ORIGINS=\"https://yourdomain.com,https://www.yourdomain.com\"")
+        import sys
+        sys.exit(1)
+    CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=True)
+    logger.info(f"✅ Production CORS enabled for: {ALLOWED_ORIGINS}")
+else:
+    # Development: Permissive but logged
+    CORS(app, origins='*', supports_credentials=True)
+    logger.warning("⚠️  Development mode: CORS allows all origins")
 
 # ==================== Production Infrastructure Integration ====================
 # Load production infrastructure if available
@@ -63,6 +105,34 @@ if PRODUCTION_MODE:
 else:
     logger.info("ℹ Using in-memory storage (development mode)")
     logger.info("  Set DATABASE_URL to enable production features")
+
+# Register admin routes for subscription management
+if PRODUCTION_MODE:
+    from admin_routes import admin_bp
+    app.register_blueprint(admin_bp)
+    logger.info("✓ Admin routes registered at /api/admin/*")
+    logger.info("  - /api/admin/users - User and subscription management")
+    logger.info("  - /api/admin/metrics - System-wide metrics")
+    
+    # Register Square integration routes
+    from square_routes import square_bp
+    from square_webhooks import square_webhooks_bp
+    app.register_blueprint(square_bp)
+    app.register_blueprint(square_webhooks_bp)
+    logger.info("✓ Square subscription routes registered at /api/square/*")
+    logger.info("  - /api/square/create-checkout - Create subscription checkout")
+    logger.info("  - /api/square/subscription-status - Get current subscription")
+    logger.info("  - /api/square/webhooks - Handle Square webhook events")
+    
+    # Create default admin account if it doesn't exist
+    if DB_ENABLED:
+        try:
+            from auth import create_default_admin
+            from database import db_session_scope
+            with db_session_scope() as session:
+                create_default_admin(session)
+        except Exception as e:
+            logger.error(f"Error creating default admin: {e}")
 
 # Register advanced features (TTS, Social Listening, AI Training)
 try:
