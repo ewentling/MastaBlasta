@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import ChangePasswordModal from '../components/ChangePasswordModal';
 import './LoginPage.css';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
@@ -46,6 +47,7 @@ function LoginPage() {
   const [loginMethod, setLoginMethod] = useState<'google' | 'email'>('google');
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -154,14 +156,24 @@ function LoginPage() {
       localStorage.setItem('refresh_token', data.refresh_token);
       localStorage.setItem('user', JSON.stringify(data.user));
 
-      // Reload page to trigger auth context update
-      window.location.href = '/';
+      // Check if password must be changed
+      if (data.password_must_change) {
+        setShowPasswordChange(true);
+      } else {
+        // Reload page to trigger auth context update
+        window.location.href = '/';
+      }
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePasswordChanged = () => {
+    // Password successfully changed, redirect to home
+    window.location.href = '/';
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -359,12 +371,43 @@ function LoginPage() {
               <span>AI-powered content generation</span>
             </div>
           </div>
+
+          {/* Subscription Plans Link */}
+          <div style={{ marginTop: '24px', textAlign: 'center' }}>
+            <Link 
+              to="/subscription-info"
+              style={{
+                display: 'inline-block',
+                padding: '12px 24px',
+                backgroundColor: '#f3f4f6',
+                color: '#1f2937',
+                borderRadius: '8px',
+                textDecoration: 'none',
+                fontSize: '14px',
+                fontWeight: '500',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#e5e7eb';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = '#f3f4f6';
+              }}
+            >
+              View Subscription Plans →
+            </Link>
+          </div>
         </div>
 
         <div className="login-footer">
           <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
         </div>
       </div>
+
+      {/* Password Change Modal */}
+      {showPasswordChange && (
+        <ChangePasswordModal onPasswordChanged={handlePasswordChanged} />
+      )}
     </div>
   );
 }

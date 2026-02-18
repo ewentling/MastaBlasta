@@ -19,6 +19,7 @@ import ClipsPage from './pages/ClipsPage';
 import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import SubscriptionInfoPage from './pages/SubscriptionInfoPage';
 import SettingsModal from './components/SettingsModal';
 import { ThemeProvider } from './ThemeContext';
 import { AIProvider } from './contexts/AIContext';
@@ -135,6 +136,7 @@ function App() {
               <Routes>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+                <Route path="/subscription-info" element={<SubscriptionInfoPage />} />
                 <Route
                   path="*"
                   element={
