@@ -194,14 +194,25 @@ class OAuthManager:
             logger.error(f"OAuth authorization error for {platform}: {e}")
             return {'error': str(e)}
 
-    def handle_callback(self, platform: str, code: str, state: str) -> Dict:
-        """Handle OAuth callback and exchange code for tokens"""
+    def handle_callback(self, platform: str, code: str, state: str, code_verifier: str = None) -> Dict:
+        """Handle OAuth callback and exchange code for tokens
+        
+        Args:
+            platform: Platform name (twitter, facebook, etc.)
+            code: Authorization code from OAuth provider
+            state: State parameter for verification
+            code_verifier: PKCE code verifier (required for Twitter)
+            
+        Returns:
+            Dict with account info or error
+        """
         if not self.enabled:
             return {'error': 'OAuth not enabled'}
 
         try:
             if platform == 'twitter':
-                return self.twitter.handle_callback(code, state)
+                # Pass code_verifier to Twitter OAuth handler
+                return self.twitter.handle_callback(code, state, code_verifier)
             elif platform in ['facebook', 'instagram', 'threads']:
                 return self.meta.handle_callback(code, state, platform)
             elif platform == 'linkedin':
@@ -211,8 +222,8 @@ class OAuthManager:
             else:
                 return {'error': f'Platform {platform} not supported'}
         except Exception as e:
-            logger.error(f"OAuth callback error for {platform}: {e}")
-            return {'error': str(e)}
+            logger.error(f"OAuth callback error for {platform}: {e}", exc_info=True)
+            return {'error': f'OAuth callback failed: {str(e)}'}
 
     def post_to_platform(self, platform: str, account_id: str, content: str, media: List = None, options: Dict = None, user_id: str = None) -> Dict:
         """Post content to platform using real API
@@ -599,6 +610,35 @@ class WebhookManager:
             'active': True,
             'created_at': datetime.utcnow().isoformat()
         }
+    
+    def get_webhooks(self, user_id: str) -> List[Dict]:
+        """Get all webhooks for a user"""
+        if not self.enabled:
+            return {'error': 'Webhooks not enabled'}
+        
+        try:
+            # TODO: Query from database when Webhook model is available
+            # For now, return empty list as webhooks are stored in memory
+            # during register_webhook but not persisted
+            logger.info(f"Getting webhooks for user {user_id}")
+            return []
+        except Exception as e:
+            logger.error(f"Error getting webhooks: {e}")
+            return {'error': str(e)}
+    
+    def delete_webhook(self, webhook_id: str, user_id: str) -> Dict:
+        """Delete a webhook (with authorization check)"""
+        if not self.enabled:
+            return {'error': 'Webhooks not enabled'}
+        
+        try:
+            # TODO: Delete from database when Webhook model is available
+            # For now, just return success
+            logger.info(f"Deleting webhook {webhook_id} for user {user_id}")
+            return {'success': True}
+        except Exception as e:
+            logger.error(f"Error deleting webhook: {e}")
+            return {'error': str(e)}
 
     def send_webhook(self, webhook_url: str, event: str, data: Dict, secret: str = None):
         """Send webhook notification"""

@@ -5,7 +5,7 @@ New endpoints that use production infrastructure
 These routes implement the 9 improvements by using the managers from app_extensions.py
 """
 
-from flask import Blueprint, request, jsonify, g, send_file
+from flask import Blueprint, request, jsonify, g, send_file, session
 from datetime import datetime
 import logging
 import os
@@ -268,6 +268,11 @@ def oauth_authorize(platform):
 
     if 'error' in result:
         return jsonify(result), 400
+    
+    # Store code_verifier in session for Twitter PKCE flow
+    if platform == 'twitter' and 'code_verifier' in result:
+        session[f'twitter_code_verifier_{g.current_user["id"]}'] = result['code_verifier']
+        logger.info(f"Stored code_verifier in session for user {g.current_user['id']}")
 
     return jsonify(result)
 
@@ -280,8 +285,29 @@ def oauth_callback(platform):
 
     if not code or not state:
         return jsonify({'error': 'Missing code or state'}), 400
+    
+    # For Twitter, retrieve code_verifier from session
+    code_verifier = None
+    if platform == 'twitter':
+        # Extract user_id from state to get the right code_verifier
+        parts = state.split(':')
+        if len(parts) >= 1:
+            user_id = parts[0]
+            session_key = f'twitter_code_verifier_{user_id}'
+            code_verifier = session.get(session_key)
+            
+            if code_verifier:
+                logger.info(f"Retrieved code_verifier from session for user {user_id}")
+                # Clean up the session after use
+                session.pop(session_key, None)
+            else:
+                logger.warning(f"No code_verifier found in session for user {user_id}")
+                return jsonify({
+                    'error': 'Session expired or invalid',
+                    'details': 'Please try connecting your Twitter account again'
+                }), 400
 
-    result = oauth_manager.handle_callback(platform, code, state)
+    result = oauth_manager.handle_callback(platform, code, state, code_verifier=code_verifier)
 
     if 'error' in result:
         return jsonify(result), 400
@@ -661,17 +687,48 @@ def register_webhook():
 @integrated_bp.route('/webhooks', methods=['GET'])
 @auth_required
 def list_webhooks():
-    """List registered webhooks"""
-    # Implementation would query database for user's webhooks
-    return jsonify({'webhooks': []})
+    """List registered webhooks for the authenticated user"""
+    try:
+        # Get webhooks from webhook manager
+        webhooks = webhook_manager.get_webhooks(g.current_user['id'])
+        
+        if isinstance(webhooks, dict) and 'error' in webhooks:
+            return jsonify(webhooks), 500
+        
+        return jsonify({
+            'webhooks': webhooks,
+            'count': len(webhooks)
+        })
+    except Exception as e:
+        logger.error(f"Error listing webhooks: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to list webhooks',
+            'details': str(e)
+        }), 500
 
 
 @integrated_bp.route('/webhooks/<webhook_id>', methods=['DELETE'])
 @auth_required
 def delete_webhook(webhook_id):
-    """Delete webhook"""
-    # Implementation would delete from database
-    return jsonify({'message': 'Webhook deleted'})
+    """Delete a webhook (with authorization check)"""
+    try:
+        # Delete webhook with authorization check
+        result = webhook_manager.delete_webhook(webhook_id, g.current_user['id'])
+        
+        if 'error' in result:
+            status_code = 404 if 'not found' in result['error'].lower() else 400
+            return jsonify(result), status_code
+        
+        return jsonify({
+            'success': True,
+            'message': 'Webhook deleted successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error deleting webhook {webhook_id}: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to delete webhook',
+            'details': str(e)
+        }), 500
 
 
 # ==================== ANALYTICS ROUTES ====================
@@ -708,14 +765,89 @@ def get_post_analytics(post_id):
 @integrated_bp.route('/analytics/overview', methods=['GET'])
 @auth_required
 def get_analytics_overview():
-    """Get analytics overview for user"""
-    # Implementation would aggregate user's post analytics
-    return jsonify({
-        'total_posts': 0,
-        'total_engagement': 0,
-        'platforms': {},
-        'period': '30d'
-    })
+    """Get analytics overview for user with real data aggregation"""
+    if not DB_ENABLED:
+        return jsonify({
+            'error': 'Analytics not available',
+            'details': 'Database not enabled'
+        }), 503
+    
+    try:
+        from database import db_session_scope
+        from models import Post, PostAnalytics, PostAccount
+        from sqlalchemy import func
+        
+        with db_session_scope() as session:
+            # Get posts for the user
+            posts = session.query(Post).filter_by(user_id=g.current_user['id']).all()
+            post_ids = [p.id for p in posts]
+            
+            if not post_ids:
+                # User has no posts yet
+                return jsonify({
+                    'total_posts': 0,
+                    'total_engagement': 0,
+                    'platforms': {},
+                    'period': '30d',
+                    'message': 'No posts yet'
+                })
+            
+            # Get analytics for user's posts
+            analytics = session.query(PostAnalytics).filter(
+                PostAnalytics.post_id.in_(post_ids)
+            ).all()
+            
+            # Calculate total engagement
+            total_engagement = sum(
+                (a.likes or 0) + (a.comments or 0) + (a.shares or 0) 
+                for a in analytics
+            )
+            
+            # Calculate per-platform metrics
+            platforms = {}
+            for post in posts:
+                # Get accounts used for this post
+                post_accounts = session.query(PostAccount).filter_by(post_id=post.id).all()
+                
+                for pa in post_accounts:
+                    platform = pa.platform
+                    if platform not in platforms:
+                        platforms[platform] = {
+                            'posts': 0,
+                            'engagement': 0,
+                            'status': {}
+                        }
+                    
+                    platforms[platform]['posts'] += 1
+                    
+                    # Track post statuses
+                    status = pa.status
+                    if status not in platforms[platform]['status']:
+                        platforms[platform]['status'][status] = 0
+                    platforms[platform]['status'][status] += 1
+            
+            # Add engagement per platform from analytics
+            for a in analytics:
+                platform = a.platform
+                if platform in platforms:
+                    platforms[platform]['engagement'] += (
+                        (a.likes or 0) + (a.comments or 0) + (a.shares or 0)
+                    )
+            
+            return jsonify({
+                'total_posts': len(posts),
+                'total_engagement': total_engagement,
+                'platforms': platforms,
+                'period': '30d',
+                'analytics_count': len(analytics)
+            })
+    
+    except Exception as e:
+        logger.error(f"Error getting analytics overview: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Failed to get analytics overview',
+            'details': str(e)
+        }), 500
 
 
 # ==================== RETRY & RECOVERY ROUTES ====================

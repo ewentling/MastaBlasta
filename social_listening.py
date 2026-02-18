@@ -304,7 +304,12 @@ class TwitterMonitor:
         """Search Twitter for keywords"""
         if not self.is_configured():
             logger.warning("Twitter bearer token not configured, returning simulated data")
-            return self._simulated_results(keywords, limit)
+            results = self._simulated_results(keywords, limit)
+            # Mark as simulated
+            for result in results:
+                result['simulated'] = True
+                result['warning'] = 'Simulated data - configure Twitter bearer token for real results'
+            return results
 
         # Build query
         query = ' OR '.join(keywords)
@@ -342,13 +347,19 @@ class TwitterMonitor:
                         tweet.get('public_metrics', {}).get('retweet_count', 0)
                     ),
                     'created_at': tweet.get('created_at'),
-                    'url': f"https://twitter.com/i/web/status/{tweet['id']}"
+                    'url': f"https://twitter.com/i/web/status/{tweet['id']}",
+                    'simulated': False
                 })
 
             return mentions
         except Exception as e:
             logger.error(f"Twitter API error: {e}")
-            return self._simulated_results(keywords, limit)
+            results = self._simulated_results(keywords, limit)
+            # Mark as simulated due to error
+            for result in results:
+                result['simulated'] = True
+                result['warning'] = f'Simulated data - Twitter API error: {str(e)}'
+            return results
 
     def _simulated_results(self, keywords: List[str], limit: int) -> List[Dict[str, Any]]:
         """Return simulated results for testing"""
@@ -385,11 +396,21 @@ class RedditMonitor:
         """Search Reddit for keywords"""
         if not self.is_configured():
             logger.warning("Reddit credentials not configured, returning simulated data")
-            return self._simulated_results(keywords, limit)
+            results = self._simulated_results(keywords, limit)
+            # Mark as simulated
+            for result in results:
+                result['simulated'] = True
+                result['warning'] = 'Simulated data - configure Reddit API credentials for real results'
+            return results
 
         # For simplicity, using simulated results
-        # Real implementation would use Reddit API
-        return self._simulated_results(keywords, limit)
+        # Real implementation would use Reddit API (praw library)
+        logger.info("Reddit API not yet implemented, returning simulated data")
+        results = self._simulated_results(keywords, limit)
+        for result in results:
+            result['simulated'] = True
+            result['warning'] = 'Simulated data - Reddit API integration not yet implemented'
+        return results
 
     def _simulated_results(self, keywords: List[str], limit: int) -> List[Dict[str, Any]]:
         """Return simulated results for testing"""

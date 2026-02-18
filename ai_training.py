@@ -258,16 +258,32 @@ class AIModelTrainer:
         return results
 
     def predict_engagement(self, content: str, features: Dict[str, Any],
-                           model_name: str = 'engagement_predictor_engagement') -> float:
-        """Predict engagement for new content"""
+                           model_name: str = 'engagement_predictor_engagement') -> Dict[str, Any]:
+        """Predict engagement for new content
+        
+        Returns:
+            Dict with prediction, confidence, and simulated flag
+        """
         if model_name not in self.models:
-            # Return simulated prediction
+            # Return simulated prediction with flag
             import random
-            return random.randint(50, 500)
+            return {
+                'predicted_engagement': random.randint(50, 500),
+                'confidence': 0.0,
+                'simulated': True,
+                'warning': f'Model "{model_name}" not trained - returning simulated prediction',
+                'factors': []
+            }
 
         if not ML_AVAILABLE:
             import random
-            return random.randint(50, 500)
+            return {
+                'predicted_engagement': random.randint(50, 500),
+                'confidence': 0.0,
+                'simulated': True,
+                'warning': 'ML libraries not available - returning simulated prediction',
+                'factors': []
+            }
 
         model_data = self.models[model_name]
         model = model_data['model']
@@ -282,20 +298,41 @@ class AIModelTrainer:
         ]])
 
         prediction = model.predict(X)[0]
-        return float(prediction)
+        return {
+            'predicted_engagement': float(prediction),
+            'confidence': 0.75,  # Placeholder confidence score
+            'simulated': False,
+            'factors': ['word_count', 'hashtags', 'mentions', 'media', 'timing']
+        }
 
     def classify_content(self, content: str, model_name: str = 'content_classifier') -> Dict[str, Any]:
-        """Classify content performance potential"""
+        """Classify content performance potential
+        
+        Returns:
+            Dict with classification, confidence, probabilities, and simulated flag
+        """
         if model_name not in self.models:
-            # Return simulated classification
+            # Return simulated classification with flag
             import random
             label = random.choice(['high', 'medium', 'low'])
-            return {'label': label, 'confidence': random.uniform(0.6, 0.95)}
+            return {
+                'label': label,
+                'confidence': random.uniform(0.6, 0.95),
+                'simulated': True,
+                'warning': f'Model "{model_name}" not trained - returning simulated classification',
+                'suggestions': []
+            }
 
         if not ML_AVAILABLE:
             import random
             label = random.choice(['high', 'medium', 'low'])
-            return {'label': label, 'confidence': random.uniform(0.6, 0.95)}
+            return {
+                'label': label,
+                'confidence': random.uniform(0.6, 0.95),
+                'simulated': True,
+                'warning': 'ML libraries not available - returning simulated classification',
+                'suggestions': []
+            }
 
         model_data = self.models[model_name]
         model = model_data['model']
@@ -316,7 +353,9 @@ class AIModelTrainer:
                 'low': float(pred_proba[0]),
                 'medium': float(pred_proba[1]),
                 'high': float(pred_proba[2])
-            }
+            },
+            'simulated': False,
+            'suggestions': []  # Could add AI-generated suggestions
         }
 
     def get_optimal_posting_time(self, is_weekday: bool = True) -> List[str]:

@@ -137,31 +137,102 @@ class TwitterOAuth:
         }
 
     @classmethod
-    def handle_callback(cls, code: str, state: str) -> Dict[str, Any]:
-        """Handle OAuth callback and save account to database
+    def handle_callback(cls, code: str, state: str, code_verifier: str = None) -> Dict[str, Any]:
+        """Handle OAuth callback and exchange code for access token
         
-        Note: This is a simplified implementation that doesn't handle code_verifier.
-        Twitter OAuth PKCE requires code_verifier to be stored in session/cache during
-        the authorization request and retrieved during callback. This limitation means
-        Twitter OAuth flow needs additional session management implementation.
+        Args:
+            code: Authorization code from Twitter
+            state: State parameter to verify request
+            code_verifier: PKCE code verifier (can be passed directly or retrieved from session)
         
-        TODO: Implement proper session storage for code_verifier
+        Returns:
+            Dict containing account info or error
         """
         try:
             # Parse user_id from state
             parts = state.split(':')
             if len(parts) < 2:
-                return {'error': 'Invalid state parameter'}
+                logger.error(f"Invalid state parameter format: {state}")
+                return {'error': 'Invalid state parameter format'}
             
             user_id = parts[0]
             
-            # Note: code_verifier should be retrieved from session/cache
-            # This is a limitation that requires session management
-            return {'error': 'Twitter OAuth requires code_verifier from session - session management not yet implemented'}
+            # If code_verifier not provided, try to get it from the calling function
+            # (The calling route should retrieve it from session/cache and pass it here)
+            if not code_verifier:
+                logger.error("code_verifier not provided for Twitter OAuth callback")
+                return {
+                    'error': 'Missing code_verifier',
+                    'details': 'PKCE code_verifier must be provided for Twitter OAuth',
+                    'user_id': user_id
+                }
+            
+            # Exchange authorization code for access token
+            oauth = OAuth2Session(
+                TWITTER_CLIENT_ID,
+                redirect_uri=TWITTER_REDIRECT_URI
+            )
+            
+            try:
+                token = oauth.fetch_token(
+                    cls.TOKEN_URL,
+                    code=code,
+                    code_verifier=code_verifier,
+                    client_secret=TWITTER_CLIENT_SECRET
+                )
+            except Exception as token_error:
+                logger.error(f"Failed to fetch Twitter token: {token_error}")
+                return {
+                    'error': 'Token exchange failed',
+                    'details': str(token_error),
+                    'user_id': user_id
+                }
+            
+            access_token = token.get('access_token')
+            if not access_token:
+                logger.error("No access token in Twitter OAuth response")
+                return {'error': 'No access token received from Twitter', 'user_id': user_id}
+            
+            # Get user info from Twitter
+            try:
+                client = tweepy.Client(bearer_token=access_token)
+                twitter_user = client.get_me(user_fields=['username', 'profile_image_url'])
+                
+                if not twitter_user or not twitter_user.data:
+                    logger.error("Failed to get Twitter user info")
+                    return {'error': 'Failed to retrieve Twitter user information', 'user_id': user_id}
+                
+                user_data = twitter_user.data
+                
+                return {
+                    'user_id': user_id,
+                    'platform': 'twitter',
+                    'platform_user_id': str(user_data.id),
+                    'platform_username': user_data.username,
+                    'oauth_token': access_token,
+                    'refresh_token': token.get('refresh_token'),
+                    'token_expires_at': token.get('expires_at'),
+                    'display_name': f"@{user_data.username}",
+                    'success': True
+                }
+                
+            except Exception as user_error:
+                logger.error(f"Failed to get Twitter user info: {user_error}")
+                # Still return the token data even if user info fails
+                return {
+                    'user_id': user_id,
+                    'platform': 'twitter',
+                    'oauth_token': access_token,
+                    'refresh_token': token.get('refresh_token'),
+                    'token_expires_at': token.get('expires_at'),
+                    'display_name': 'Twitter Account',
+                    'success': True,
+                    'warning': 'Account connected but user details unavailable'
+                }
         
         except Exception as e:
-            logger.error(f"Twitter callback handling failed: {e}")
-            return {'error': str(e)}
+            logger.error(f"Twitter callback handling failed: {e}", exc_info=True)
+            return {'error': f'Twitter OAuth callback failed: {str(e)}'}
 
     @classmethod
     def create_tweet(cls, access_token: str, content: str, media: List = None) -> Dict[str, Any]:
