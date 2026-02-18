@@ -31,7 +31,12 @@ pip install -r requirements.txt
 # 2. Set up PostgreSQL
 createdb mastablasta
 export DATABASE_URL="postgresql://localhost/mastablasta"
-python3 -c "from database import init_db; init_db()"
+
+# Run migrations (recommended)
+alembic upgrade head
+
+# Or use init_db (not recommended - may miss schema updates)
+# python3 -c "from database import init_db; init_db()"
 
 # 3. Configure security
 export JWT_SECRET_KEY="$(openssl rand -hex 32)"
