@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -16,6 +16,7 @@ import ContentLibraryPage from './pages/ContentLibraryPage';
 import ABTestingPage from './pages/ABTestingPage';
 import ChatbotPage from './pages/ChatbotPage';
 import ClipsPage from './pages/ClipsPage';
+import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import SettingsModal from './components/SettingsModal';
@@ -38,6 +39,7 @@ type AppRouteConfig = {
   label: string;
   icon: LucideIcon;
   element: JSX.Element;
+  adminOnly?: boolean;
 };
 
 export const appRoutes: AppRouteConfig[] = [
@@ -54,6 +56,7 @@ export const appRoutes: AppRouteConfig[] = [
   { path: '/ab-testing', label: 'A/B Testing', icon: Sparkles, element: <ABTestingPage /> },
   { path: '/chatbot', label: 'AI Assistant', icon: MessageSquare, element: <ChatbotPage /> },
   { path: '/clips', label: 'Video Clipper', icon: Scissors, element: <ClipsPage /> },
+  { path: '/admin', label: 'Admin', icon: Shield, element: <AdminPage />, adminOnly: true },
 ];
 
 function Navigation() {
@@ -67,6 +70,9 @@ function Navigation() {
     logout();
   };
 
+  // Check if user is admin
+  const isAdmin = user?.role === 'admin';
+
   return (
     <>
       <nav className="sidebar">
@@ -74,7 +80,7 @@ function Navigation() {
           <img src="/logo.png" alt="MastaBlasta" className="logo-image" />
         </div>
         <ul className="nav-menu">
-          {appRoutes.map(({ path, label, icon: Icon }) => (
+          {appRoutes.filter(route => !route.adminOnly || isAdmin).map(({ path, label, icon: Icon }) => (
             <li key={path}>
               <Link to={path} className={isActive(path)}>
                 <Icon size={20} />
