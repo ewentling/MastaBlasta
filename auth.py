@@ -131,6 +131,11 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def verify_token(token: str) -> Optional[Dict[str, Any]]:
+    """Verify and decode a JWT token (alias for decode_token for backward compatibility)"""
+    return decode_token(token)
+
+
 def get_current_user(db_session) -> Optional[Dict[str, Any]]:
     """Get the current authenticated user from request"""
     auth_header = request.headers.get('Authorization', '')
