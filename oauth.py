@@ -3,7 +3,7 @@ Real OAuth implementation for social media platforms
 """
 import os
 import requests
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta, timezone
 import secrets
 import tweepy
