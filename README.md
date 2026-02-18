@@ -204,6 +204,13 @@ docker-compose up -d
 
 **Access the Web UI**: Open your browser and navigate to `http://localhost:33766`
 
+**Default Admin Credentials:**
+- Email: `admin@mastablasta.com`
+- Password: `ChangeMe123!`
+- ⚠️ You will be prompted to change the password on first login
+
+**Troubleshooting Login Issues**: If you're unable to login after updating, you may need to apply database migrations. See [DATABASE_MIGRATION_FIX.md](DATABASE_MIGRATION_FIX.md) for details.
+
 ## 🔗 Social Platform Connection
 
 MastaBlasta supports easy "click to connect" OAuth integration for all major social platforms.
