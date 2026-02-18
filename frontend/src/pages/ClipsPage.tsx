@@ -350,6 +350,19 @@ export default function ClipsPage() {
             <li>✅ Use alternative platforms like <strong>Vimeo, Wistia, or direct video URLs</strong></li>
             <li>✅ For production use, ask your admin to configure <strong>YouTube Data API v3 access</strong></li>
           </ul>
+          <div style={{ backgroundColor: '#dbeafe', padding: '12px', borderRadius: '6px', marginBottom: '12px', border: '1px solid #3b82f6' }}>
+            <p style={{ marginBottom: '8px', fontWeight: '600', color: '#1e40af' }}>
+              ℹ️ About YouTube Account Connections
+            </p>
+            <p style={{ fontSize: '13px', color: '#1e3a8a', marginBottom: '8px' }}>
+              <strong>Connecting your YouTube account in the Accounts page will NOT fix video clipping issues.</strong>
+            </p>
+            <p style={{ fontSize: '13px', color: '#1e3a8a' }}>
+              YouTube account connections are used for <strong>uploading/posting videos to YOUR channel</strong>, not for 
+              analyzing/downloading videos from other channels. The video clipper uses a different system (yt-dlp) that 
+              works independently of YouTube account connections.
+            </p>
+          </div>
           <p style={{ fontSize: '13px', color: '#78716c' }}>
             💡 <strong>Alternative:</strong> You can download videos manually and upload the file directly, or use 
             platforms like Vimeo that are more automation-friendly.
