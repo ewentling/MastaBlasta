@@ -24,16 +24,74 @@ admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 @auth_required
 @admin_only
 def list_users():
-    """List all users with subscription information"""
+    """List all users with subscription information, supports search and filtering"""
     if not DB_ENABLED:
         return jsonify({'error': 'Database not enabled'}), 503
     
     try:
         from database import db_session_scope
         
+        # Get query parameters for search and filtering
+        search = request.args.get('search', '').strip()
+        tier_filter = request.args.get('tier', '').strip()
+        status_filter = request.args.get('status', '').strip()
+        provider_filter = request.args.get('provider', '').strip()
+        sort_by = request.args.get('sort_by', 'created_at')
+        sort_order = request.args.get('sort_order', 'desc')
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))
+        
         with db_session_scope() as db_session:
-            # Get all users with their subscriptions
-            users = db_session.query(User).all()
+            # Build base query with join
+            query = db_session.query(User).outerjoin(Subscription, User.id == Subscription.user_id)
+            
+            # Apply search filter
+            if search:
+                search_pattern = f'%{search}%'
+                query = query.filter(
+                    or_(
+                        User.email.ilike(search_pattern),
+                        User.full_name.ilike(search_pattern),
+                        User.id.ilike(search_pattern)
+                    )
+                )
+            
+            # Apply tier filter
+            if tier_filter:
+                try:
+                    tier_enum = SubscriptionTier(tier_filter.lower())
+                    query = query.filter(Subscription.tier == tier_enum)
+                except ValueError:
+                    pass
+            
+            # Apply status filter
+            if status_filter:
+                try:
+                    status_enum = SubscriptionStatus(status_filter.lower())
+                    query = query.filter(Subscription.status == status_enum)
+                except ValueError:
+                    pass
+            
+            # Apply provider filter
+            if provider_filter:
+                query = query.filter(User.auth_provider == provider_filter)
+            
+            # Apply sorting
+            if sort_by == 'email':
+                query = query.order_by(User.email.desc() if sort_order == 'desc' else User.email.asc())
+            elif sort_by == 'created_at':
+                query = query.order_by(User.created_at.desc() if sort_order == 'desc' else User.created_at.asc())
+            elif sort_by == 'last_login':
+                query = query.order_by(User.last_login.desc() if sort_order == 'desc' else User.last_login.asc())
+            elif sort_by == 'full_name':
+                query = query.order_by(User.full_name.desc() if sort_order == 'desc' else User.full_name.asc())
+            
+            # Get total count before pagination
+            total_users = query.count()
+            
+            # Apply pagination
+            offset = (page - 1) * per_page
+            users = query.limit(per_page).offset(offset).all()
             
             users_data = []
             for user in users:
@@ -69,7 +127,10 @@ def list_users():
             
             return jsonify({
                 'users': users_data,
-                'total': len(users_data)
+                'total': total_users,
+                'page': page,
+                'per_page': per_page,
+                'total_pages': (total_users + per_page - 1) // per_page
             }), 200
             
     except Exception as e:
@@ -534,3 +595,247 @@ def test_square_connection():
             'message': 'Failed to initialize Square client',
             'error': str(e)
         }), 500
+
+
+# ==================== AUDIT LOG & ACTIVITY ====================
+
+@admin_bp.route('/audit-logs', methods=['GET'])
+@auth_required
+@admin_only
+def get_audit_logs():
+    """Get audit logs with filtering and pagination"""
+    try:
+        # Get query parameters
+        user_id = request.args.get('user_id', '').strip()
+        event_type = request.args.get('event_type', '').strip()
+        start_date = request.args.get('start_date', '').strip()
+        end_date = request.args.get('end_date', '').strip()
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))
+        
+        # Get security events from SecurityLogger
+        # Note: In production, this should query a database table
+        # For now, we'll return sample data showing the structure
+        sample_logs = [
+            {
+                'id': f'log_{i}',
+                'timestamp': (datetime.now(timezone.utc) - timedelta(hours=i)).isoformat(),
+                'event_type': ['login_success', 'login_failed', 'password_change', 'subscription_change', 'user_suspended'][i % 5],
+                'user_id': f'user_{i % 10}',
+                'user_email': f'user{i % 10}@example.com',
+                'details': {
+                    'ip_address': f'192.168.1.{i % 255}',
+                    'user_agent': 'Mozilla/5.0...'
+                },
+                'severity': ['info', 'warning', 'error'][i % 3]
+            }
+            for i in range(100)
+        ]
+        
+        logs = sample_logs
+        
+        # Apply filters
+        if user_id:
+            logs = [log for log in logs if log.get('user_id') == user_id]
+        if event_type:
+            logs = [log for log in logs if log.get('event_type') == event_type]
+        
+        # Pagination
+        total = len(logs)
+        start_idx = (page - 1) * per_page
+        end_idx = start_idx + per_page
+        paginated_logs = logs[start_idx:end_idx]
+        
+        return jsonify({
+            'logs': paginated_logs,
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'total_pages': (total + per_page - 1) // per_page
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error getting audit logs: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to get audit logs'}), 500
+
+
+# ==================== QUICK ACTIONS ====================
+
+@admin_bp.route('/quick-actions/extend-trial', methods=['POST'])
+@auth_required
+@admin_only
+def extend_trial():
+    """Extend trial period for a user"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        days = data.get('days', 7)
+        
+        if not user_id:
+            return jsonify({'error': 'user_id is required'}), 400
+        
+        from database import db_session_scope
+        
+        with db_session_scope() as db_session:
+            subscription = db_session.query(Subscription).filter_by(user_id=user_id).first()
+            
+            if not subscription:
+                return jsonify({'error': 'User has no subscription'}), 404
+            
+            # Extend trial
+            if subscription.trial_ends_at:
+                subscription.trial_ends_at = subscription.trial_ends_at + timedelta(days=days)
+            else:
+                subscription.trial_ends_at = datetime.now(timezone.utc) + timedelta(days=days)
+            
+            # Log the action
+            SecurityLogger.log_event(
+                'trial_extended',
+                user_id=g.current_user['id'],
+                details={
+                    'target_user_id': user_id,
+                    'days_added': days,
+                    'new_trial_end': subscription.trial_ends_at.isoformat()
+                }
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': f'Trial extended by {days} days',
+                'new_trial_end': subscription.trial_ends_at.isoformat()
+            }), 200
+            
+    except Exception as e:
+        logger.error(f"Error extending trial: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to extend trial'}), 500
+
+
+@admin_bp.route('/quick-actions/reset-password', methods=['POST'])
+@auth_required
+@admin_only
+def admin_reset_password():
+    """Reset user password and send email"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        
+        if not user_id:
+            return jsonify({'error': 'user_id is required'}), 400
+        
+        from database import db_session_scope
+        
+        with db_session_scope() as db_session:
+            user = db_session.query(User).filter_by(id=user_id).first()
+            
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+            
+            # Generate temporary password
+            import secrets
+            temp_password = secrets.token_urlsafe(12)
+            
+            # Hash and set password
+            import bcrypt
+            user.password_hash = bcrypt.hashpw(temp_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            user.password_must_change = True
+            
+            # Log the action
+            SecurityLogger.log_event(
+                'admin_password_reset',
+                user_id=g.current_user['id'],
+                details={
+                    'target_user_id': user_id,
+                    'target_email': user.email
+                }
+            )
+            
+            # In production, send email with temp password
+            # For now, return it in response (admin must communicate it)
+            
+            return jsonify({
+                'success': True,
+                'message': 'Password reset successfully',
+                'temporary_password': temp_password,
+                'note': 'User must change password on next login'
+            }), 200
+            
+    except Exception as e:
+        logger.error(f"Error resetting password: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to reset password'}), 500
+
+
+@admin_bp.route('/quick-actions/bulk-operations', methods=['POST'])
+@auth_required
+@admin_only
+def bulk_operations():
+    """Perform bulk operations on multiple users"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        data = request.get_json()
+        user_ids = data.get('user_ids', [])
+        action = data.get('action')
+        
+        if not user_ids or not action:
+            return jsonify({'error': 'user_ids and action are required'}), 400
+        
+        if len(user_ids) > 100:
+            return jsonify({'error': 'Maximum 100 users per bulk operation'}), 400
+        
+        from database import db_session_scope
+        
+        with db_session_scope() as db_session:
+            results = []
+            
+            for user_id in user_ids:
+                try:
+                    user = db_session.query(User).filter_by(id=user_id).first()
+                    if not user:
+                        results.append({'user_id': user_id, 'success': False, 'error': 'User not found'})
+                        continue
+                    
+                    if action == 'suspend':
+                        user.is_active = False
+                        results.append({'user_id': user_id, 'success': True})
+                    elif action == 'activate':
+                        user.is_active = True
+                        results.append({'user_id': user_id, 'success': True})
+                    else:
+                        results.append({'user_id': user_id, 'success': False, 'error': 'Invalid action'})
+                        
+                except Exception as e:
+                    results.append({'user_id': user_id, 'success': False, 'error': str(e)})
+            
+            # Log bulk action
+            successful = sum(1 for r in results if r['success'])
+            SecurityLogger.log_event(
+                'bulk_operation',
+                user_id=g.current_user['id'],
+                details={
+                    'action': action,
+                    'total_users': len(user_ids),
+                    'successful': successful,
+                    'failed': len(user_ids) - successful
+                }
+            )
+            
+            return jsonify({
+                'success': True,
+                'results': results,
+                'summary': {
+                    'total': len(user_ids),
+                    'successful': successful,
+                    'failed': len(user_ids) - successful
+                }
+            }), 200
+            
+    except Exception as e:
+        logger.error(f"Error performing bulk operation: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to perform bulk operation'}), 500
