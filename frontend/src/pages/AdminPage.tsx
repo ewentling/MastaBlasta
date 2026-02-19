@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Shield, Users, BarChart3, CreditCard, CheckCircle, XCircle, Clock, AlertTriangle, Crown, Zap, TrendingUp } from 'lucide-react';
+import { Shield, Users, BarChart3, CreditCard, CheckCircle, XCircle, Clock, AlertTriangle, Crown, Zap, TrendingUp, Settings, DollarSign, Mail, Flag, Activity } from 'lucide-react';
 import { formatDateTime } from '../utils/timezone';
+import { UserGrowthChart } from '../components/admin/UserGrowthChart';
+import { RevenueChart } from '../components/admin/RevenueChart';
+import { SubscriptionDistributionChart } from '../components/admin/SubscriptionDistributionChart';
+import { SystemHealthPanel } from '../components/admin/SystemHealthPanel';
+import { RevenueSummaryCards } from '../components/admin/RevenueSummaryCards';
+import { FailedPaymentsTable } from '../components/admin/FailedPaymentsTable';
+import { EmailComposer } from '../components/admin/EmailComposer';
+import { PostModerationTable } from '../components/admin/PostModerationTable';
 
 // Types
 interface User {
@@ -145,11 +153,32 @@ const adminApi = {
     if (!response.ok) throw new Error('Failed to fetch tiers');
     return response.json();
   },
+
+  getSquareConfig: async () => {
+    const response = await fetch('/api/admin/square-config', {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+      },
+    });
+    if (!response.ok) throw new Error('Failed to fetch Square config');
+    return response.json();
+  },
+
+  testSquareConnection: async () => {
+    const response = await fetch('/api/admin/square-test-connection', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
+    if (!response.ok) throw new Error('Failed to test Square connection');
+    return response.json();
+  },
 };
 
 export default function AdminPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'users' | 'metrics'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'metrics' | 'square' | 'analytics' | 'revenue' | 'email' | 'moderation'>('users');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [editingSubscription, setEditingSubscription] = useState(false);
   const [subscriptionForm, setSubscriptionForm] = useState({
@@ -158,6 +187,8 @@ export default function AdminPage() {
     admin_notes: '',
   });
   const [suspendReason, setSuspendReason] = useState('');
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionTestResult, setConnectionTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Queries
   const { data: usersData, isLoading: usersLoading } = useQuery({
@@ -175,6 +206,12 @@ export default function AdminPage() {
     queryKey: ['admin-user-details', selectedUser],
     queryFn: () => adminApi.getUserDetails(selectedUser!),
     enabled: !!selectedUser,
+  });
+
+  const { data: squareConfig, isLoading: squareConfigLoading } = useQuery({
+    queryKey: ['admin-square-config'],
+    queryFn: adminApi.getSquareConfig,
+    enabled: activeTab === 'square',
   });
 
   // Mutations
@@ -259,6 +296,25 @@ export default function AdminPage() {
     });
   };
 
+  const handleTestSquareConnection = async () => {
+    setTestingConnection(true);
+    setConnectionTestResult(null);
+    try {
+      const result = await adminApi.testSquareConnection();
+      setConnectionTestResult({
+        success: result.success,
+        message: result.message + (result.locations_count !== undefined ? ` (${result.locations_count} locations found)` : ''),
+      });
+    } catch (error: any) {
+      setConnectionTestResult({
+        success: false,
+        message: error.message || 'Failed to test connection',
+      });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -273,10 +329,10 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="mb-6 border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
+          <nav className="-mb-px flex space-x-8 overflow-x-auto">
             <button
               onClick={() => setActiveTab('users')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                 activeTab === 'users'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -287,7 +343,7 @@ export default function AdminPage() {
             </button>
             <button
               onClick={() => setActiveTab('metrics')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                 activeTab === 'metrics'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -295,6 +351,61 @@ export default function AdminPage() {
             >
               <BarChart3 className="w-5 h-5 inline-block mr-2" />
               System Metrics
+            </button>
+            <button
+              onClick={() => setActiveTab('analytics')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === 'analytics'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Activity className="w-5 h-5 inline-block mr-2" />
+              Analytics
+            </button>
+            <button
+              onClick={() => setActiveTab('revenue')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === 'revenue'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <DollarSign className="w-5 h-5 inline-block mr-2" />
+              Revenue
+            </button>
+            <button
+              onClick={() => setActiveTab('email')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === 'email'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Mail className="w-5 h-5 inline-block mr-2" />
+              Email
+            </button>
+            <button
+              onClick={() => setActiveTab('moderation')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === 'moderation'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Flag className="w-5 h-5 inline-block mr-2" />
+              Moderation
+            </button>
+            <button
+              onClick={() => setActiveTab('square')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === 'square'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Settings className="w-5 h-5 inline-block mr-2" />
+              Square Integration
             </button>
           </nav>
         </div>
@@ -445,6 +556,219 @@ export default function AdminPage() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* Square Integration Tab */}
+        {activeTab === 'square' && (
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-xl font-semibold mb-2">Square Payment Integration</h2>
+                  <p className="text-gray-600">Manage your Square payment gateway configuration for subscriptions</p>
+                </div>
+                <button
+                  onClick={handleTestSquareConnection}
+                  disabled={testingConnection}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {testingConnection ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Testing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Test Connection
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {connectionTestResult && (
+                <div className={`mb-6 p-4 rounded-lg ${connectionTestResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                  <div className="flex items-center gap-2">
+                    {connectionTestResult.success ? (
+                      <CheckCircle className="w-5 h-5 text-green-600" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-red-600" />
+                    )}
+                    <span className={connectionTestResult.success ? 'text-green-800' : 'text-red-800'}>
+                      {connectionTestResult.message}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {squareConfigLoading ? (
+                <div className="text-center py-8">Loading configuration...</div>
+              ) : squareConfig ? (
+                <div className="space-y-6">
+                  {/* Configuration Status */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">Status</span>
+                        {squareConfig.configured ? (
+                          <CheckCircle className="w-5 h-5 text-green-500" />
+                        ) : (
+                          <XCircle className="w-5 h-5 text-red-500" />
+                        )}
+                      </div>
+                      <p className="text-lg font-semibold text-gray-900">
+                        {squareConfig.configured ? 'Configured' : 'Not Configured'}
+                      </p>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">Environment</span>
+                        <Settings className="w-5 h-5 text-blue-500" />
+                      </div>
+                      <p className="text-lg font-semibold text-gray-900 capitalize">
+                        {squareConfig.environment || 'Not Set'}
+                      </p>
+                    </div>
+
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-600">Location ID</span>
+                        <CreditCard className="w-5 h-5 text-purple-500" />
+                      </div>
+                      <p className="text-sm font-mono text-gray-900 break-all">
+                        {squareConfig.location_id || 'Not Set'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Configuration Details */}
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                      <h3 className="font-semibold text-gray-900">Configuration Details</h3>
+                    </div>
+                    <div className="p-4 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Access Token</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={squareConfig.access_token}
+                            readOnly
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 font-mono text-sm"
+                          />
+                          <span className="text-xs text-gray-500">Masked for security</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Webhook Signature Key</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={squareConfig.webhook_signature_key}
+                            readOnly
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 font-mono text-sm"
+                          />
+                          <span className="text-xs text-gray-500">Masked for security</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Starter Plan ID</label>
+                          <input
+                            type="text"
+                            value={squareConfig.catalog_starter || 'Not Set'}
+                            readOnly
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Pro Plan ID</label>
+                          <input
+                            type="text"
+                            value={squareConfig.catalog_pro || 'Not Set'}
+                            readOnly
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">Enterprise Plan ID</label>
+                          <input
+                            type="text"
+                            value={squareConfig.catalog_enterprise || 'Not Set'}
+                            readOnly
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Configuration Instructions */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-blue-600 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-blue-900 mb-2">Configuration Update</h4>
+                        <p className="text-sm text-blue-800 mb-2">
+                          To update Square configuration, set the following environment variables and restart the application:
+                        </p>
+                        <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                          <li><code className="bg-blue-100 px-1 rounded">SQUARE_ACCESS_TOKEN</code> - Your Square API access token</li>
+                          <li><code className="bg-blue-100 px-1 rounded">SQUARE_ENVIRONMENT</code> - Either "sandbox" or "production"</li>
+                          <li><code className="bg-blue-100 px-1 rounded">SQUARE_LOCATION_ID</code> - Your Square location ID</li>
+                          <li><code className="bg-blue-100 px-1 rounded">SQUARE_WEBHOOK_SIGNATURE_KEY</code> - Webhook signature key from Square</li>
+                          <li><code className="bg-blue-100 px-1 rounded">SQUARE_CATALOG_*</code> - Catalog object IDs for each subscription tier</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">Failed to load Square configuration</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <SystemHealthPanel />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <UserGrowthChart />
+              <RevenueChart />
+            </div>
+            <SubscriptionDistributionChart />
+          </div>
+        )}
+
+        {/* Revenue Tab */}
+        {activeTab === 'revenue' && (
+          <div className="space-y-6">
+            <RevenueSummaryCards />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <RevenueChart days={180} />
+              <SubscriptionDistributionChart />
+            </div>
+            <FailedPaymentsTable />
+          </div>
+        )}
+
+        {/* Email Tab */}
+        {activeTab === 'email' && (
+          <div>
+            <EmailComposer />
+          </div>
+        )}
+
+        {/* Moderation Tab */}
+        {activeTab === 'moderation' && (
+          <div>
+            <PostModerationTable />
           </div>
         )}
 

@@ -375,13 +375,12 @@ def upload_media():
     if file.filename == '':
         return jsonify({'error': 'Empty filename'}), 400
 
-    # Read file data
-    file_data = file.read()
+    # Pass file object directly (not bytes)
     mime_type = file.content_type or 'application/octet-stream'
 
     result = media_manager.upload_media(
         g.current_user['id'],
-        file_data,
+        file,  # Pass file object, not file.read()
         file.filename,
         mime_type
     )

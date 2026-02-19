@@ -7,6 +7,7 @@ import logging
 import json
 import re
 from typing import Dict, Any, List
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -487,6 +488,181 @@ Provide ONLY the JSON response."""
                 'success': False,
                 'error': str(e)
             }
+
+    def download_and_clip_video(self, video_url: str, start_time: int, end_time: int, output_path: str = None) -> Dict[str, Any]:
+        """
+        Download video, extract clip, and delete the original to save storage.
+        This method addresses bot detection issues by downloading the entire video first.
+
+        Args:
+            video_url: URL of the video to clip
+            start_time: Clip start time in seconds
+            end_time: Clip end time in seconds
+            output_path: Optional custom output path for the clip
+
+        Returns:
+            Dictionary with success status and clip information
+        """
+        if not YT_DLP_ENABLED:
+            return {
+                'success': False,
+                'error': 'yt-dlp not installed. Install with: pip install yt-dlp'
+            }
+
+        import tempfile
+        import subprocess
+        import shutil
+        
+        temp_dir = None
+        downloaded_file = None
+        
+        try:
+            # Create temporary directory for download
+            temp_dir = tempfile.mkdtemp(prefix='video_clip_')
+            temp_video_path = os.path.join(temp_dir, 'downloaded_video.%(ext)s')
+            
+            # Configure yt-dlp to download with better bot detection avoidance
+            ydl_opts = {
+                'format': 'best[ext=mp4]/best',  # Prefer mp4
+                'outtmpl': temp_video_path,
+                'quiet': False,
+                'no_warnings': False,
+                'socket_timeout': 30,
+                'retries': 5,
+                # Additional options to avoid bot detection
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+                'nocheckcertificate': True,
+            }
+            
+            logger.info(f"Downloading video from {video_url} to temporary location...")
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=True)
+                
+                # Get the actual downloaded filename
+                downloaded_file = ydl.prepare_filename(info)
+                
+                if not os.path.exists(downloaded_file):
+                    return {
+                        'success': False,
+                        'error': 'Failed to download video. File not found after download.'
+                    }
+                
+                logger.info(f"Video downloaded successfully: {downloaded_file}")
+                
+                # Validate clip times
+                video_duration = info.get('duration', 0)
+                if end_time > video_duration:
+                    end_time = video_duration
+                
+                # Generate output path if not provided
+                if not output_path:
+                    # Create more descriptive filename including video title
+                    # Sanitize video title for filename (re already imported at module level)
+                    safe_title = re.sub(r'[^\w\s-]', '', info.get('title', 'video'))[:50]
+                    safe_title = re.sub(r'[-\s]+', '_', safe_title).strip('_')
+                    clip_filename = f"clip_{safe_title}_{start_time}_{end_time}_{int(datetime.now(timezone.utc).timestamp())}.mp4"
+                    output_path = os.path.join(temp_dir, clip_filename)
+                
+                # Use ffmpeg to extract the clip
+                logger.info(f"Extracting clip from {start_time}s to {end_time}s...")
+                
+                ffmpeg_cmd = [
+                    'ffmpeg',
+                    '-ss', str(start_time),
+                    '-i', downloaded_file,
+                    '-t', str(end_time - start_time),
+                    '-c:v', 'libx264',
+                    '-c:a', 'aac',
+                    '-b:v', '3000k',
+                    '-b:a', '192k',
+                    '-movflags', '+faststart',
+                    '-y',  # Overwrite output file
+                    output_path
+                ]
+                
+                result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+                
+                if result.returncode != 0:
+                    logger.error(f"FFmpeg error: {result.stderr}")
+                    return {
+                        'success': False,
+                        'error': f'Failed to extract clip: {result.stderr[:200]}'
+                    }
+                
+                if not os.path.exists(output_path):
+                    return {
+                        'success': False,
+                        'error': 'Clip extraction failed. Output file not found.'
+                    }
+                
+                clip_size = os.path.getsize(output_path)
+                logger.info(f"Clip extracted successfully: {output_path} ({clip_size} bytes)")
+                
+                # Clean up the downloaded video to save storage
+                try:
+                    if os.path.exists(downloaded_file):
+                        os.remove(downloaded_file)
+                        logger.info(f"Cleaned up downloaded video: {downloaded_file}")
+                except (OSError, IOError) as cleanup_error:
+                    logger.warning(f"Failed to clean up downloaded video: {cleanup_error}")
+                
+                return {
+                    'success': True,
+                    'clip_path': output_path,
+                    'clip_size_mb': clip_size / (1024 * 1024),
+                    'start_time': start_time,
+                    'end_time': end_time,
+                    'duration': end_time - start_time,
+                    'video_title': info.get('title', 'Unknown'),
+                    'temp_dir': temp_dir,
+                    'message': 'Clip created successfully. Original video deleted to save storage.'
+                }
+                
+        except yt_dlp.utils.DownloadError as e:
+            error_msg = str(e)
+            logger.error(f"Download error: {error_msg}")
+            
+            if 'bot' in error_msg.lower() or 'detect' in error_msg.lower():
+                return {
+                    'success': False,
+                    'error': 'YouTube bot detection triggered. Try again in a few minutes, or use a different video source.',
+                    'suggestion': 'Consider using videos from other platforms like Vimeo, which have fewer restrictions.'
+                }
+            elif 'unavailable' in error_msg.lower() or 'private' in error_msg.lower():
+                return {
+                    'success': False,
+                    'error': 'Video is unavailable or private. Please check the URL and permissions.'
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'Failed to download video: {error_msg}'
+                }
+                
+        except subprocess.CalledProcessError as e:
+            logger.error(f"FFmpeg subprocess error: {e}")
+            return {
+                'success': False,
+                'error': 'FFmpeg is not installed or failed to process the video. Install with: apt-get install ffmpeg'
+            }
+            
+        except Exception as e:
+            logger.error(f"Unexpected error in download_and_clip_video: {str(e)}", exc_info=True)
+            return {
+                'success': False,
+                'error': f'Unexpected error: {str(e)}'
+            }
+        
+        finally:
+            # Always clean up temp directory, regardless of success or failure
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    shutil.rmtree(temp_dir)
+                    logger.info(f"Cleaned up temporary directory: {temp_dir}")
+                except (OSError, IOError) as e:
+                    logger.warning(f"Failed to cleanup temp directory: {e}")
 
 
 # Global instance

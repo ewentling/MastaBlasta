@@ -40,6 +40,17 @@ export default function SocialMonitoringPage() {
     }
   };
 
+  const deleteTemplate = async (templateId: string) => {
+    if (!confirm('Delete this template?')) return;
+    try {
+      await axios.delete(`/api/response-templates/${templateId}`);
+      await loadTemplates(); // Auto-refresh after deletion
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      alert('Failed to delete template');
+    }
+  };
+
   const loadInteractions = async () => {
     try {
       const response = await axios.get('/api/chatbot/interactions?per_page=50');
@@ -398,8 +409,18 @@ export default function SocialMonitoringPage() {
                     backgroundColor: 'var(--color-bgSecondary)',
                   }}
                 >
-                  <div style={{ fontWeight: '600', marginBottom: '0.5rem', color: 'var(--color-textPrimary)' }}>
-                    {template.name}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '0.5rem' }}>
+                    <div style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>
+                      {template.name}
+                    </div>
+                    <button
+                      onClick={() => deleteTemplate(template.id)}
+                      className="btn btn-secondary"
+                      style={{ minWidth: 'auto', padding: '0.25rem 0.5rem' }}
+                      title="Delete template"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                   <div style={{ marginBottom: '0.5rem', color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
                     {template.template}
@@ -707,8 +728,31 @@ function CreateMonitorModal({
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
   const [enableAutoReply, setEnableAutoReply] = useState(false);
   const [replyMessage, setReplyMessage] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [templates, setTemplates] = useState<any[]>([]);
 
   const platforms = ['twitter', 'facebook', 'instagram', 'linkedin'];
+
+  // Load templates when component mounts
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        const response = await axios.get('/api/response-templates');
+        setTemplates(response.data);
+      } catch (error) {
+        console.error('Error loading templates:', error);
+      }
+    };
+    loadTemplates();
+  }, []);
+
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    const template = templates.find(t => t.id === templateId);
+    if (template) {
+      setReplyMessage(template.template);
+    }
+  };
 
   const addKeyword = () => {
     if (keywordInput.trim() && !keywords.includes(keywordInput.trim())) {
@@ -834,6 +878,21 @@ function CreateMonitorModal({
               </label>
               {enableAutoReply && (
                 <div>
+                  <label className="form-label">Select Template (Optional)</label>
+                  <select
+                    className="form-input"
+                    value={selectedTemplateId}
+                    onChange={(e) => handleTemplateSelect(e.target.value)}
+                    style={{ marginBottom: '0.75rem' }}
+                  >
+                    <option value="">-- Start from scratch --</option>
+                    {templates.map(template => (
+                      <option key={template.id} value={template.id}>
+                        {template.name} ({template.category})
+                      </option>
+                    ))}
+                  </select>
+
                   <label className="form-label">Reply Message *</label>
                   <textarea
                     className="form-textarea"

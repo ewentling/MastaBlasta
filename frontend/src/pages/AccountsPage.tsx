@@ -85,24 +85,10 @@ export default function AccountsPage() {
       <div className="card">
         <div className="card-header">
           <h3>Connected Accounts</h3>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn btn-secondary" onClick={() => setShowOAuthAppModal(true)}>
-              <Settings size={18} />
-              OAuth Apps
-            </button>
-            <button className="btn btn-primary" onClick={() => setShowOAuthModal(true)}>
-              <Zap size={18} />
-              Quick Connect
-            </button>
-          </div>
-        </div>
-
-        <div className="alert alert-info" style={{ margin: '1rem' }}>
-          <span style={{ fontSize: '0.875rem' }}>
-            💡 <strong>Getting Started:</strong> Click "OAuth Apps" to configure your own OAuth credentials for each platform, 
-            then use "Quick Connect" to link your social media accounts. This allows you to manage your own API apps without 
-            needing access to environment variables.
-          </span>
+          <button className="btn btn-primary" onClick={() => setShowOAuthModal(true)}>
+            <Zap size={18} />
+            Quick Connect
+          </button>
         </div>
 
         {isLoading ? (
@@ -322,12 +308,9 @@ function OAuthModal({
       
       // Check if response exists and OAuth is properly configured
       if (!response || !response.oauth_url) {
-        const envVars = response?.required_env_vars || [];
         throw new Error(
-          response?.message || 
-          `OAuth not configured for ${selectedPlatform}. ` +
-          `Please set these environment variables: ${envVars.join(', ')}. ` +
-          `See PLATFORM_SETUP.md for detailed instructions.`
+          `Unable to connect to ${selectedPlatform}. The platform's OAuth connection is not configured yet. ` +
+          `Please contact your administrator or configure custom OAuth credentials in Advanced settings.`
         );
       }
 
@@ -358,9 +341,9 @@ function OAuthModal({
           try {
             // Check if demo mode was used
             if (event.data.data?.demo_mode) {
+              // Successfully connected but inform about limitations
               setError(
-                `Connected in demo mode. For real OAuth, configure credentials. ` +
-                `The account may not work for actual posting without proper credentials.`
+                `Note: Connected in demo mode. For full functionality, configure OAuth credentials in Advanced settings.`
               );
             }
             
@@ -422,27 +405,8 @@ function OAuthModal({
             <Zap size={20} />
             <div>
               <span style={{ fontSize: '0.875rem' }}>
-                Connect your account in one click! You'll be redirected to authorize access.
+                <strong>Connect your social media accounts in one click!</strong> Select a platform below and you'll be redirected to authorize access.
               </span>
-              {oauthApps.length === 0 && (
-                <div style={{ marginTop: '0.5rem', fontSize: '0.875rem' }}>
-                  <strong>Note:</strong> You need to configure OAuth apps for the platforms you want to connect.{' '}
-                  <button
-                    type="button"
-                    onClick={onOpenOAuthApps}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: 'var(--color-primary)',
-                      textDecoration: 'underline',
-                      cursor: 'pointer',
-                      padding: 0,
-                    }}
-                  >
-                    Setup OAuth Apps
-                  </button>
-                </div>
-              )}
             </div>
           </div>
 
@@ -458,7 +422,7 @@ function OAuthModal({
               <option value="">Select a platform</option>
               {platforms.map(p => (
                 <option key={p.name} value={p.name}>
-                  {p.display_name} {hasOAuthApp(p.name) ? '✓ Configured' : '⚠️ Not configured'}
+                  {p.display_name}
                 </option>
               ))}
             </select>
@@ -477,6 +441,29 @@ function OAuthModal({
             <p style={{ color: 'var(--color-textTertiary)', fontSize: '0.75rem', marginTop: '0.5rem' }}>
               Leave empty to use default name
             </p>
+          </div>
+
+          {/* Advanced options - link to OAuth Apps for custom credentials */}
+          <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-borderLight)' }}>
+            <details style={{ fontSize: '0.875rem' }}>
+              <summary style={{ cursor: 'pointer', color: 'var(--color-textSecondary)', userSelect: 'none' }}>
+                <strong>Advanced:</strong> Use custom OAuth credentials
+              </summary>
+              <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: 'var(--color-bgSecondary)', borderRadius: '4px' }}>
+                <p style={{ color: 'var(--color-textSecondary)', marginBottom: '0.5rem' }}>
+                  By default, connections use the application's OAuth credentials. If you want to use your own API apps, you can configure custom OAuth credentials.
+                </p>
+                <button
+                  type="button"
+                  onClick={onOpenOAuthApps}
+                  className="btn btn-secondary btn-small"
+                  style={{ marginTop: '0.5rem' }}
+                >
+                  <Settings size={16} />
+                  Manage OAuth Apps
+                </button>
+              </div>
+            </details>
           </div>
         </div>
         <div className="modal-footer">
