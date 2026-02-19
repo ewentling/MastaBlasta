@@ -5683,7 +5683,7 @@ def oauth_init(platform):
     # No OAuth configured
     return jsonify({
         'error': 'OAuth not configured',
-        'message': f'Please configure OAuth credentials for {platform}. You can either add them in your account settings or set environment variables.',
+        'message': f'OAuth connection for {platform} is not currently configured. Please contact your administrator to enable {platform} integration, or configure custom OAuth credentials in the Advanced settings.',
         'platform': platform,
         'mode': 'none'
     }), 400
