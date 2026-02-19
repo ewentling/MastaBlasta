@@ -2,8 +2,9 @@ services:
   mastablasta:
     build: .
     container_name: mastablasta-api
-    ports:
-      - "33766:33766"
+    network_mode: host
+    env_file:
+      - .env
     environment:
       - PORT=33766
       - PYTHONUNBUFFERED=1

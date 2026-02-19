@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Panel - Square Integration</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f3f4f6; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { display: flex; align-items: center; gap: 12px; margin-bottom: 32px; }
+        .icon { width: 32px; height: 32px; color: #2563eb; }
+        h1 { font-size: 30px; font-weight: bold; color: #111827; margin: 0; }
+        .subtitle { color: #6b7280; margin-top: 8px; }
+        
+        .tabs { display: flex; gap: 32px; border-bottom: 2px solid #e5e7eb; margin-bottom: 24px; }
+        .tab { padding: 16px 4px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+        .tab.active { color: #2563eb; border-bottom-color: #2563eb; }
+        .tab:not(.active) { color: #6b7280; }
+        
+        .card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 24px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .card-title { font-size: 20px; font-weight: 600; }
+        .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+        .btn-primary { background: #2563eb; color: white; }
+        
+        .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 24px; }
+        .status-card { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+        .status-label { font-size: 14px; color: #6b7280; margin-bottom: 8px; }
+        .status-value { font-size: 18px; font-weight: 600; color: #111827; }
+        
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 4px; }
+        .form-input { width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-family: monospace; font-size: 14px; background: #f9fafb; color: #6b7280; }
+        
+        .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 16px; margin-top: 24px; }
+        .info-box h4 { color: #1e40af; margin: 0 0 8px 0; font-size: 14px; font-weight: 600; }
+        .info-box p { color: #1e3a8a; margin: 0 0 8px 0; font-size: 14px; }
+        .info-box ul { color: #1e3a8a; font-size: 14px; margin: 8px 0; padding-left: 24px; }
+        .info-box code { background: #dbeafe; padding: 2px 4px; border-radius: 4px; }
+        
+        .badge { display: inline-flex; align-items: center; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+        .badge.success { background: #dcfce7; color: #166534; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+            </svg>
+            <div>
+                <h1>Admin Dashboard</h1>
+                <p class="subtitle">Manage users, subscriptions, and monitor system metrics</p>
+            </div>
+        </div>
+        
+        <div class="tabs">
+            <div class="tab">📊 User Management</div>
+            <div class="tab">📈 System Metrics</div>
+            <div class="tab active">⚙️ Square Integration</div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">Square Payment Integration</div>
+                    <p class="subtitle">Manage your Square payment gateway configuration for subscriptions</p>
+                </div>
+                <button class="btn btn-primary">✓ Test Connection</button>
+            </div>
+            
+            <div class="status-grid">
+                <div class="status-card">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <div class="status-label">Status</div>
+                        <span class="badge success">✓</span>
+                    </div>
+                    <div class="status-value">Configured</div>
+                </div>
+                <div class="status-card">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <div class="status-label">Environment</div>
+                        <span style="color: #2563eb;">⚙️</span>
+                    </div>
+                    <div class="status-value">Production</div>
+                </div>
+                <div class="status-card">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <div class="status-label">Location ID</div>
+                        <span style="color: #7c3aed;">💳</span>
+                    </div>
+                    <div class="status-value" style="font-size: 12px; font-family: monospace;">LXYZ...5678</div>
+                </div>
+            </div>
+            
+            <div style="border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+                <div style="background: #f9fafb; padding: 12px 16px; border-bottom: 1px solid #e5e7eb;">
+                    <div style="font-weight: 600; color: #111827;">Configuration Details</div>
+                </div>
+                <div style="padding: 16px;">
+                    <div class="form-group">
+                        <label class="form-label">Access Token</label>
+                        <input type="text" class="form-input" value="************************************************abcd" readonly>
+                        <span style="font-size: 12px; color: #6b7280; margin-top: 4px; display: inline-block;">Masked for security</span>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Webhook Signature Key</label>
+                        <input type="text" class="form-input" value="********************************************************wxyz" readonly>
+                        <span style="font-size: 12px; color: #6b7280; margin-top: 4px; display: inline-block;">Masked for security</span>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                        <div>
+                            <label class="form-label">Starter Plan ID</label>
+                            <input type="text" class="form-input" value="STARTER_PLAN_123" readonly>
+                        </div>
+                        <div>
+                            <label class="form-label">Pro Plan ID</label>
+                            <input type="text" class="form-input" value="PRO_PLAN_456" readonly>
+                        </div>
+                        <div>
+                            <label class="form-label">Enterprise Plan ID</label>
+                            <input type="text" class="form-input" value="ENT_PLAN_789" readonly>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="info-box">
+                <div style="display: flex; align-items: start; gap: 12px;">
+                    <span style="color: #2563eb; font-size: 20px;">⚠️</span>
+                    <div>
+                        <h4>Configuration Update</h4>
+                        <p>To update Square configuration, set the following environment variables and restart the application:</p>
+                        <ul>
+                            <li><code>SQUARE_ACCESS_TOKEN</code> - Your Square API access token</li>
+                            <li><code>SQUARE_ENVIRONMENT</code> - Either "sandbox" or "production"</li>
+                            <li><code>SQUARE_LOCATION_ID</code> - Your Square location ID</li>
+                            <li><code>SQUARE_WEBHOOK_SIGNATURE_KEY</code> - Webhook signature key from Square</li>
+                            <li><code>SQUARE_CATALOG_*</code> - Catalog object IDs for each subscription tier</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

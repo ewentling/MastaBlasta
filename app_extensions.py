@@ -38,7 +38,7 @@ try:
         verify_token, decrypt_token
     )
     from oauth import TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth
-    from media_utils import MediaUploadHandler, validate_file_upload
+    from media_utils import save_uploaded_file, validate_file_size, is_allowed_file
     DB_ENABLED = True
 except ImportError as e:
     logging.warning(f"Production infrastructure not fully available: {e}")
@@ -280,22 +280,37 @@ class MediaManager:
     """Manages media uploads and library"""
 
     def __init__(self):
-        self.handler = MediaUploadHandler() if DB_ENABLED else None
         self.enabled = DB_ENABLED
 
-    def upload_media(self, user_id: str, file_data: bytes, filename: str, mime_type: str) -> Dict:
+    def upload_media(self, user_id: str, file_obj, filename: str, mime_type: str = None) -> Dict:
         """Upload media file"""
         if not self.enabled:
             return {'error': 'Media upload not enabled'}
 
         try:
-            # Validate file
-            validation = validate_file_upload(file_data, mime_type, filename)
-            if not validation['valid']:
-                return {'error': validation['error']}
+            # Determine file type if not provided
+            if not mime_type:
+                import mimetypes
+                mime_type, _ = mimetypes.guess_type(filename)
+                mime_type = mime_type or 'application/octet-stream'
+            
+            # Validate file type
+            file_type = 'image' if mime_type.startswith('image/') else 'video' if mime_type.startswith('video/') else 'other'
+            if file_type in ['image', 'video'] and not is_allowed_file(filename, file_type):
+                return {'error': f'Invalid {file_type} file type'}
+            
+            # Validate file size
+            from media_utils import MAX_IMAGE_SIZE, MAX_VIDEO_SIZE
+            max_size = MAX_IMAGE_SIZE if file_type == 'image' else MAX_VIDEO_SIZE
+            valid, error = validate_file_size(file_obj, max_size)
+            if not valid:
+                return {'error': error}
 
-            # Save file
-            result = self.handler.save_file(user_id, file_data, filename, mime_type)
+            # Save file using media_utils
+            result = save_uploaded_file(file_obj, user_id, filename)
+            
+            if 'error' in result:
+                return result
 
             # Store in database
             with db_session_scope() as session:
@@ -304,8 +319,8 @@ class MediaManager:
                     user_id=user_id,
                     filename=result['filename'],
                     file_path=result['file_path'],
-                    mime_type=mime_type,
-                    file_size=len(file_data),
+                    mime_type=result['mime_type'],
+                    file_size=result['file_size'],
                     width=result.get('width'),
                     height=result.get('height'),
                     thumbnail_path=result.get('thumbnail_path'),
