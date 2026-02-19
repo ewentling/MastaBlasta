@@ -7407,6 +7407,47 @@ def clips_download_info():
     return jsonify(result)
 
 
+@app.route('/api/clips/create-clip', methods=['POST'])
+def clips_create_clip():
+    """
+    Download video, create clip, and delete original.
+    This endpoint addresses bot detection by downloading the full video first.
+
+    Request body:
+    {
+        "video_url": "https://youtube.com/watch?v=...",
+        "start_time": 45,
+        "end_time": 75,
+        "output_path": "/path/to/output.mp4"  # Optional
+    }
+    """
+    data = request.get_json()
+
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    video_url = data.get('video_url', '').strip()
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+    output_path = data.get('output_path')
+
+    if not video_url:
+        return jsonify({'error': 'video_url is required'}), 400
+
+    if start_time is None or end_time is None:
+        return jsonify({'error': 'start_time and end_time are required'}), 400
+
+    if start_time < 0 or end_time < 0 or start_time >= end_time:
+        return jsonify({'error': 'Invalid time range. start_time must be less than end_time'}), 400
+
+    result = video_clipper.download_and_clip_video(video_url, start_time, end_time, output_path)
+
+    if not result.get('success'):
+        return jsonify(result), 400
+
+    return jsonify(result)
+
+
 @app.route('/api/clips/schedule', methods=['POST'])
 def clips_schedule():
     """
