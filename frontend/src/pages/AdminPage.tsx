@@ -141,7 +141,7 @@ const adminApi = {
 
 function Avatar({ name, email }: { name?: string; email: string }) {
   const initials = name
-    ? name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase()
+    ? name.split(' ').filter((w) => w).map((w) => w[0]).slice(0, 2).join('').toUpperCase()
     : email.slice(0, 2).toUpperCase();
   const colors = ['bg-violet-500', 'bg-blue-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-cyan-500'];
   const color = colors[email.charCodeAt(0) % colors.length];
@@ -712,6 +712,12 @@ export default function AdminPage() {
                   <option value="editor">Editor</option>
                   <option value="admin">Admin</option>
                 </select>
+                {addUserForm.role === 'admin' && (
+                  <p className="mt-1.5 text-xs text-amber-600 flex items-center gap-1">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                    Admin users have full access to all system settings.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Password <span className="text-red-500">*</span></label>
@@ -720,7 +726,7 @@ export default function AdminPage() {
             </div>
             <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl">
               <button onClick={() => { setShowAddUser(false); setAddUserError(''); }} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
-              <button onClick={() => createUserMutation.mutate(addUserForm)} disabled={!addUserForm.email || !addUserForm.password || createUserMutation.isPending} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              <button onClick={() => createUserMutation.mutate(addUserForm)} disabled={!addUserForm.email || addUserForm.password.length < 8 || createUserMutation.isPending} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                 {createUserMutation.isPending ? 'Creating\u2026' : 'Create User'}
               </button>
             </div>

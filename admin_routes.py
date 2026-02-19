@@ -401,6 +401,117 @@ def activate_user(user_id):
         return jsonify({'error': 'Failed to activate user'}), 500
 
 
+@admin_bp.route('/users', methods=['POST'])
+@auth_required
+@admin_only
+def create_user():
+    """Create a new user account"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+
+    try:
+        from database import db_session_scope
+        from auth import hash_password
+
+        data = request.get_json() or {}
+        email = data.get('email', '').strip().lower()
+        full_name = data.get('full_name', '').strip()
+        role_str = data.get('role', 'editor').lower()
+        password = data.get('password', '')
+
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        if not password or len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
+        try:
+            role = UserRole(role_str)
+        except ValueError:
+            return jsonify({'error': f'Invalid role: {role_str}'}), 400
+
+        with db_session_scope() as db_session:
+            existing = db_session.query(User).filter_by(email=email).first()
+            if existing:
+                return jsonify({'error': 'A user with that email already exists'}), 409
+
+            user = User(
+                id=str(uuid4()),
+                email=email,
+                full_name=full_name,
+                password_hash=hash_password(password),
+                role=role,
+                is_active=True,
+                auth_provider='email',
+            )
+            db_session.add(user)
+            db_session.commit()
+
+            logger.info(f"Admin {g.current_user['email']} created user {email}")
+            SecurityLogger.log_event(
+                'admin_user_created',
+                g.current_user['id'],
+                {'new_user_email': email, 'role': role_str}
+            )
+
+            return jsonify({
+                'message': 'User created successfully',
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'full_name': user.full_name,
+                    'role': user.role.value,
+                    'is_active': user.is_active,
+                    'created_at': user.created_at.isoformat(),
+                }
+            }), 201
+
+    except Exception as e:
+        logger.error(f"Error creating user: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to create user'}), 500
+
+
+@admin_bp.route('/users/<user_id>', methods=['DELETE'])
+@auth_required
+@admin_only
+def delete_user(user_id):
+    """Permanently delete a user account"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+
+    try:
+        from database import db_session_scope
+
+        with db_session_scope() as db_session:
+            user = db_session.query(User).filter_by(id=user_id).first()
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+
+            # Prevent deleting admin accounts
+            if user.role == UserRole.ADMIN:
+                return jsonify({'error': 'Cannot delete admin users'}), 403
+
+            # Prevent self-deletion
+            if user.id == g.current_user['id']:
+                return jsonify({'error': 'Cannot delete your own account'}), 403
+
+            email = user.email
+            db_session.delete(user)
+            db_session.commit()
+
+            logger.warning(f"Admin {g.current_user['email']} deleted user {email}")
+            SecurityLogger.log_event(
+                'admin_user_deleted',
+                g.current_user['id'],
+                {'deleted_user_id': user_id, 'deleted_user_email': email}
+            )
+
+            return jsonify({'message': 'User deleted successfully', 'user_id': user_id}), 200
+
+    except Exception as e:
+        logger.error(f"Error deleting user: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to delete user'}), 500
+
+
 # ==================== SYSTEM METRICS ====================
 
 @admin_bp.route('/metrics', methods=['GET'])
