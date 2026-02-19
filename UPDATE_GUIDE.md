@@ -765,7 +765,7 @@ When reporting update problems, include:
 
 - [Production Setup Guide](PRODUCTION_SETUP.md)
 - [Database Migration Guide](DATABASE_MIGRATION_FIX.md)
-- [Security Best Practices](SECURITY_REVIEW_COMPLETE.md)
+- [Security Best Practices](SECURITY_AUDIT.md)
 - [Deployment Checklist](DEPLOYMENT_CHECKLIST.md)
 
 ---

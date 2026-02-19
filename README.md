@@ -1,6 +1,29 @@
 # MastaBlasta
 A production-ready multi-platform social media posting service that allows easy posting to multiple social media platforms at once.
 
+> 📖 **[View Complete Documentation Index](DOCUMENTATION_INDEX.md)** - Organized guide to all documentation files
+
+## 📚 Table of Contents
+
+- [🚀 Production-Ready Features](#-production-ready-features)
+- [✨ Features](#-features)
+- [🎯 Supported Platforms](#-supported-platforms)
+- [🚀 Quick Start](#-quick-start)
+- [🔗 Social Platform Connection](#-social-platform-connection)
+- [🔐 Authentication & Google Services Setup](#-authentication--google-services-setup)
+- [🏭 Production Deployment](#-production-deployment)
+- [🌐 Web UI](#-web-ui)
+- [🔌 API Endpoints](#-api-endpoints)
+- [🏗️ Architecture](#️-architecture)
+- [⚙️ Configuration](#️-configuration)
+- [🤖 AI API Endpoints](#-ai-api-endpoints)
+- [🛠️ Development](#️-development)
+- [🧪 Testing](#-testing)
+- [❓ Troubleshooting](#-troubleshooting)
+- [📖 Additional Documentation](#-additional-documentation)
+- [📝 License](#-license)
+- [🤝 Contributing](#-contributing)
+
 ## 🚀 Production-Ready Features
 
 **MastaBlasta now includes enterprise-grade infrastructure for production deployment:**
@@ -22,7 +45,7 @@ A production-ready multi-platform social media posting service that allows easy 
 
 See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 
-## Features
+## ✨ Features
 
 ### Core Features
 - **Web UI**: Modern React TypeScript interface for managing accounts and posting
@@ -147,7 +170,7 @@ See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 - **Hook Suggestions**: Catchy titles and hooks for maximum engagement
 - **Batch Processing**: Analyze one video and get multiple clip opportunities at once
 
-## Supported Platforms
+## 🎯 Supported Platforms
 
 ### LinkedIn
 - **Personal Profiles**: Post to your personal LinkedIn profile
@@ -405,7 +428,7 @@ This will create all necessary tables including:
 - GoogleServices table for Calendar and Drive integrations
 - Posts, Media, Analytics, and other tables
 
-## Production Deployment Guide
+## 🏭 Production Deployment
 
 ### Required Configuration for Production
 
@@ -562,7 +585,7 @@ npm run dev  # Development server on port 5173
 - Without the build step, the backend has no static files to serve, so you must use the development server at `http://localhost:5173` instead
 - Docker deployments automatically run `npm run build` during image creation, so no manual build is needed
 
-## Web UI
+## 🌐 Web UI
 
 The application includes a modern, intuitive web interface built with React and TypeScript.
 
@@ -609,7 +632,7 @@ Features:
 - Download instructions with FFmpeg commands
 - Platform-specific optimization for TikTok, Instagram Reels, YouTube Shorts
 
-## API Endpoints
+## 🔌 API Endpoints
 
 ### Health Check
 ```bash
@@ -1122,7 +1145,7 @@ Deletes a post or cancels a scheduled post.
 }
 ```
 
-## Architecture
+## 🏗️ Architecture
 
 MastaBlasta is built with:
 - **Flask**: Lightweight Python web framework
@@ -1137,7 +1160,7 @@ Each social media platform has its own adapter class that:
 2. Formats content according to platform requirements (e.g., Twitter's 280 character limit)
 3. Handles platform-specific API calls
 
-## Configuration
+## ⚙️ Configuration
 
 Set environment variables:
 - `PORT`: API port (default: 33766)
@@ -1245,7 +1268,7 @@ brew install ffmpeg
 # Download from https://ffmpeg.org/download.html
 ```
 
-## AI API Endpoints
+## 🤖 AI API Endpoints
 
 ### Content Generation
 
@@ -2426,7 +2449,7 @@ POST /api/clips/schedule
 }
 ```
 
-## Development
+## 🛠️ Development
 
 ### Adding New Platforms
 
@@ -2458,7 +2481,7 @@ class TikTokAdapter(PlatformAdapter):
 PLATFORM_ADAPTERS['tiktok'] = TikTokAdapter()
 ```
 
-## Testing
+## 🧪 Testing
 
 Test the API with curl:
 
@@ -2481,10 +2504,151 @@ curl -X POST http://localhost:33766/api/post \
 curl http://localhost:33766/api/posts
 ```
 
-## License
+## ❓ Troubleshooting
+
+### Admin Login Issues
+
+If you're unable to login with the default admin credentials (`admin@mastablasta.com` / `ChangeMe123!`):
+
+1. **Check if the database migration was applied:**
+   ```bash
+   alembic upgrade head
+   ```
+
+2. **Verify the admin account exists:**
+   ```sql
+   SELECT email, is_active, password_must_change FROM users WHERE email = 'admin@mastablasta.com';
+   ```
+
+3. **If admin doesn't exist, restart the app** - it will be created automatically on startup.
+
+For more details, see [DATABASE_MIGRATION_FIX.md](DATABASE_MIGRATION_FIX.md).
+
+### Database Connection Issues
+
+If you see "Database not enabled" errors:
+
+1. **Set the DATABASE_URL environment variable:**
+   ```bash
+   export DATABASE_URL="postgresql://username:password@host:5432/mastablasta"
+   ```
+
+2. **For Docker, ensure DATABASE_URL is in your .env file:**
+   ```bash
+   DATABASE_URL=postgresql://postgres:password@localhost/mastablasta
+   ```
+
+3. **Verify PostgreSQL is running:**
+   ```bash
+   # Check if PostgreSQL is running
+   pg_isready
+   
+   # Test connection
+   psql $DATABASE_URL -c "SELECT 1"
+   ```
+
+### OAuth Connection Failures
+
+If platform connections are failing:
+
+1. **Check your OAuth credentials are correctly configured** in `.env`
+2. **Verify callback URLs match** your configuration (must use exact domain/port)
+3. **Check platform-specific setup guides:**
+   - [Twitter/X OAuth Setup](TWITTER_OAUTH_SETUP.md)
+   - [Facebook OAuth Setup](FACEBOOK_OAUTH_SETUP.md)
+   - [LinkedIn OAuth Setup](LINKEDIN_OAUTH_SETUP.md)
+   - [Instagram OAuth Setup](INSTAGRAM_OAUTH_SETUP.md)
+   - [YouTube OAuth Setup](YOUTUBE_OAUTH_SETUP.md)
+
+4. **Common issues:**
+   - **Expired tokens:** Use the reconnection wizard in the UI
+   - **Missing permissions:** Check the permission inspector
+   - **Invalid redirect URI:** Must match exactly what's in your OAuth app settings
+
+### Video Clipping Bot Detection
+
+If YouTube video clipping is being blocked:
+
+- The system automatically uses multiple player clients (android, web) with user-agent spoofing
+- Videos are downloaded first, then clipped locally to avoid detection
+- If issues persist, try using different video URLs or wait before retrying
+
+### Frontend Build Issues
+
+If the frontend fails to build:
+
+1. **Clear node_modules and reinstall:**
+   ```bash
+   cd frontend
+   rm -rf node_modules package-lock.json
+   npm install
+   ```
+
+2. **Check Node.js version:**
+   ```bash
+   node --version  # Should be v18 or higher
+   ```
+
+3. **Build with verbose output:**
+   ```bash
+   npm run build -- --verbose
+   ```
+
+### Update Script Issues
+
+If the update script (`./update.sh`) fails:
+
+1. **Check prerequisites:**
+   - Git installed and repo is a git repository
+   - Database is accessible
+   - No uncommitted changes (or use `--skip-git-check`)
+
+2. **Run with debug output:**
+   ```bash
+   bash -x ./update.sh
+   ```
+
+3. **Manual update process:**
+   ```bash
+   git pull
+   pip install -r requirements.txt
+   cd frontend && npm install && npm run build && cd ..
+   alembic upgrade head
+   # Restart your application
+   ```
+
+For more troubleshooting help, see the [QUICK_START.md](QUICK_START.md) and [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md) guides.
+
+## 📖 Additional Documentation
+
+- **[QUICK_START.md](QUICK_START.md)** - 5-minute setup guide for development and production
+- **[IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)** - Complete architecture and feature documentation
+- **[PRODUCTION_SETUP.md](PRODUCTION_SETUP.md)** - Detailed production deployment guide
+- **[DEPLOYMENT_CHECKLIST.md](DEPLOYMENT_CHECKLIST.md)** - Pre-deployment verification checklist
+- **[UPDATE_GUIDE.md](UPDATE_GUIDE.md)** - How to update to newer versions
+- **[SECURITY_AUDIT.md](SECURITY_AUDIT.md)** - Security configuration and best practices
+- **[PLATFORM_SETUP.md](PLATFORM_SETUP.md)** - Overview of all platform integrations
+
+### Platform-Specific Guides
+
+**OAuth Setup (for administrators):**
+- [Facebook OAuth Setup](FACEBOOK_OAUTH_SETUP.md)
+- [Twitter/X OAuth Setup](TWITTER_OAUTH_SETUP.md)
+- [LinkedIn OAuth Setup](LINKEDIN_OAUTH_SETUP.md)
+- [Instagram OAuth Setup](INSTAGRAM_OAUTH_SETUP.md)
+- [YouTube OAuth Setup](YOUTUBE_OAUTH_SETUP.md)
+
+**User Connection Guides:**
+- [Quick Connect to Facebook](QUICK_FACEBOOK_CONNECT.md)
+- [Quick Connect to Twitter/X](QUICK_TWITTER_CONNECT.md)
+- [Quick Connect to LinkedIn](QUICK_LINKEDIN_CONNECT.md)
+- [Quick Connect to Instagram](QUICK_INSTAGRAM_CONNECT.md)
+- [Quick Connect to YouTube](QUICK_YOUTUBE_CONNECT.md)
+
+## 📝 License
 
 MIT License
 
-## Contributing
+## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
