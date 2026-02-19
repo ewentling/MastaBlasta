@@ -1,6 +1,8 @@
 # MastaBlasta
 A production-ready multi-platform social media posting service that allows easy posting to multiple social media platforms at once.
 
+> 📖 **[View Complete Documentation Index](DOCUMENTATION_INDEX.md)** - Organized guide to all documentation files
+
 ## 📚 Table of Contents
 
 - [🚀 Production-Ready Features](#-production-ready-features)

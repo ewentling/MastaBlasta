@@ -114,7 +114,6 @@ curl -X GET http://localhost:33766/api/v2/posts \
 
 - **Full Documentation**: See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)
 - **Setup Details**: See [PRODUCTION_SETUP.md](PRODUCTION_SETUP.md)
-- **Implementation Details**: See [IMPLEMENTATION_COMPLETE.md](IMPLEMENTATION_COMPLETE.md)
 - **Main README**: See [README.md](README.md)
 
 ---
