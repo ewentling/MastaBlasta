@@ -80,7 +80,7 @@ const adminApi = {
   getUsers: async (): Promise<{ users: User[]; total: number }> => {
     const response = await fetch('/api/admin/users', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
       },
     });
     if (!response.ok) throw new Error('Failed to fetch users');
@@ -90,7 +90,7 @@ const adminApi = {
   getUserDetails: async (userId: string): Promise<UserDetails> => {
     const response = await fetch(`/api/admin/users/${userId}`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
       },
     });
     if (!response.ok) throw new Error('Failed to fetch user details');
@@ -102,7 +102,7 @@ const adminApi = {
       method: 'PATCH',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
       },
       body: JSON.stringify(data),
     });
@@ -115,7 +115,7 @@ const adminApi = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
       },
       body: JSON.stringify({ reason }),
     });
@@ -127,7 +127,7 @@ const adminApi = {
     const response = await fetch(`/api/admin/users/${userId}/activate`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
       },
     });
     if (!response.ok) throw new Error('Failed to activate user');
@@ -137,7 +137,7 @@ const adminApi = {
   getMetrics: async (): Promise<SystemMetrics> => {
     const response = await fetch('/api/admin/metrics', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
       },
     });
     if (!response.ok) throw new Error('Failed to fetch metrics');
@@ -147,7 +147,7 @@ const adminApi = {
   getTiers: async () => {
     const response = await fetch('/api/admin/subscription-tiers', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
       },
     });
     if (!response.ok) throw new Error('Failed to fetch tiers');
@@ -168,7 +168,7 @@ const adminApi = {
     const response = await fetch('/api/admin/square-test-connection', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
       },
     });
     if (!response.ok) throw new Error('Failed to test Square connection');
