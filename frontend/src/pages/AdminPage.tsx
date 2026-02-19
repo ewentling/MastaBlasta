@@ -157,7 +157,7 @@ const adminApi = {
   getSquareConfig: async () => {
     const response = await fetch('/api/admin/square-config', {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
       },
     });
     if (!response.ok) throw new Error('Failed to fetch Square config');

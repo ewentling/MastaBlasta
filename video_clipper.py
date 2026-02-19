@@ -511,8 +511,10 @@ Provide ONLY the JSON response."""
 
         import tempfile
         import subprocess
+        import shutil
         
-        temp_video_path = None
+        temp_dir = None
+        downloaded_file = None
         
         try:
             # Create temporary directory for download
@@ -557,8 +559,7 @@ Provide ONLY the JSON response."""
                 # Generate output path if not provided
                 if not output_path:
                     # Create more descriptive filename including video title
-                    import re
-                    # Sanitize video title for filename
+                    # Sanitize video title for filename (re already imported at module level)
                     safe_title = re.sub(r'[^\w\s-]', '', info.get('title', 'video'))[:50]
                     safe_title = re.sub(r'[-\s]+', '_', safe_title).strip('_')
                     clip_filename = f"clip_{safe_title}_{start_time}_{end_time}_{int(datetime.now(timezone.utc).timestamp())}.mp4"
@@ -623,14 +624,6 @@ Provide ONLY the JSON response."""
             error_msg = str(e)
             logger.error(f"Download error: {error_msg}")
             
-            # Clean up temp directory on error
-            if temp_video_path and os.path.exists(os.path.dirname(temp_video_path)):
-                try:
-                    import shutil
-                    shutil.rmtree(os.path.dirname(temp_video_path))
-                except (OSError, IOError) as e:
-                    logger.warning(f"Failed to cleanup temp directory: {e}")
-            
             if 'bot' in error_msg.lower() or 'detect' in error_msg.lower():
                 return {
                     'success': False,
@@ -657,19 +650,19 @@ Provide ONLY the JSON response."""
             
         except Exception as e:
             logger.error(f"Unexpected error in download_and_clip_video: {str(e)}", exc_info=True)
-            
-            # Clean up on error
-            if temp_video_path and os.path.exists(os.path.dirname(temp_video_path)):
-                try:
-                    import shutil
-                    shutil.rmtree(os.path.dirname(temp_video_path))
-                except (OSError, IOError) as e:
-                    logger.warning(f"Failed to cleanup temp directory: {e}")
-            
             return {
                 'success': False,
                 'error': f'Unexpected error: {str(e)}'
             }
+        
+        finally:
+            # Always clean up temp directory, regardless of success or failure
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    shutil.rmtree(temp_dir)
+                    logger.info(f"Cleaned up temporary directory: {temp_dir}")
+                except (OSError, IOError) as e:
+                    logger.warning(f"Failed to cleanup temp directory: {e}")
 
 
 # Global instance
