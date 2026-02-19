@@ -7438,7 +7438,7 @@ def clips_create_clip():
         return jsonify({'error': 'start_time and end_time are required'}), 400
 
     if start_time < 0 or end_time < 0 or start_time >= end_time:
-        return jsonify({'error': 'Invalid time range. start_time must be less than end_time'}), 400
+        return jsonify({'error': 'Invalid time range. Times must be non-negative and start_time must be less than end_time'}), 400
 
     result = video_clipper.download_and_clip_video(video_url, start_time, end_time, output_path)
 

@@ -556,7 +556,12 @@ Provide ONLY the JSON response."""
                 
                 # Generate output path if not provided
                 if not output_path:
-                    clip_filename = f"clip_{start_time}_{end_time}_{int(datetime.now(timezone.utc).timestamp())}.mp4"
+                    # Create more descriptive filename including video title
+                    import re
+                    # Sanitize video title for filename
+                    safe_title = re.sub(r'[^\w\s-]', '', info.get('title', 'video'))[:50]
+                    safe_title = re.sub(r'[-\s]+', '_', safe_title).strip('_')
+                    clip_filename = f"clip_{safe_title}_{start_time}_{end_time}_{int(datetime.now(timezone.utc).timestamp())}.mp4"
                     output_path = os.path.join(temp_dir, clip_filename)
                 
                 # Use ffmpeg to extract the clip
@@ -599,7 +604,7 @@ Provide ONLY the JSON response."""
                     if os.path.exists(downloaded_file):
                         os.remove(downloaded_file)
                         logger.info(f"Cleaned up downloaded video: {downloaded_file}")
-                except Exception as cleanup_error:
+                except (OSError, IOError) as cleanup_error:
                     logger.warning(f"Failed to clean up downloaded video: {cleanup_error}")
                 
                 return {
@@ -623,8 +628,8 @@ Provide ONLY the JSON response."""
                 try:
                     import shutil
                     shutil.rmtree(os.path.dirname(temp_video_path))
-                except:
-                    pass
+                except (OSError, IOError) as e:
+                    logger.warning(f"Failed to cleanup temp directory: {e}")
             
             if 'bot' in error_msg.lower() or 'detect' in error_msg.lower():
                 return {
@@ -658,8 +663,8 @@ Provide ONLY the JSON response."""
                 try:
                     import shutil
                     shutil.rmtree(os.path.dirname(temp_video_path))
-                except:
-                    pass
+                except (OSError, IOError) as e:
+                    logger.warning(f"Failed to cleanup temp directory: {e}")
             
             return {
                 'success': False,
