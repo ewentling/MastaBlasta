@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Shield, Users, BarChart3, CreditCard, CheckCircle, XCircle, Clock, AlertTriangle, Crown, Zap, TrendingUp, Settings } from 'lucide-react';
+import { Shield, Users, BarChart3, CreditCard, CheckCircle, XCircle, Clock, AlertTriangle, Crown, Zap, TrendingUp, Settings, DollarSign, Mail, Flag, Activity } from 'lucide-react';
 import { formatDateTime } from '../utils/timezone';
+import { UserGrowthChart } from '../components/admin/UserGrowthChart';
+import { RevenueChart } from '../components/admin/RevenueChart';
+import { SubscriptionDistributionChart } from '../components/admin/SubscriptionDistributionChart';
+import { SystemHealthPanel } from '../components/admin/SystemHealthPanel';
+import { RevenueSummaryCards } from '../components/admin/RevenueSummaryCards';
+import { FailedPaymentsTable } from '../components/admin/FailedPaymentsTable';
+import { EmailComposer } from '../components/admin/EmailComposer';
+import { PostModerationTable } from '../components/admin/PostModerationTable';
 
 // Types
 interface User {
@@ -170,7 +178,7 @@ const adminApi = {
 
 export default function AdminPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'users' | 'metrics' | 'square'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'metrics' | 'square' | 'analytics' | 'revenue' | 'email' | 'moderation'>('users');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [editingSubscription, setEditingSubscription] = useState(false);
   const [subscriptionForm, setSubscriptionForm] = useState({
@@ -321,10 +329,10 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="mb-6 border-b border-gray-200">
-          <nav className="-mb-px flex space-x-8">
+          <nav className="-mb-px flex space-x-8 overflow-x-auto">
             <button
               onClick={() => setActiveTab('users')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                 activeTab === 'users'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -335,7 +343,7 @@ export default function AdminPage() {
             </button>
             <button
               onClick={() => setActiveTab('metrics')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                 activeTab === 'metrics'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -345,8 +353,52 @@ export default function AdminPage() {
               System Metrics
             </button>
             <button
+              onClick={() => setActiveTab('analytics')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === 'analytics'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Activity className="w-5 h-5 inline-block mr-2" />
+              Analytics
+            </button>
+            <button
+              onClick={() => setActiveTab('revenue')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === 'revenue'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <DollarSign className="w-5 h-5 inline-block mr-2" />
+              Revenue
+            </button>
+            <button
+              onClick={() => setActiveTab('email')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === 'email'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Mail className="w-5 h-5 inline-block mr-2" />
+              Email
+            </button>
+            <button
+              onClick={() => setActiveTab('moderation')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                activeTab === 'moderation'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Flag className="w-5 h-5 inline-block mr-2" />
+              Moderation
+            </button>
+            <button
               onClick={() => setActiveTab('square')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                 activeTab === 'square'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -679,6 +731,44 @@ export default function AdminPage() {
                 <div className="text-center py-8 text-gray-500">Failed to load Square configuration</div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Analytics Tab */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <SystemHealthPanel />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <UserGrowthChart />
+              <RevenueChart />
+            </div>
+            <SubscriptionDistributionChart />
+          </div>
+        )}
+
+        {/* Revenue Tab */}
+        {activeTab === 'revenue' && (
+          <div className="space-y-6">
+            <RevenueSummaryCards />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <RevenueChart days={180} />
+              <SubscriptionDistributionChart />
+            </div>
+            <FailedPaymentsTable />
+          </div>
+        )}
+
+        {/* Email Tab */}
+        {activeTab === 'email' && (
+          <div>
+            <EmailComposer />
+          </div>
+        )}
+
+        {/* Moderation Tab */}
+        {activeTab === 'moderation' && (
+          <div>
+            <PostModerationTable />
           </div>
         )}
 
