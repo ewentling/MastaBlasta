@@ -6768,6 +6768,82 @@ def delete_post(post_id):
     })
 
 
+@app.route('/api/posts/<post_id>', methods=['PATCH'])
+def update_post(post_id):
+    """Update a scheduled post's content, media, accounts and/or scheduled time"""
+    post = posts_db.get(post_id)
+
+    if not post:
+        return jsonify({'error': 'Post not found'}), 404
+
+    if post['status'] != 'scheduled':
+        return jsonify({'error': 'Only scheduled posts can be edited'}), 400
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    if 'content' in data:
+        post['content'] = data['content']
+
+    if 'media' in data:
+        post['media'] = data['media']
+
+    if 'account_ids' in data:
+        account_ids = data['account_ids']
+        platforms = []
+        for account_id in account_ids:
+            account = accounts_db.get(account_id)
+            if not account:
+                return jsonify({'error': f'Account {account_id} not found'}), 404
+            platforms.append(account['platform'])
+        post['account_ids'] = account_ids
+        post['platforms'] = platforms
+
+    if 'scheduled_time' in data:
+        new_time = data['scheduled_time']
+        try:
+            scheduled_time_normalized = new_time.replace('Z', '+00:00')
+            scheduled_dt = datetime.fromisoformat(scheduled_time_normalized)
+        except ValueError:
+            return jsonify({'error': 'Invalid scheduled_time format. Use ISO 8601 format'}), 400
+
+        if scheduled_dt <= datetime.now(scheduled_dt.tzinfo):
+            return jsonify({'error': 'Scheduled time must be in the future'}), 400
+
+        # Remove old scheduled job and create updated one
+        try:
+            scheduler.remove_job(post_id)
+        except Exception as e:
+            logger.warning(f"Could not remove old job {post_id}: {e}")
+
+        platforms = post['platforms']
+        content = post['content']
+        media = post['media']
+        credentials = {}
+        for account_id in post.get('account_ids', []):
+            account = accounts_db.get(account_id)
+            if account:
+                credentials[account['platform']] = account.get('credentials', {})
+
+        post_type = post.get('post_type', 'standard')
+        post_options = post.get('post_options', {})
+
+        scheduler.add_job(
+            publish_to_platforms,
+            'date',
+            run_date=scheduled_dt,
+            args=[post_id, platforms, content, media, credentials, post_type, post_options],
+            id=post_id
+        )
+        post['scheduled_for'] = new_time
+
+    posts_db[post_id] = post
+    logger.info(f"Updated scheduled post {post_id}")
+
+    return jsonify({'success': True, 'post': post})
+
+
 @app.route('/', methods=['GET'])
 def index():
     """Serve the frontend or API information"""

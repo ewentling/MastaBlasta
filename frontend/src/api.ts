@@ -151,6 +151,16 @@ export const postsApi = {
     return response.data;
   },
 
+  update: async (id: string, data: {
+    content?: string;
+    media?: string[];
+    account_ids?: string[];
+    scheduled_time?: string;
+  }): Promise<{ success: boolean; post: Post }> => {
+    const response = await api.patch(`/posts/${id}`, data);
+    return response.data;
+  },
+
   delete: async (id: string): Promise<{ success: boolean; message: string }> => {
     const response = await api.delete(`/posts/${id}`);
     return response.data;

@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import enUS from 'date-fns/locale/en-US';
 import axios from 'axios';
-import { Calendar as CalendarIcon, Plus, X, Trash2, Edit, Settings, CheckCircle } from 'lucide-react';
+import { postsApi } from '../api';
+import { Calendar as CalendarIcon, Plus, X, Settings, CheckCircle, List } from 'lucide-react';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
 
 const locales = {
   'en-US': enUS,
@@ -39,10 +39,10 @@ interface GoogleCalendarSettings {
 }
 
 export default function ContentCalendarPage() {
+  const navigate = useNavigate();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [showEventModal, setShowEventModal] = useState(false);
-  const [showNewEventModal, setShowNewEventModal] = useState(false);
   const [showGoogleSettings, setShowGoogleSettings] = useState(false);
   const [googleSettings, setGoogleSettings] = useState<GoogleCalendarSettings>({
     enabled: false,
@@ -50,7 +50,6 @@ export default function ContentCalendarPage() {
     refreshToken: '',
     calendarId: 'primary',
   });
-  const [newEventDate, setNewEventDate] = useState<Date | null>(null);
 
   // Load Google Calendar settings from localStorage
   useEffect(() => {
@@ -67,12 +66,12 @@ export default function ContentCalendarPage() {
 
   const loadScheduledPosts = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/posts/scheduled`);
-      const calendarEvents = response.data.map((post: any) => ({
+      const response = await postsApi.getAll('scheduled');
+      const calendarEvents = (response.posts || []).map((post: any) => ({
         id: post.id,
         title: post.content.substring(0, 50) + (post.content.length > 50 ? '...' : ''),
-        start: new Date(post.scheduled_time),
-        end: new Date(new Date(post.scheduled_time).getTime() + 60 * 60 * 1000), // 1 hour duration
+        start: new Date(post.scheduled_for),
+        end: new Date(new Date(post.scheduled_for).getTime() + 60 * 60 * 1000), // 1 hour duration
         content: post.content,
         platforms: post.platforms,
         status: post.status || 'scheduled',
@@ -81,15 +80,14 @@ export default function ContentCalendarPage() {
       setEvents(calendarEvents);
     } catch (error) {
       console.error('Error loading scheduled posts:', error);
-      // Fallback to empty array if API fails
       setEvents([]);
     }
   };
 
   const handleSelectSlot = useCallback((slotInfo: any) => {
-    setNewEventDate(slotInfo.start);
-    setShowNewEventModal(true);
-  }, []);
+    // Navigate to Scheduled Posts page; user can pick the exact time there
+    navigate('/scheduled');
+  }, [navigate]);
 
   const handleSelectEvent = useCallback((event: CalendarEvent) => {
     setSelectedEvent(event);
@@ -98,35 +96,22 @@ export default function ContentCalendarPage() {
 
   const handleGoogleCalendarAuth = async () => {
     try {
-      // Get authorization URL from backend
-      const response = await axios.get(`${API_BASE_URL}/api/google-calendar/authorize`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
+      const response = await axios.get('/api/google-calendar/authorize', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
       });
       
       const { authorization_url } = response.data;
-      
-      // Open OAuth popup
       const popup = window.open(authorization_url, 'googleCalendarAuth', 'width=600,height=700');
       
-      // Listen for auth callback
       const handleMessage = (event: MessageEvent) => {
         if (event.data.type === 'calendar_auth_success') {
-          setGoogleSettings({
-            ...googleSettings,
-            enabled: true,
-          });
-          localStorage.setItem('googleCalendarSettings', JSON.stringify({
-            ...googleSettings,
-            enabled: true,
-          }));
+          setGoogleSettings({ ...googleSettings, enabled: true });
+          localStorage.setItem('googleCalendarSettings', JSON.stringify({ ...googleSettings, enabled: true }));
           alert('Successfully connected to Google Calendar!');
           popup?.close();
           window.removeEventListener('message', handleMessage);
         }
       };
-      
       window.addEventListener('message', handleMessage);
     } catch (error) {
       console.error('Error starting Google Calendar auth:', error);
@@ -135,32 +120,20 @@ export default function ContentCalendarPage() {
   };
 
   const syncWithGoogleCalendar = async () => {
-    if (!googleSettings.enabled) {
-      alert('Please connect your Google Calendar first');
-      return;
-    }
-
+    if (!googleSettings.enabled) { alert('Please connect your Google Calendar first'); return; }
     try {
-      // Transform events to Calendar API format
       const calendarEvents = events.map(event => ({
         title: event.title,
-        description: event.description || '',
+        description: event.content || '',
         start: event.start.toISOString(),
         end: event.end.toISOString(),
         event_id: event.id.startsWith('gcal-') ? event.id.replace('gcal-', '') : undefined
       }));
-      
-      const response = await axios.post(`${API_BASE_URL}/api/google-calendar/sync`, {
-        events: calendarEvents
-      }, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
+      const response = await axios.post('/api/google-calendar/sync', { events: calendarEvents }, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
       });
-      
       const { synced_count, total_events, errors } = response.data;
-      
-      if (errors && errors.length > 0) {
+      if (errors?.length > 0) {
         alert(`Synced ${synced_count} of ${total_events} events. Some errors occurred:\n${errors.join('\n')}`);
       } else {
         alert(`Successfully synced ${synced_count} events to Google Calendar!`);
@@ -199,13 +172,21 @@ export default function ContentCalendarPage() {
           <p>Plan and schedule your social media posts</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn-primary" onClick={() => setShowGoogleSettings(true)}>
-            <Settings size={20} />
+          <button className="btn-secondary" onClick={() => navigate('/scheduled')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <List size={18} />
+            List View
+          </button>
+          <button className="btn-primary" onClick={() => navigate('/scheduled')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Plus size={18} />
+            Schedule Post
+          </button>
+          <button className="btn-primary" onClick={() => setShowGoogleSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <Settings size={18} />
             Google Calendar
           </button>
           {googleSettings.enabled && (
-            <button className="btn-secondary" onClick={syncWithGoogleCalendar}>
-              <CheckCircle size={20} />
+            <button className="btn-secondary" onClick={syncWithGoogleCalendar} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircle size={18} />
               Sync with Google
             </button>
           )}
@@ -306,7 +287,7 @@ export default function ContentCalendarPage() {
         <div className="modal-overlay" onClick={() => setShowEventModal(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Post Details</h2>
+              <h2>Scheduled Post</h2>
               <button className="close-btn" onClick={() => setShowEventModal(false)}>
                 <X size={24} />
               </button>
@@ -314,31 +295,31 @@ export default function ContentCalendarPage() {
             <div className="modal-body">
               <div style={{ marginBottom: '15px' }}>
                 <strong>Content:</strong>
-                <p style={{ marginTop: '5px', padding: '10px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
+                <p style={{ marginTop: '5px', padding: '10px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', lineHeight: '1.5' }}>
                   {selectedEvent.content}
                 </p>
               </div>
               <div style={{ marginBottom: '15px' }}>
                 <strong>Scheduled Time:</strong>
-                <p>{format(selectedEvent.start, 'PPpp')}</p>
+                <p style={{ marginTop: '4px' }}>{format(selectedEvent.start, 'PPpp')}</p>
               </div>
               <div style={{ marginBottom: '15px' }}>
                 <strong>Platforms:</strong>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '5px' }}>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '5px', flexWrap: 'wrap' }}>
                   {selectedEvent.platforms.map(platform => (
                     <span key={platform} style={{
                       padding: '4px 12px',
                       backgroundColor: 'var(--primary)',
                       color: 'white',
                       borderRadius: '12px',
-                      fontSize: '14px'
+                      fontSize: '13px'
                     }}>
                       {platform}
                     </span>
                   ))}
                 </div>
               </div>
-              <div style={{ marginBottom: '15px' }}>
+              <div style={{ marginBottom: '20px' }}>
                 <strong>Status:</strong>
                 <span style={{
                   marginLeft: '10px',
@@ -346,10 +327,19 @@ export default function ContentCalendarPage() {
                   backgroundColor: selectedEvent.status === 'published' ? '#4caf50' : '#ff9800',
                   color: 'white',
                   borderRadius: '12px',
-                  fontSize: '14px'
+                  fontSize: '13px'
                 }}>
                   {selectedEvent.status}
                 </span>
+              </div>
+              <div style={{ padding: '12px', background: 'var(--bg-secondary)', borderRadius: '8px', fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                To edit or cancel this post, use the{' '}
+                <button
+                  onClick={() => { setShowEventModal(false); navigate('/scheduled'); }}
+                  style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontWeight: '600', textDecoration: 'underline', fontSize: '13px', padding: 0 }}
+                >
+                  Scheduled Posts list view
+                </button>
               </div>
             </div>
           </div>
