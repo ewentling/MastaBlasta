@@ -333,7 +333,7 @@ export const oauthAppsApi = {
 };
 
 export const urlsApi = {
-  getAll: async (): Promise<{ urls: any[]; count: number }> => {
+  getAll: async (): Promise<{ urls: any[]; count: number; total_clicks: number; total_unique_visitors: number }> => {
     const response = await api.get('/urls');
     return response.data;
   },
@@ -343,9 +343,16 @@ export const urlsApi = {
     utm_source?: string;
     utm_medium?: string;
     utm_campaign?: string;
+    utm_content?: string;
+    utm_term?: string;
     custom_code?: string;
   }): Promise<{ success: boolean; id: string; short_code: string; short_url: string; original_url: string }> => {
     const response = await api.post('/urls/shorten', data);
+    return response.data;
+  },
+
+  update: async (shortCode: string, url: string): Promise<{ success: boolean; short_code: string; original_url: string }> => {
+    const response = await api.patch(`/urls/${shortCode}`, { url });
     return response.data;
   },
 
