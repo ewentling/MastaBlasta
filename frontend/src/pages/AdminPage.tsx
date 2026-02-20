@@ -4,6 +4,7 @@ import {
   Shield, Users, BarChart3, CreditCard, CheckCircle, XCircle, Clock,
   AlertTriangle, Crown, Zap, TrendingUp, Settings, DollarSign, Mail,
   Flag, Activity, UserPlus, Trash2, Ban, RefreshCw, Search, X,
+  ExternalLink, Copy, Eye, EyeOff, Save, ChevronRight,
 } from 'lucide-react';
 import { formatDateTime } from '../utils/timezone';
 import { UserGrowthChart } from '../components/admin/UserGrowthChart';
@@ -132,6 +133,18 @@ const adminApi = {
     if (!r.ok) throw new Error('Failed to fetch Square config');
     return r.json();
   },
+  updateSquareConfig: async (data: Record<string, string>) => {
+    const r = await fetch('/api/admin/square-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify(data),
+    });
+    if (!r.ok) {
+      const err = await r.json();
+      throw new Error(err.error || 'Failed to save configuration');
+    }
+    return r.json();
+  },
   testSquareConnection: async () => {
     const r = await fetch('/api/admin/square-test-connection', { method: 'POST', headers: authHeader() });
     if (!r.ok) throw new Error('Failed to test Square connection');
@@ -203,6 +216,22 @@ export default function AdminPage() {
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTestResult, setConnectionTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  // Square config form state
+  const [squareForm, setSquareForm] = useState({
+    access_token: '',
+    environment: 'sandbox',
+    location_id: '',
+    webhook_signature_key: '',
+    catalog_starter: '',
+    catalog_pro: '',
+    catalog_enterprise: '',
+  });
+  const [squareFormDirty, setSquareFormDirty] = useState(false);
+  const [squareSaveResult, setSquareSaveResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showAccessToken, setShowAccessToken] = useState(false);
+  const [showWebhookKey, setShowWebhookKey] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
   const { data: usersData, isLoading: usersLoading } = useQuery({
     queryKey: ['admin-users'],
     queryFn: adminApi.getUsers,
@@ -225,6 +254,20 @@ export default function AdminPage() {
     queryFn: adminApi.getSquareConfig,
     enabled: activeTab === 'square',
   });
+
+  // Pre-populate non-sensitive form fields from saved config
+  // (sensitive fields – access_token, webhook_signature_key – are masked and must be re-entered to change)
+  const squareFormInitialized = squareConfig && !squareFormDirty;
+  if (squareFormInitialized && squareForm.location_id === '' && squareConfig.location_id) {
+    setSquareForm((f) => ({
+      ...f,
+      environment: squareConfig.environment || 'sandbox',
+      location_id: squareConfig.location_id || '',
+      catalog_starter: squareConfig.catalog_starter || '',
+      catalog_pro: squareConfig.catalog_pro || '',
+      catalog_enterprise: squareConfig.catalog_enterprise || '',
+    }));
+  }
 
   const createUserMutation = useMutation({
     mutationFn: adminApi.createUser,
@@ -273,6 +316,31 @@ export default function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-user-details'] });
     },
   });
+
+  const saveSquareConfigMutation = useMutation({
+    mutationFn: adminApi.updateSquareConfig,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-square-config'] });
+      setSquareFormDirty(false);
+      setSquareSaveResult({ success: true, message: data.message || 'Configuration saved successfully' });
+      // Clear access_token / webhook_key fields since they are now persisted (show masked on next load)
+      setSquareForm((f) => ({ ...f, access_token: '', webhook_signature_key: '' }));
+    },
+    onError: (e: Error) => setSquareSaveResult({ success: false, message: e.message }),
+  });
+
+  const handleSquareFieldChange = (field: string, value: string) => {
+    setSquareForm((f) => ({ ...f, [field]: value }));
+    setSquareFormDirty(true);
+    setSquareSaveResult(null);
+  };
+
+  const handleCopyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    });
+  };
 
   const filteredUsers = useMemo(() => {
     const q = searchQuery.toLowerCase();
@@ -588,90 +656,364 @@ export default function AdminPage() {
 
         {/* Square Tab */}
         {activeTab === 'square' && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">Square Payment Integration</h2>
-                <p className="text-sm text-slate-500 mt-0.5">Manage your Square payment gateway configuration</p>
+          <div className="space-y-6">
+
+            {/* ── Status bar ─────────────────────────────────────────────────── */}
+            {squareConfigLoading ? (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center text-slate-400">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />Loading…
               </div>
-              <button
-                onClick={handleTestSquareConnection}
-                disabled={testingConnection}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
-                {testingConnection ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                {testingConnection ? 'Testing\u2026' : 'Test Connection'}
-              </button>
-            </div>
-            {connectionTestResult && (
-              <div className={`mx-6 mt-6 p-4 rounded-lg flex items-center gap-3 ${connectionTestResult.success ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
-                {connectionTestResult.success ? <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" /> : <XCircle className="w-5 h-5 text-red-600 flex-shrink-0" />}
-                <span className="text-sm">{connectionTestResult.message}</span>
-              </div>
-            )}
-            <div className="p-6">
-              {squareConfigLoading ? (
-                <div className="py-12 text-center text-slate-400"><RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />Loading\u2026</div>
-              ) : squareConfig ? (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            ) : squareConfig && (
+              <>
+                {/* Config status summary */}
+                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                  <div className="flex items-center justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${squareConfig.configured ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                        <CreditCard className={`w-5 h-5 ${squareConfig.configured ? 'text-emerald-600' : 'text-amber-600'}`} />
+                      </div>
+                      <div>
+                        <h2 className="text-base font-semibold text-slate-900">Square Payment Integration</h2>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {squareConfig.configured
+                            ? `Connected · ${squareConfig.environment === 'production' ? 'Production' : 'Sandbox'} mode`
+                            : 'Not configured — complete the setup below'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href="https://developer.squareup.com/apps"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Square Developer Console
+                      </a>
+                      <button
+                        onClick={handleTestSquareConnection}
+                        disabled={testingConnection || !squareConfig.configured}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {testingConnection ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                        {testingConnection ? 'Testing…' : 'Test Connection'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Connection test result */}
+                  {connectionTestResult && (
+                    <div className={`mb-5 p-3 rounded-lg flex items-center gap-3 text-sm ${connectionTestResult.success ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                      {connectionTestResult.success ? <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <XCircle className="w-4 h-4 text-red-600 flex-shrink-0" />}
+                      {connectionTestResult.message}
+                    </div>
+                  )}
+
+                  {/* Configured fields checklist */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
-                      { label: 'Status', value: squareConfig.configured ? 'Configured' : 'Not Configured', icon: squareConfig.configured ? <CheckCircle className="w-5 h-5 text-emerald-500" /> : <XCircle className="w-5 h-5 text-red-500" /> },
-                      { label: 'Environment', value: squareConfig.environment || 'Not Set', icon: <Settings className="w-5 h-5 text-blue-500" /> },
-                      { label: 'Location ID', value: squareConfig.location_id || 'Not Set', icon: <CreditCard className="w-5 h-5 text-violet-500" /> },
-                    ].map((item) => (
-                      <div key={item.label} className="bg-slate-50 rounded-lg border border-slate-200 p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{item.label}</span>
-                          {item.icon}
+                      { key: 'access_token', label: 'Access Token' },
+                      { key: 'location_id', label: 'Location ID' },
+                      { key: 'webhook_signature_key', label: 'Webhook Key' },
+                      { key: 'catalog_starter', label: 'Catalog IDs' },
+                    ].map(({ key, label }) => {
+                      const isOk = key === 'catalog_starter'
+                        ? squareConfig.configured_fields?.catalog_starter || squareConfig.configured_fields?.catalog_pro || squareConfig.configured_fields?.catalog_enterprise
+                        : squareConfig.configured_fields?.[key as keyof typeof squareConfig.configured_fields];
+                      return (
+                        <div key={key} className={`flex items-center gap-2 p-3 rounded-lg border ${isOk ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+                          {isOk ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <XCircle className="w-4 h-4 text-slate-300 flex-shrink-0" />}
+                          <span className={`text-xs font-medium ${isOk ? 'text-emerald-700' : 'text-slate-400'}`}>{label}</span>
                         </div>
-                        <p className="text-sm font-semibold text-slate-900 break-all">{item.value}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
-                  <div className="border border-slate-200 rounded-lg overflow-hidden">
-                    <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-                      <h3 className="text-sm font-semibold text-slate-700">Credentials</h3>
-                    </div>
-                    <div className="p-4 space-y-4">
+                </div>
+
+                {/* Save result banner */}
+                {squareSaveResult && (
+                  <div className={`p-4 rounded-lg flex items-center gap-3 text-sm ${squareSaveResult.success ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                    {squareSaveResult.success ? <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />}
+                    {squareSaveResult.message}
+                  </div>
+                )}
+
+                {/* ── Two-column layout: setup guide + credentials form ──────── */}
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+                  {/* Setup Guide */}
+                  <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                    <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">Setup Guide</h3>
+                    <ol className="space-y-4">
                       {[
-                        { label: 'Access Token', value: squareConfig.access_token },
-                        { label: 'Webhook Signature Key', value: squareConfig.webhook_signature_key },
-                      ].map((field) => (
-                        <div key={field.label}>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">{field.label}</label>
-                          <div className="flex items-center gap-2">
-                            <input type="text" value={field.value} readOnly className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-600 font-mono" />
-                            <span className="text-xs text-slate-400 whitespace-nowrap">Masked</span>
+                        {
+                          step: 1,
+                          title: 'Create a Square Developer App',
+                          desc: 'Go to the Square Developer Console, create a new application and note your Application ID.',
+                          link: 'https://developer.squareup.com/apps',
+                          linkLabel: 'Open Developer Console →',
+                        },
+                        {
+                          step: 2,
+                          title: 'Copy your Access Token',
+                          desc: 'In your app\'s Credentials tab, copy either the Sandbox or Production Access Token.',
+                          link: 'https://developer.squareup.com/apps',
+                          linkLabel: 'View credentials →',
+                        },
+                        {
+                          step: 3,
+                          title: 'Get your Location ID',
+                          desc: 'Open the Square Dashboard → Locations. Copy the Location ID for your business location.',
+                          link: 'https://squareup.com/dashboard/locations',
+                          linkLabel: 'Open Locations →',
+                        },
+                        {
+                          step: 4,
+                          title: 'Configure Webhook (optional)',
+                          desc: 'In Developer Console → Webhooks, create a subscription for payment.completed. Set endpoint to your server URL + /api/square/webhook.',
+                          link: 'https://developer.squareup.com/apps',
+                          linkLabel: 'Manage Webhooks →',
+                        },
+                        {
+                          step: 5,
+                          title: 'Create Catalog Items',
+                          desc: 'In Square Dashboard → Items, create subscription items for Starter, Pro, and Enterprise. Copy each item\'s Catalog Object ID.',
+                          link: 'https://squareup.com/dashboard/items',
+                          linkLabel: 'Manage Items →',
+                        },
+                        {
+                          step: 6,
+                          title: 'Save & Test',
+                          desc: 'Fill in the form on the right, click Save, then click Test Connection to verify everything works.',
+                          link: null,
+                          linkLabel: null,
+                        },
+                      ].map(({ step, title, desc, link, linkLabel }) => (
+                        <li key={step} className="flex gap-3">
+                          <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center mt-0.5">{step}</span>
+                          <div>
+                            <p className="text-sm font-medium text-slate-800">{title}</p>
+                            <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{desc}</p>
+                            {link && (
+                              <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 mt-1">
+                                {linkLabel}<ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
                           </div>
-                        </div>
+                        </li>
                       ))}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {[
-                          { label: 'Starter Plan ID', value: squareConfig.catalog_starter },
-                          { label: 'Pro Plan ID', value: squareConfig.catalog_pro },
-                          { label: 'Enterprise Plan ID', value: squareConfig.catalog_enterprise },
-                        ].map((field) => (
-                          <div key={field.label}>
-                            <label className="block text-xs font-medium text-slate-600 mb-1">{field.label}</label>
-                            <input type="text" value={field.value || 'Not Set'} readOnly className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-600" />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                    </ol>
                   </div>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex gap-3">
-                    <AlertTriangle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-blue-800">
-                      <p className="font-semibold mb-1">Updating Configuration</p>
-                      <p>Set environment variables and restart: <code className="bg-blue-100 px-1 rounded">SQUARE_ACCESS_TOKEN</code>, <code className="bg-blue-100 px-1 rounded">SQUARE_ENVIRONMENT</code>, <code className="bg-blue-100 px-1 rounded">SQUARE_LOCATION_ID</code>, <code className="bg-blue-100 px-1 rounded">SQUARE_WEBHOOK_SIGNATURE_KEY</code>, <code className="bg-blue-100 px-1 rounded">SQUARE_CATALOG_*</code>.</p>
+
+                  {/* Credentials Form */}
+                  <div className="lg:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm">
+                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Credentials</h3>
+                      {squareFormDirty && (
+                        <span className="text-xs text-amber-600 font-medium">Unsaved changes</span>
+                      )}
+                    </div>
+                    <div className="p-6 space-y-5">
+
+                      {/* Environment */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Environment</label>
+                        <div className="flex gap-3">
+                          {(['sandbox', 'production'] as const).map((env) => (
+                            <button
+                              key={env}
+                              onClick={() => handleSquareFieldChange('environment', env)}
+                              className={`flex-1 py-2.5 text-sm font-medium rounded-lg border-2 transition-colors ${
+                                squareForm.environment === env
+                                  ? env === 'production'
+                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
+                                    : 'border-blue-600 bg-blue-50 text-blue-700'
+                                  : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
+                              }`}
+                            >
+                              {env === 'sandbox' ? '🧪 Sandbox' : '🚀 Production'}
+                            </button>
+                          ))}
+                        </div>
+                        {squareForm.environment === 'production' && (
+                          <p className="mt-1.5 text-xs text-amber-600 flex items-center gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            Production mode processes real payments.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Access Token */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
+                          Access Token <span className="text-red-500">*</span>
+                          {squareConfig.configured_fields?.access_token && !squareForm.access_token && (
+                            <span className="ml-2 text-emerald-600 normal-case font-normal">✓ saved</span>
+                          )}
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showAccessToken ? 'text' : 'password'}
+                            value={squareForm.access_token}
+                            onChange={(e) => handleSquareFieldChange('access_token', e.target.value)}
+                          placeholder={squareConfig.configured_fields?.access_token ? '(saved — enter new value to replace)' : 'EAAAl...'}
+                            className="w-full pl-3 pr-10 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowAccessToken((v) => !v)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            {showAccessToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-400">Found in Square Developer Console → Credentials</p>
+                      </div>
+
+                      {/* Location ID */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
+                          Location ID <span className="text-red-500">*</span>
+                          {squareConfig.configured_fields?.location_id && (
+                            <span className="ml-2 text-emerald-600 normal-case font-normal">✓ saved</span>
+                          )}
+                        </label>
+                        <input
+                          type="text"
+                          value={squareForm.location_id}
+                          onChange={(e) => handleSquareFieldChange('location_id', e.target.value)}
+                          placeholder={squareConfig.location_id || 'L0XXXXXXXXXXXXXXXXXX'}
+                          className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                        />
+                        <p className="mt-1 text-xs text-slate-400">
+                          Found in{' '}
+                          <a href="https://squareup.com/dashboard/locations" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                            Square Dashboard → Locations
+                          </a>
+                        </p>
+                      </div>
+
+                      {/* Webhook Signature Key */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
+                          Webhook Signature Key
+                          {squareConfig.configured_fields?.webhook_signature_key && !squareForm.webhook_signature_key && (
+                            <span className="ml-2 text-emerald-600 normal-case font-normal">✓ saved</span>
+                          )}
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showWebhookKey ? 'text' : 'password'}
+                            value={squareForm.webhook_signature_key}
+                            onChange={(e) => handleSquareFieldChange('webhook_signature_key', e.target.value)}
+                            placeholder={squareConfig.configured_fields?.webhook_signature_key ? '(saved — enter new value to replace)' : 'Optional — required for webhook verification'}
+                            className="w-full pl-3 pr-10 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowWebhookKey((v) => !v)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                          >
+                            {showWebhookKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-400">Set your webhook endpoint to: <code className="bg-slate-100 px-1 rounded">/api/square/webhook</code></p>
+                      </div>
+
+                      {/* Catalog IDs */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
+                          Subscription Catalog IDs
+                        </label>
+                        <div className="space-y-3">
+                          {[
+                            { field: 'catalog_starter', label: '⚡ Starter Plan', configKey: 'catalog_starter', placeholder: 'CATALOG_ITEM_ID_FOR_STARTER' },
+                            { field: 'catalog_pro', label: '👑 Pro Plan', configKey: 'catalog_pro', placeholder: 'CATALOG_ITEM_ID_FOR_PRO' },
+                            { field: 'catalog_enterprise', label: '📈 Enterprise Plan', configKey: 'catalog_enterprise', placeholder: 'CATALOG_ITEM_ID_FOR_ENTERPRISE' },
+                          ].map(({ field, label, configKey, placeholder }) => (
+                            <div key={field} className="flex items-center gap-3">
+                              <span className="text-xs font-medium text-slate-500 w-28 flex-shrink-0">{label}</span>
+                              <input
+                                type="text"
+                                value={squareForm[field as keyof typeof squareForm]}
+                                onChange={(e) => handleSquareFieldChange(field, e.target.value)}
+                                placeholder={squareConfig[configKey] || placeholder}
+                                className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                              />
+                              {squareConfig.configured_fields?.[configKey as keyof typeof squareConfig.configured_fields] && (
+                                <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mt-2 text-xs text-slate-400">
+                          Create subscription items in{' '}
+                          <a href="https://squareup.com/dashboard/items" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                            Square Dashboard → Items
+                          </a>{' '}
+                          and paste their Catalog Object IDs here.
+                        </p>
+                      </div>
+
+                      {/* Save button */}
+                      <div className="pt-2 flex items-center gap-3">
+                        <button
+                          onClick={() => saveSquareConfigMutation.mutate(squareForm)}
+                          disabled={saveSquareConfigMutation.isPending || !squareFormDirty}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {saveSquareConfigMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          {saveSquareConfigMutation.isPending ? 'Saving…' : 'Save Configuration'}
+                        </button>
+                        <p className="text-xs text-slate-400">Changes apply immediately — no restart needed</p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="py-12 text-center text-slate-500">Failed to load Square configuration</div>
-              )}
-            </div>
+
+                {/* ── Env variable reference ──────────────────────────────────── */}
+                <div className="bg-slate-900 rounded-xl p-6 text-slate-300">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold text-white">Environment Variable Reference</h3>
+                    <button
+                      onClick={() => {
+                        const vars = `SQUARE_ACCESS_TOKEN=your_token\nSQUARE_ENVIRONMENT=sandbox\nSQUARE_LOCATION_ID=your_location_id\nSQUARE_WEBHOOK_SIGNATURE_KEY=your_webhook_key\nSQUARE_CATALOG_STARTER=your_catalog_id\nSQUARE_CATALOG_PRO=your_catalog_id\nSQUARE_CATALOG_ENTERPRISE=your_catalog_id`;
+                        handleCopyToClipboard(vars, 'all_vars');
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 transition-colors"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      {copiedField === 'all_vars' ? 'Copied!' : 'Copy all'}
+                    </button>
+                  </div>
+                  <div className="space-y-1.5 font-mono text-xs">
+                    {[
+                      { key: 'SQUARE_ACCESS_TOKEN', desc: 'API Access Token from Developer Console' },
+                      { key: 'SQUARE_ENVIRONMENT', desc: '"sandbox" or "production"' },
+                      { key: 'SQUARE_LOCATION_ID', desc: 'Business location ID from Square Dashboard' },
+                      { key: 'SQUARE_WEBHOOK_SIGNATURE_KEY', desc: 'Webhook signature key (for verifying webhooks)' },
+                      { key: 'SQUARE_CATALOG_STARTER', desc: 'Catalog Object ID for Starter subscription' },
+                      { key: 'SQUARE_CATALOG_PRO', desc: 'Catalog Object ID for Pro subscription' },
+                      { key: 'SQUARE_CATALOG_ENTERPRISE', desc: 'Catalog Object ID for Enterprise subscription' },
+                    ].map(({ key, desc }) => (
+                      <div key={key} className="flex items-center gap-3 group">
+                        <code className="text-emerald-400">{key}</code>
+                        <span className="text-slate-600">=</span>
+                        <span className="text-slate-500 text-xs">{'# '}{desc}</span>
+                        <button
+                          onClick={() => handleCopyToClipboard(key, key)}
+                          className="ml-auto opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-opacity"
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                        {copiedField === key && <span className="text-xs text-emerald-400">Copied!</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

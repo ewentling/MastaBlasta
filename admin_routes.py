@@ -604,24 +604,41 @@ def get_subscription_tiers():
 @auth_required
 @admin_only
 def get_square_config():
-    """Get Square integration configuration (masked for security)"""
+    """Get Square integration configuration (sensitive values masked)"""
     try:
         import os
-        
-        # Get current configuration (mask sensitive values)
+
+        access_token = os.getenv('SQUARE_ACCESS_TOKEN', '')
+        webhook_key = os.getenv('SQUARE_WEBHOOK_SIGNATURE_KEY', '')
+
+        # Build list of which fields are configured so the UI can show a checklist
+        configured_fields = {
+            'access_token': bool(access_token),
+            'environment': True,  # always has a default
+            'location_id': bool(os.getenv('SQUARE_LOCATION_ID', '')),
+            'webhook_signature_key': bool(webhook_key),
+            'catalog_starter': bool(os.getenv('SQUARE_CATALOG_STARTER', '')),
+            'catalog_pro': bool(os.getenv('SQUARE_CATALOG_PRO', '')),
+            'catalog_enterprise': bool(os.getenv('SQUARE_CATALOG_ENTERPRISE', '')),
+        }
+
         config = {
-            'access_token': f"{'*' * 48}{os.getenv('SQUARE_ACCESS_TOKEN', '')[-4:]}" if os.getenv('SQUARE_ACCESS_TOKEN') else '',
+            # Masked sensitive values (show last 4 chars only)
+            'access_token': f"{'*' * 48}{access_token[-4:]}" if access_token else '',
+            'webhook_signature_key': f"{'*' * 56}{webhook_key[-4:]}" if webhook_key else '',
+            # Non-sensitive values returned as-is
             'environment': os.getenv('SQUARE_ENVIRONMENT', 'sandbox'),
             'location_id': os.getenv('SQUARE_LOCATION_ID', ''),
-            'webhook_signature_key': f"{'*' * 56}{os.getenv('SQUARE_WEBHOOK_SIGNATURE_KEY', '')[-4:]}" if os.getenv('SQUARE_WEBHOOK_SIGNATURE_KEY') else '',
             'catalog_starter': os.getenv('SQUARE_CATALOG_STARTER', ''),
             'catalog_pro': os.getenv('SQUARE_CATALOG_PRO', ''),
             'catalog_enterprise': os.getenv('SQUARE_CATALOG_ENTERPRISE', ''),
-            'configured': bool(os.getenv('SQUARE_ACCESS_TOKEN') and os.getenv('SQUARE_LOCATION_ID'))
+            # Status helpers
+            'configured': bool(access_token and os.getenv('SQUARE_LOCATION_ID', '')),
+            'configured_fields': configured_fields,
         }
-        
+
         return jsonify(config), 200
-        
+
     except Exception as e:
         logger.error(f"Error getting Square config: {e}", exc_info=True)
         return jsonify({'error': 'Failed to get Square configuration'}), 500
@@ -631,34 +648,107 @@ def get_square_config():
 @auth_required
 @admin_only
 def update_square_config():
-    """Update Square integration configuration"""
+    """Update Square integration configuration.
+
+    Persists credentials to the .env file and applies them to the running
+    process immediately so a server restart is not required.
+    """
+    import os
+    import re
+
     try:
-        data = request.get_json()
-        
-        # Note: In production, these should be stored securely (e.g., AWS Secrets Manager)
-        # For now, we'll just log that the values should be set as environment variables
-        
-        required_fields = ['access_token', 'environment', 'location_id', 'webhook_signature_key']
-        missing_fields = [field for field in required_fields if not data.get(field)]
-        
+        data = request.get_json() or {}
+
+        required_fields = ['access_token', 'environment', 'location_id']
+        missing_fields = [f for f in required_fields if not data.get(f)]
         if missing_fields:
-            return jsonify({
-                'error': 'Missing required fields',
-                'missing': missing_fields
-            }), 400
-        
-        # Log the configuration update
+            return jsonify({'error': 'Missing required fields', 'missing': missing_fields}), 400
+
+        if data.get('environment') not in ('sandbox', 'production'):
+            return jsonify({'error': 'environment must be "sandbox" or "production"'}), 400
+
+        # Map from request keys to env var names and option values
+        env_map = {
+            'SQUARE_ACCESS_TOKEN': data.get('access_token', ''),
+            'SQUARE_ENVIRONMENT': data.get('environment', 'sandbox'),
+            'SQUARE_LOCATION_ID': data.get('location_id', ''),
+            'SQUARE_WEBHOOK_SIGNATURE_KEY': data.get('webhook_signature_key', ''),
+            'SQUARE_CATALOG_STARTER': data.get('catalog_starter', ''),
+            'SQUARE_CATALOG_PRO': data.get('catalog_pro', ''),
+            'SQUARE_CATALOG_ENTERPRISE': data.get('catalog_enterprise', ''),
+        }
+
+        # ── 1. Apply to running process immediately ──────────────────────────
+        for key, value in env_map.items():
+            # Apply all values (including empty) so clearing a var is reflected
+            os.environ[key] = value
+
+        # Reset the Square client singleton so it picks up the new credentials
+        try:
+            import square_integration
+            square_integration._square_client = None
+            # Also update module-level constants used by the module
+            square_integration.SQUARE_ACCESS_TOKEN = os.environ.get('SQUARE_ACCESS_TOKEN', '')
+            square_integration.SQUARE_ENVIRONMENT = os.environ.get('SQUARE_ENVIRONMENT', 'sandbox')
+            square_integration.SQUARE_LOCATION_ID = os.environ.get('SQUARE_LOCATION_ID', '')
+        except ImportError:
+            pass
+
+        # ── 2. Persist to .env file so credentials survive restarts ──────────
+        env_file_path = os.path.join(os.path.dirname(__file__), '.env')
+        try:
+            # Read existing lines (or start fresh)
+            if os.path.exists(env_file_path):
+                with open(env_file_path, 'r') as fh:
+                    lines = fh.readlines()
+            else:
+                lines = []
+
+            updated_keys = set()
+            new_lines = []
+            for line in lines:
+                # Skip comment lines and empty lines without modification
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    new_lines.append(line)
+                    continue
+                match = re.match(r'^([A-Z_][A-Z0-9_]*)\s*=', line)
+                if match and match.group(1) in env_map:
+                    key = match.group(1)
+                    new_lines.append(f"{key}={env_map[key]}\n")
+                    updated_keys.add(key)
+                else:
+                    new_lines.append(line)
+
+            # Append any keys that were not already in the file
+            for key, value in env_map.items():
+                if key not in updated_keys:
+                    new_lines.append(f"{key}={value}\n")
+
+            with open(env_file_path, 'w') as fh:
+                fh.writelines(new_lines)
+
+            # Restrict file permissions to owner-read-write only (security: no world-read)
+            import stat
+            os.chmod(env_file_path, stat.S_IRUSR | stat.S_IWUSR)
+
+            persisted = True
+        except Exception as file_err:
+            logger.warning(f"Could not write .env file: {file_err}")
+            persisted = False
+
         SecurityLogger.log_event(
             'square_config_updated',
             user_id=g.current_user['id'],
             details=f"Square configuration updated by {g.current_user['email']}"
         )
-        
+
         return jsonify({
-            'message': 'Configuration updated',
-            'note': 'Set environment variables: SQUARE_ACCESS_TOKEN, SQUARE_ENVIRONMENT, SQUARE_LOCATION_ID, SQUARE_WEBHOOK_SIGNATURE_KEY, SQUARE_CATALOG_* and restart application'
+            'success': True,
+            'message': 'Square configuration saved and applied',
+            'persisted_to_env': persisted,
         }), 200
-        
+
     except Exception as e:
         logger.error(f"Error updating Square config: {e}", exc_info=True)
         return jsonify({'error': 'Failed to update Square configuration'}), 500
