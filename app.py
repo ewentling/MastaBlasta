@@ -80,7 +80,7 @@ else:
 # Load production infrastructure if available
 try:
     from app_extensions import (
-        get_current_user, DB_ENABLED
+        get_current_user, DB_ENABLED, auth_required
     )
     from integrated_routes import integrated_bp
     PRODUCTION_MODE = True
@@ -88,6 +88,9 @@ try:
 except ImportError as e:
     PRODUCTION_MODE = False
     DB_ENABLED = False
+    # No-op fallback for development mode (no auth infrastructure available)
+    def auth_required(f):  # type: ignore[misc]
+        return f
     logger.warning(f"⚠ Running in development mode (in-memory storage): {e}")
 
 # Register integrated routes if production mode is enabled
@@ -6768,6 +6771,91 @@ def delete_post(post_id):
     })
 
 
+@app.route('/api/posts/<post_id>', methods=['PATCH'])
+@auth_required
+def update_post(post_id):
+    """Update a scheduled post's content, media, accounts and/or scheduled time"""
+    post = posts_db.get(post_id)
+
+    if not post:
+        return jsonify({'error': 'Post not found'}), 404
+
+    # Ownership check: if the post was created by a specific user, only that user
+    # (or an admin) may edit it.
+    current_user = getattr(g, 'current_user', None)
+    if current_user:
+        post_owner = post.get('user_id')
+        if post_owner and post_owner != current_user['id'] and current_user.get('role') != 'admin':
+            return jsonify({'error': 'Forbidden'}), 403
+
+    if post['status'] != 'scheduled':
+        return jsonify({'error': 'Only scheduled posts can be edited'}), 400
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    if 'content' in data:
+        post['content'] = data['content']
+
+    if 'media' in data:
+        post['media'] = data['media']
+
+    if 'account_ids' in data:
+        account_ids = data['account_ids']
+        platforms = []
+        for account_id in account_ids:
+            account = accounts_db.get(account_id)
+            if not account:
+                return jsonify({'error': f'Account {account_id} not found'}), 404
+            platforms.append(account['platform'])
+        post['account_ids'] = account_ids
+        post['platforms'] = platforms
+
+    if 'scheduled_time' in data:
+        new_time = data['scheduled_time']
+        try:
+            scheduled_time_normalized = new_time.replace('Z', '+00:00')
+            scheduled_dt = datetime.fromisoformat(scheduled_time_normalized)
+        except ValueError:
+            return jsonify({'error': 'Invalid scheduled_time format. Use ISO 8601 format'}), 400
+
+        if scheduled_dt <= datetime.now(scheduled_dt.tzinfo):
+            return jsonify({'error': 'Scheduled time must be in the future'}), 400
+
+        # Remove old scheduled job and create updated one
+        try:
+            scheduler.remove_job(post_id)
+        except Exception as e:
+            logger.warning(f"Could not remove old job {post_id}: {e}")
+
+        platforms = post['platforms']
+        content = post['content']
+        media = post['media']
+        credentials = {}
+        for account_id in post.get('account_ids', []):
+            account = accounts_db.get(account_id)
+            if account:
+                credentials[account['platform']] = account.get('credentials', {})
+
+        post_type = post.get('post_type', 'standard')
+        post_options = post.get('post_options', {})
+
+        scheduler.add_job(
+            publish_to_platforms,
+            'date',
+            run_date=scheduled_dt,
+            args=[post_id, platforms, content, media, credentials, post_type, post_options],
+            id=post_id
+        )
+        post['scheduled_for'] = new_time
+
+    posts_db[post_id] = post
+    logger.info(f"Updated scheduled post {post_id}")
+
+    return jsonify({'success': True, 'post': post})
+
+
 @app.route('/', methods=['GET'])
 def index():
     """Serve the frontend or API information"""
@@ -6823,6 +6911,8 @@ def shorten_url():
     utm_source = data.get('utm_source', '')
     utm_medium = data.get('utm_medium', '')
     utm_campaign = data.get('utm_campaign', '')
+    utm_content = data.get('utm_content', '')
+    utm_term = data.get('utm_term', '')
     custom_code = data.get('custom_code', '')
 
     if not original_url:
@@ -6844,6 +6934,10 @@ def shorten_url():
         utm_params.append(f'utm_medium={utm_medium}')
     if utm_campaign:
         utm_params.append(f'utm_campaign={utm_campaign}')
+    if utm_content:
+        utm_params.append(f'utm_content={utm_content}')
+    if utm_term:
+        utm_params.append(f'utm_term={utm_term}')
 
     if utm_params:
         separator = '&' if '?' in original_url else '?'
@@ -6859,6 +6953,8 @@ def shorten_url():
         'utm_source': utm_source,
         'utm_medium': utm_medium,
         'utm_campaign': utm_campaign,
+        'utm_content': utm_content,
+        'utm_term': utm_term,
         'created_at': datetime.now(timezone.utc).isoformat(),
         'clicks': 0
     }
@@ -6908,6 +7004,8 @@ def get_shortened_urls():
     """Get all shortened URLs"""
     urls = []
     for short_code, url_data in shortened_urls.items():
+        clicks = url_clicks.get(short_code, [])
+        last_clicked = clicks[-1]['timestamp'] if clicks else None
         urls.append({
             'id': url_data['id'],
             'short_code': short_code,
@@ -6915,17 +7013,28 @@ def get_shortened_urls():
             'final_url': url_data['final_url'],
             'clicks': url_data['clicks'],
             'created_at': url_data['created_at'],
+            'last_clicked': last_clicked,
             'utm_source': url_data.get('utm_source', ''),
             'utm_medium': url_data.get('utm_medium', ''),
-            'utm_campaign': url_data.get('utm_campaign', '')
+            'utm_campaign': url_data.get('utm_campaign', ''),
+            'utm_content': url_data.get('utm_content', ''),
+            'utm_term': url_data.get('utm_term', ''),
         })
 
     # Sort by creation time (newest first)
     urls.sort(key=lambda x: x['created_at'], reverse=True)
 
+    total_clicks = sum(u['clicks'] for u in urls)
+    total_unique = sum(
+        len(set(c['ip'] for c in url_clicks.get(sc, [])))
+        for sc in shortened_urls
+    )
+
     return jsonify({
         'urls': urls,
-        'count': len(urls)
+        'count': len(urls),
+        'total_clicks': total_clicks,
+        'total_unique_visitors': total_unique,
     })
 
 
@@ -6943,6 +7052,46 @@ def delete_shortened_url(short_code):
         'success': True,
         'message': 'Shortened URL deleted successfully'
     })
+
+
+@app.route('/api/urls/<short_code>', methods=['PATCH'])
+@auth_required
+def update_shortened_url(short_code):
+    """Update the destination URL of a shortened link"""
+    if short_code not in shortened_urls:
+        return jsonify({'error': 'Short URL not found'}), 404
+
+    # Ownership check: only the creator (or an admin) may update a short link.
+    current_user = getattr(g, 'current_user', None)
+    if current_user:
+        url_owner = shortened_urls[short_code].get('user_id')
+        if url_owner and url_owner != current_user['id'] and current_user.get('role') != 'admin':
+            return jsonify({'error': 'Forbidden'}), 403
+
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    new_url = data.get('url', '').strip()
+    if not new_url:
+        return jsonify({'error': 'URL is required'}), 400
+
+    url_data = shortened_urls[short_code]
+    url_data['original_url'] = new_url
+
+    # Rebuild final_url with any existing UTM params
+    utm_params = []
+    for key in ('utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'):
+        val = url_data.get(key, '')
+        if val:
+            utm_params.append(f'{key}={val}')
+    if utm_params:
+        separator = '&' if '?' in new_url else '?'
+        url_data['final_url'] = f"{new_url}{separator}{'&'.join(utm_params)}"
+    else:
+        url_data['final_url'] = new_url
+
+    return jsonify({'success': True, 'short_code': short_code, 'original_url': new_url})
 
 
 @app.route('/api/urls/<short_code>/stats', methods=['GET'])
@@ -6970,6 +7119,18 @@ def get_url_stats(short_code):
         ref = click['referer'] or 'Direct'
         referers[ref] = referers.get(ref, 0) + 1
 
+    # Device breakdown from User-Agent
+    # Android tablets have 'android' but NOT 'mobile'; phones have both.
+    devices = {'Mobile': 0, 'Tablet': 0, 'Desktop': 0}
+    for click in clicks:
+        ua = (click.get('user_agent') or '').lower()
+        if 'ipad' in ua or 'tablet' in ua or ('android' in ua and 'mobile' not in ua):
+            devices['Tablet'] += 1
+        elif any(m in ua for m in ('mobile', 'iphone', 'ipod', 'blackberry', 'windows phone')):
+            devices['Mobile'] += 1
+        else:
+            devices['Desktop'] += 1
+
     return jsonify({
         'short_code': short_code,
         'original_url': url_data['original_url'],
@@ -6978,6 +7139,7 @@ def get_url_stats(short_code):
         'unique_visitors': unique_ips,
         'clicks_by_date': clicks_by_date,
         'top_referers': sorted(referers.items(), key=lambda x: x[1], reverse=True)[:5],
+        'devices': devices,
         'recent_clicks': clicks[-10:][::-1]  # Last 10 clicks, most recent first
     })
 

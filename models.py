@@ -516,3 +516,23 @@ class UsageMetrics(Base):
 
     def __repr__(self):
         return f"<UsageMetrics {self.period_start} - {self.period_end} for subscription {self.subscription_id}>"
+
+
+class Webhook(Base):
+    """Persisted webhook registrations for event notifications"""
+    __tablename__ = 'webhooks'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    url = Column(String(2048), nullable=False)
+    events = Column(JSON, nullable=False)  # List[str] of event names
+    secret = Column(Text, nullable=True)   # HMAC signing secret (optional)
+    active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = relationship("User")
+
+    def __repr__(self):
+        return f"<Webhook {self.id} url={self.url} user={self.user_id}>"

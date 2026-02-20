@@ -4,6 +4,9 @@ Admin API endpoints for subscription and user management
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone, timedelta
 import logging
+import re
+import stat
+import os
 from uuid import uuid4
 
 from app_extensions import auth_required, DB_ENABLED
@@ -17,6 +20,21 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
+
+def _sanitize_env_value(value: str) -> str:
+    """Sanitize a value before writing it to a .env file.
+
+    * Strips leading/trailing whitespace.
+    * Removes embedded newlines (which would break dotenv parsing).
+    * Wraps in double-quotes when the value contains spaces, ``#`` (which
+      dotenv treats as a comment start), or ``"``/``'`` characters so that
+      the file remains unambiguously parseable on restart.
+    """
+    value = value.strip().replace('\r', '').replace('\n', '')
+    if any(ch in value for ch in (' ', '\t', '#', '"', "'")):
+        # Escape any embedded double-quotes and wrap in double-quotes.
+        value = '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    return value
 
 # ==================== USER MANAGEMENT ====================
 
@@ -401,6 +419,117 @@ def activate_user(user_id):
         return jsonify({'error': 'Failed to activate user'}), 500
 
 
+@admin_bp.route('/users', methods=['POST'])
+@auth_required
+@admin_only
+def create_user():
+    """Create a new user account"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+
+    try:
+        from database import db_session_scope
+        from auth import hash_password
+
+        data = request.get_json() or {}
+        email = data.get('email', '').strip().lower()
+        full_name = data.get('full_name', '').strip()
+        role_str = data.get('role', 'editor').lower()
+        password = data.get('password', '')
+
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+        if not password or len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
+        try:
+            role = UserRole(role_str)
+        except ValueError:
+            return jsonify({'error': f'Invalid role: {role_str}'}), 400
+
+        with db_session_scope() as db_session:
+            existing = db_session.query(User).filter_by(email=email).first()
+            if existing:
+                return jsonify({'error': 'A user with that email already exists'}), 409
+
+            user = User(
+                id=str(uuid4()),
+                email=email,
+                full_name=full_name,
+                password_hash=hash_password(password),
+                role=role,
+                is_active=True,
+                auth_provider='email',
+            )
+            db_session.add(user)
+            db_session.commit()
+
+            logger.info(f"Admin {g.current_user['email']} created user {email}")
+            SecurityLogger.log_event(
+                'admin_user_created',
+                g.current_user['id'],
+                {'new_user_email': email, 'role': role_str}
+            )
+
+            return jsonify({
+                'message': 'User created successfully',
+                'user': {
+                    'id': user.id,
+                    'email': user.email,
+                    'full_name': user.full_name,
+                    'role': user.role.value,
+                    'is_active': user.is_active,
+                    'created_at': user.created_at.isoformat(),
+                }
+            }), 201
+
+    except Exception as e:
+        logger.error(f"Error creating user: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to create user'}), 500
+
+
+@admin_bp.route('/users/<user_id>', methods=['DELETE'])
+@auth_required
+@admin_only
+def delete_user(user_id):
+    """Permanently delete a user account"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+
+    try:
+        from database import db_session_scope
+
+        with db_session_scope() as db_session:
+            user = db_session.query(User).filter_by(id=user_id).first()
+            if not user:
+                return jsonify({'error': 'User not found'}), 404
+
+            # Prevent deleting admin accounts
+            if user.role == UserRole.ADMIN:
+                return jsonify({'error': 'Cannot delete admin users'}), 403
+
+            # Prevent self-deletion
+            if user.id == g.current_user['id']:
+                return jsonify({'error': 'Cannot delete your own account'}), 403
+
+            email = user.email
+            db_session.delete(user)
+            db_session.commit()
+
+            logger.warning(f"Admin {g.current_user['email']} deleted user {email}")
+            SecurityLogger.log_event(
+                'admin_user_deleted',
+                g.current_user['id'],
+                {'deleted_user_id': user_id, 'deleted_user_email': email}
+            )
+
+            return jsonify({'message': 'User deleted successfully', 'user_id': user_id}), 200
+
+    except Exception as e:
+        logger.error(f"Error deleting user: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to delete user'}), 500
+
+
 # ==================== SYSTEM METRICS ====================
 
 @admin_bp.route('/metrics', methods=['GET'])
@@ -493,24 +622,41 @@ def get_subscription_tiers():
 @auth_required
 @admin_only
 def get_square_config():
-    """Get Square integration configuration (masked for security)"""
+    """Get Square integration configuration (sensitive values masked)"""
     try:
         import os
-        
-        # Get current configuration (mask sensitive values)
+
+        access_token = os.getenv('SQUARE_ACCESS_TOKEN', '')
+        webhook_key = os.getenv('SQUARE_WEBHOOK_SIGNATURE_KEY', '')
+
+        # Build list of which fields are configured so the UI can show a checklist
+        configured_fields = {
+            'access_token': bool(access_token),
+            'environment': True,  # always has a default
+            'location_id': bool(os.getenv('SQUARE_LOCATION_ID', '')),
+            'webhook_signature_key': bool(webhook_key),
+            'catalog_starter': bool(os.getenv('SQUARE_CATALOG_STARTER', '')),
+            'catalog_pro': bool(os.getenv('SQUARE_CATALOG_PRO', '')),
+            'catalog_enterprise': bool(os.getenv('SQUARE_CATALOG_ENTERPRISE', '')),
+        }
+
         config = {
-            'access_token': f"{'*' * 48}{os.getenv('SQUARE_ACCESS_TOKEN', '')[-4:]}" if os.getenv('SQUARE_ACCESS_TOKEN') else '',
+            # Masked sensitive values (show last 4 chars only)
+            'access_token': f"{'*' * 48}{access_token[-4:]}" if access_token else '',
+            'webhook_signature_key': f"{'*' * 56}{webhook_key[-4:]}" if webhook_key else '',
+            # Non-sensitive values returned as-is
             'environment': os.getenv('SQUARE_ENVIRONMENT', 'sandbox'),
             'location_id': os.getenv('SQUARE_LOCATION_ID', ''),
-            'webhook_signature_key': f"{'*' * 56}{os.getenv('SQUARE_WEBHOOK_SIGNATURE_KEY', '')[-4:]}" if os.getenv('SQUARE_WEBHOOK_SIGNATURE_KEY') else '',
             'catalog_starter': os.getenv('SQUARE_CATALOG_STARTER', ''),
             'catalog_pro': os.getenv('SQUARE_CATALOG_PRO', ''),
             'catalog_enterprise': os.getenv('SQUARE_CATALOG_ENTERPRISE', ''),
-            'configured': bool(os.getenv('SQUARE_ACCESS_TOKEN') and os.getenv('SQUARE_LOCATION_ID'))
+            # Status helpers
+            'configured': bool(access_token and os.getenv('SQUARE_LOCATION_ID', '')),
+            'configured_fields': configured_fields,
         }
-        
+
         return jsonify(config), 200
-        
+
     except Exception as e:
         logger.error(f"Error getting Square config: {e}", exc_info=True)
         return jsonify({'error': 'Failed to get Square configuration'}), 500
@@ -520,34 +666,103 @@ def get_square_config():
 @auth_required
 @admin_only
 def update_square_config():
-    """Update Square integration configuration"""
+    """Update Square integration configuration.
+
+    Persists credentials to the .env file and applies them to the running
+    process immediately so a server restart is not required.
+    """
     try:
-        data = request.get_json()
-        
-        # Note: In production, these should be stored securely (e.g., AWS Secrets Manager)
-        # For now, we'll just log that the values should be set as environment variables
-        
-        required_fields = ['access_token', 'environment', 'location_id', 'webhook_signature_key']
-        missing_fields = [field for field in required_fields if not data.get(field)]
-        
+        data = request.get_json() or {}
+
+        required_fields = ['access_token', 'environment', 'location_id']
+        missing_fields = [f for f in required_fields if not data.get(f)]
         if missing_fields:
-            return jsonify({
-                'error': 'Missing required fields',
-                'missing': missing_fields
-            }), 400
-        
-        # Log the configuration update
+            return jsonify({'error': 'Missing required fields', 'missing': missing_fields}), 400
+
+        if data.get('environment') not in ('sandbox', 'production'):
+            return jsonify({'error': 'environment must be "sandbox" or "production"'}), 400
+
+        # Map from request keys to env var names and sanitized values
+        env_map = {
+            'SQUARE_ACCESS_TOKEN': _sanitize_env_value(data.get('access_token', '')),
+            'SQUARE_ENVIRONMENT': _sanitize_env_value(data.get('environment', 'sandbox')),
+            'SQUARE_LOCATION_ID': _sanitize_env_value(data.get('location_id', '')),
+            'SQUARE_WEBHOOK_SIGNATURE_KEY': _sanitize_env_value(data.get('webhook_signature_key', '')),
+            'SQUARE_CATALOG_STARTER': _sanitize_env_value(data.get('catalog_starter', '')),
+            'SQUARE_CATALOG_PRO': _sanitize_env_value(data.get('catalog_pro', '')),
+            'SQUARE_CATALOG_ENTERPRISE': _sanitize_env_value(data.get('catalog_enterprise', '')),
+        }
+
+        # ── 1. Apply to running process immediately ──────────────────────────
+        for key, value in env_map.items():
+            # Apply all values (including empty) so clearing a var is reflected
+            os.environ[key] = value
+
+        # Reset the Square client singleton so it picks up the new credentials
+        try:
+            import square_integration
+            square_integration._square_client = None
+            # Also update module-level constants used by the module
+            square_integration.SQUARE_ACCESS_TOKEN = os.environ.get('SQUARE_ACCESS_TOKEN', '')
+            square_integration.SQUARE_ENVIRONMENT = os.environ.get('SQUARE_ENVIRONMENT', 'sandbox')
+            square_integration.SQUARE_LOCATION_ID = os.environ.get('SQUARE_LOCATION_ID', '')
+        except ImportError:
+            pass
+
+        # ── 2. Persist to .env file so credentials survive restarts ──────────
+        env_file_path = os.path.join(os.path.dirname(__file__), '.env')
+        try:
+            # Read existing lines (or start fresh)
+            if os.path.exists(env_file_path):
+                with open(env_file_path, 'r') as fh:
+                    lines = fh.readlines()
+            else:
+                lines = []
+
+            updated_keys = set()
+            new_lines = []
+            for line in lines:
+                # Skip comment lines and empty lines without modification
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    new_lines.append(line)
+                    continue
+                match = re.match(r'^([A-Z_][A-Z0-9_]*)\s*=', line)
+                if match and match.group(1) in env_map:
+                    key = match.group(1)
+                    new_lines.append(f"{key}={env_map[key]}\n")
+                    updated_keys.add(key)
+                else:
+                    new_lines.append(line)
+
+            # Append any keys that were not already in the file
+            for key, value in env_map.items():
+                if key not in updated_keys:
+                    new_lines.append(f"{key}={value}\n")
+
+            with open(env_file_path, 'w') as fh:
+                fh.writelines(new_lines)
+
+            # Restrict file permissions to owner-read-write only (security: no world-read)
+            os.chmod(env_file_path, stat.S_IRUSR | stat.S_IWUSR)
+
+            persisted = True
+        except Exception as file_err:
+            logger.warning(f"Could not write .env file: {file_err}")
+            persisted = False
+
         SecurityLogger.log_event(
             'square_config_updated',
             user_id=g.current_user['id'],
             details=f"Square configuration updated by {g.current_user['email']}"
         )
-        
+
         return jsonify({
-            'message': 'Configuration updated',
-            'note': 'Set environment variables: SQUARE_ACCESS_TOKEN, SQUARE_ENVIRONMENT, SQUARE_LOCATION_ID, SQUARE_WEBHOOK_SIGNATURE_KEY, SQUARE_CATALOG_* and restart application'
+            'success': True,
+            'message': 'Square configuration saved and applied',
+            'persisted_to_env': persisted,
         }), 200
-        
+
     except Exception as e:
         logger.error(f"Error updating Square config: {e}", exc_info=True)
         return jsonify({'error': 'Failed to update Square configuration'}), 500
@@ -595,6 +810,183 @@ def test_square_connection():
             'message': 'Failed to initialize Square client',
             'error': str(e)
         }), 500
+
+
+
+# ==================== PLATFORM OAUTH CONFIGURATION ====================
+
+# All env-var names that belong to each platform.
+# `sensitive` keys are masked in GET responses.
+# `optional` keys are not required for "configured" status (nice-to-have extras).
+_PLATFORM_ENV_VARS = {
+    'meta': {
+        'keys': ['META_APP_ID', 'META_APP_SECRET', 'META_REDIRECT_URI'],
+        'sensitive': {'META_APP_SECRET'},
+        'optional': {'META_REDIRECT_URI'},
+    },
+    'twitter': {
+        'keys': ['TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET', 'TWITTER_REDIRECT_URI', 'TWITTER_BEARER_TOKEN'],
+        'sensitive': {'TWITTER_CLIENT_SECRET', 'TWITTER_BEARER_TOKEN'},
+        'optional': {'TWITTER_REDIRECT_URI', 'TWITTER_BEARER_TOKEN'},
+    },
+    'linkedin': {
+        'keys': ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET', 'LINKEDIN_REDIRECT_URI'],
+        'sensitive': {'LINKEDIN_CLIENT_SECRET'},
+        'optional': {'LINKEDIN_REDIRECT_URI'},
+    },
+    'google': {
+        'keys': ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI', 'GOOGLE_API_KEY'],
+        'sensitive': {'GOOGLE_CLIENT_SECRET', 'GOOGLE_API_KEY'},
+        'optional': {'GOOGLE_REDIRECT_URI', 'GOOGLE_API_KEY'},
+    },
+    'reddit': {
+        'keys': ['REDDIT_CLIENT_ID', 'REDDIT_CLIENT_SECRET'],
+        'sensitive': {'REDDIT_CLIENT_SECRET'},
+        'optional': set(),
+    },
+    'pinterest': {
+        'keys': ['PINTEREST_APP_ID', 'PINTEREST_APP_SECRET', 'PINTEREST_REDIRECT_URI'],
+        'sensitive': {'PINTEREST_APP_SECRET'},
+        'optional': {'PINTEREST_REDIRECT_URI'},
+    },
+    'tiktok': {
+        'keys': ['TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET', 'TIKTOK_REDIRECT_URI'],
+        'sensitive': {'TIKTOK_CLIENT_SECRET'},
+        'optional': {'TIKTOK_REDIRECT_URI'},
+    },
+    'openai': {
+        'keys': ['OPENAI_API_KEY'],
+        'sensitive': {'OPENAI_API_KEY'},
+        'optional': set(),
+    },
+}
+
+
+def _mask(value: str) -> str:
+    """Return a masked version showing only the last 4 chars."""
+    if not value:
+        return ''
+    if len(value) <= 4:
+        return '*' * len(value)
+    return '*' * (len(value) - 4) + value[-4:]
+
+
+@admin_bp.route('/platform-config', methods=['GET'])
+@auth_required
+@admin_only
+def get_platform_config():
+    """Return current platform OAuth credentials (sensitive values masked)."""
+    import os
+    try:
+        result = {}
+        for platform, meta in _PLATFORM_ENV_VARS.items():
+            fields = {}
+            configured_fields = {}
+            for key in meta['keys']:
+                raw = os.getenv(key, '')
+                configured_fields[key] = bool(raw)
+                if key in meta['sensitive']:
+                    fields[key] = _mask(raw)
+                else:
+                    fields[key] = raw
+            result[platform] = {
+                'fields': fields,
+                'configured_fields': configured_fields,
+                # A platform is "configured" when all non-optional keys have values
+                'configured': all(
+                    os.getenv(k, '')
+                    for k in meta['keys']
+                    if k not in meta.get('optional', set())
+                ),
+            }
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Error getting platform config: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to get platform configuration'}), 500
+
+
+@admin_bp.route('/platform-config', methods=['POST'])
+@auth_required
+@admin_only
+def update_platform_config():
+    """Persist platform OAuth credentials to .env and apply to running process immediately."""
+    try:
+        data = request.get_json() or {}
+        platform = data.get('platform', '').lower()
+
+        if platform not in _PLATFORM_ENV_VARS:
+            return jsonify({'error': f'Unknown platform: {platform}. Must be one of: {", ".join(_PLATFORM_ENV_VARS)}'}), 400
+
+        meta = _PLATFORM_ENV_VARS[platform]
+        env_map = {}
+        for key in meta['keys']:
+            # Accept values keyed by env-var name; sanitize before storing
+            if key in data.get('fields', {}):
+                env_map[key] = _sanitize_env_value(data['fields'][key])
+
+        if not env_map:
+            return jsonify({'error': 'No fields provided'}), 400
+
+        # ── 1. Apply to running process immediately ──────────────────────────
+        for key, value in env_map.items():
+            os.environ[key] = value
+
+        # oauth.py reads its module-level constants at import time via os.getenv().
+        # Since os.environ is now updated, any new OAuth flow will pick up the new
+        # values automatically because the OAuth classes call os.getenv() at
+        # request time (not at module load time).  No setattr/reload is needed.
+
+        # ── 2. Persist to .env file ──────────────────────────────────────────
+        env_file_path = os.path.join(os.path.dirname(__file__), '.env')
+        try:
+            if os.path.exists(env_file_path):
+                with open(env_file_path, 'r') as fh:
+                    lines = fh.readlines()
+            else:
+                lines = []
+
+            updated_keys = set()
+            new_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    new_lines.append(line)
+                    continue
+                match = re.match(r'^([A-Z_][A-Z0-9_]*)\s*=', line)
+                if match and match.group(1) in env_map:
+                    key = match.group(1)
+                    new_lines.append(f"{key}={env_map[key]}\n")
+                    updated_keys.add(key)
+                else:
+                    new_lines.append(line)
+
+            for key, value in env_map.items():
+                if key not in updated_keys:
+                    new_lines.append(f"{key}={value}\n")
+
+            with open(env_file_path, 'w') as fh:
+                fh.writelines(new_lines)
+            os.chmod(env_file_path, stat.S_IRUSR | stat.S_IWUSR)
+            persisted = True
+        except Exception as file_err:
+            logger.warning(f"Could not write .env file: {file_err}")
+            persisted = False
+
+        SecurityLogger.log_event(
+            'platform_config_updated',
+            user_id=g.current_user['id'],
+            details=f"{platform} configuration updated by {g.current_user['email']}"
+        )
+
+        return jsonify({
+            'success': True,
+            'message': f'{platform.title()} configuration saved and applied',
+            'persisted_to_env': persisted,
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error updating platform config: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to update platform configuration'}), 500
 
 
 # ==================== AUDIT LOG & ACTIVITY ====================

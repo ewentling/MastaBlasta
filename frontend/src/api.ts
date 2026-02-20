@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosRequestHeaders } from 'axios';
 import type {
   Platform,
   Account,
@@ -16,6 +16,42 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+export { api };
+
+// Attach auth token to every request automatically
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('accessToken');
+  if (token) {
+    // config.headers may be an AxiosHeaders instance or a plain object;
+    // initialise it when absent and use the type-safe set() API when available.
+    if (!config.headers) {
+      config.headers = {} as AxiosRequestHeaders;
+    }
+    if (typeof (config.headers as AxiosRequestHeaders & { set?: Function }).set === 'function') {
+      (config.headers as AxiosRequestHeaders & { set: Function }).set('Authorization', `Bearer ${token}`);
+    } else {
+      (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    }
+  }
+  return config;
+});
+
+// Handle 401 responses by clearing stale credentials and redirecting to login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const accountsApi = {
   getAll: async (): Promise<{ accounts: Account[]; count: number }> => {
@@ -123,6 +159,16 @@ export const postsApi = {
     suggestions: any[];
   }> => {
     const response = await api.post('/schedule/conflicts', data);
+    return response.data;
+  },
+
+  update: async (id: string, data: {
+    content?: string;
+    media?: string[];
+    account_ids?: string[];
+    scheduled_time?: string;
+  }): Promise<{ success: boolean; post: Post }> => {
+    const response = await api.patch(`/posts/${id}`, data);
     return response.data;
   },
 
@@ -308,7 +354,7 @@ export const oauthAppsApi = {
 };
 
 export const urlsApi = {
-  getAll: async (): Promise<{ urls: any[]; count: number }> => {
+  getAll: async (): Promise<{ urls: any[]; count: number; total_clicks: number; total_unique_visitors: number }> => {
     const response = await api.get('/urls');
     return response.data;
   },
@@ -318,9 +364,16 @@ export const urlsApi = {
     utm_source?: string;
     utm_medium?: string;
     utm_campaign?: string;
+    utm_content?: string;
+    utm_term?: string;
     custom_code?: string;
   }): Promise<{ success: boolean; id: string; short_code: string; short_url: string; original_url: string }> => {
     const response = await api.post('/urls/shorten', data);
+    return response.data;
+  },
+
+  update: async (shortCode: string, url: string): Promise<{ success: boolean; short_code: string; original_url: string }> => {
+    const response = await api.patch(`/urls/${shortCode}`, { url });
     return response.data;
   },
 

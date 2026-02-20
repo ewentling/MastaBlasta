@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import re
 import logging
+import requests as _siem_requests
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from flask import request, jsonify
@@ -363,10 +364,14 @@ class SecurityLogger:
         # Log to file/service
         logger.info(f"SECURITY_EVENT: {log_data}")
 
-        # In production, send to SIEM system
+        # In production, forward to a SIEM endpoint if configured via SIEM_ENDPOINT env var
         if os.getenv('FLASK_ENV') == 'production':
-            # TODO: Send to centralized logging service
-            pass
+            siem_endpoint = os.getenv('SIEM_ENDPOINT')
+            if siem_endpoint:
+                try:
+                    _siem_requests.post(siem_endpoint, json=log_data, timeout=2)
+                except Exception:
+                    pass  # Never let SIEM forwarding break the request
 
     @staticmethod
     def log_failed_login(email: str):
