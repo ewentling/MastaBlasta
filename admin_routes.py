@@ -798,6 +798,177 @@ def test_square_connection():
         }), 500
 
 
+
+# ==================== PLATFORM OAUTH CONFIGURATION ====================
+
+# All env-var names that belong to each platform.
+# `sensitive` keys are masked in GET responses.
+# `optional` keys are not required for "configured" status (nice-to-have extras).
+_PLATFORM_ENV_VARS = {
+    'meta': {
+        'keys': ['META_APP_ID', 'META_APP_SECRET', 'META_REDIRECT_URI'],
+        'sensitive': {'META_APP_SECRET'},
+        'optional': {'META_REDIRECT_URI'},
+    },
+    'twitter': {
+        'keys': ['TWITTER_CLIENT_ID', 'TWITTER_CLIENT_SECRET', 'TWITTER_REDIRECT_URI', 'TWITTER_BEARER_TOKEN'],
+        'sensitive': {'TWITTER_CLIENT_SECRET', 'TWITTER_BEARER_TOKEN'},
+        'optional': {'TWITTER_REDIRECT_URI', 'TWITTER_BEARER_TOKEN'},
+    },
+    'linkedin': {
+        'keys': ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET', 'LINKEDIN_REDIRECT_URI'],
+        'sensitive': {'LINKEDIN_CLIENT_SECRET'},
+        'optional': {'LINKEDIN_REDIRECT_URI'},
+    },
+    'google': {
+        'keys': ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REDIRECT_URI', 'GOOGLE_API_KEY'],
+        'sensitive': {'GOOGLE_CLIENT_SECRET', 'GOOGLE_API_KEY'},
+        'optional': {'GOOGLE_REDIRECT_URI', 'GOOGLE_API_KEY'},
+    },
+    'reddit': {
+        'keys': ['REDDIT_CLIENT_ID', 'REDDIT_CLIENT_SECRET'],
+        'sensitive': {'REDDIT_CLIENT_SECRET'},
+        'optional': set(),
+    },
+    'openai': {
+        'keys': ['OPENAI_API_KEY'],
+        'sensitive': {'OPENAI_API_KEY'},
+        'optional': set(),
+    },
+}
+
+
+def _mask(value: str) -> str:
+    """Return a masked version showing only the last 4 chars."""
+    if not value:
+        return ''
+    if len(value) <= 4:
+        return '*' * len(value)
+    return '*' * (len(value) - 4) + value[-4:]
+
+
+@admin_bp.route('/platform-config', methods=['GET'])
+@auth_required
+@admin_only
+def get_platform_config():
+    """Return current platform OAuth credentials (sensitive values masked)."""
+    import os
+    try:
+        result = {}
+        for platform, meta in _PLATFORM_ENV_VARS.items():
+            fields = {}
+            configured_fields = {}
+            for key in meta['keys']:
+                raw = os.getenv(key, '')
+                configured_fields[key] = bool(raw)
+                if key in meta['sensitive']:
+                    fields[key] = _mask(raw)
+                else:
+                    fields[key] = raw
+            result[platform] = {
+                'fields': fields,
+                'configured_fields': configured_fields,
+                # A platform is "configured" when all non-optional keys have values
+                'configured': all(
+                    os.getenv(k, '')
+                    for k in meta['keys']
+                    if k not in meta.get('optional', set())
+                ),
+            }
+        return jsonify(result), 200
+    except Exception as e:
+        logger.error(f"Error getting platform config: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to get platform configuration'}), 500
+
+
+@admin_bp.route('/platform-config', methods=['POST'])
+@auth_required
+@admin_only
+def update_platform_config():
+    """Persist platform OAuth credentials to .env and apply to running process immediately."""
+    import os
+    import re
+    import stat
+
+    try:
+        data = request.get_json() or {}
+        platform = data.get('platform', '').lower()
+
+        if platform not in _PLATFORM_ENV_VARS:
+            return jsonify({'error': f'Unknown platform: {platform}. Must be one of: {", ".join(_PLATFORM_ENV_VARS)}'}), 400
+
+        meta = _PLATFORM_ENV_VARS[platform]
+        env_map = {}
+        for key in meta['keys']:
+            # Accept values keyed by env-var name
+            if key in data.get('fields', {}):
+                env_map[key] = data['fields'][key]
+
+        if not env_map:
+            return jsonify({'error': 'No fields provided'}), 400
+
+        # ── 1. Apply to running process immediately ──────────────────────────
+        for key, value in env_map.items():
+            os.environ[key] = value
+
+        # oauth.py reads its module-level constants at import time via os.getenv().
+        # Since os.environ is now updated, any new OAuth flow will pick up the new
+        # values automatically because the OAuth classes call os.getenv() at
+        # request time (not at module load time).  No setattr/reload is needed.
+
+        # ── 2. Persist to .env file ──────────────────────────────────────────
+        env_file_path = os.path.join(os.path.dirname(__file__), '.env')
+        try:
+            if os.path.exists(env_file_path):
+                with open(env_file_path, 'r') as fh:
+                    lines = fh.readlines()
+            else:
+                lines = []
+
+            updated_keys = set()
+            new_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    new_lines.append(line)
+                    continue
+                match = re.match(r'^([A-Z_][A-Z0-9_]*)\s*=', line)
+                if match and match.group(1) in env_map:
+                    key = match.group(1)
+                    new_lines.append(f"{key}={env_map[key]}\n")
+                    updated_keys.add(key)
+                else:
+                    new_lines.append(line)
+
+            for key, value in env_map.items():
+                if key not in updated_keys:
+                    new_lines.append(f"{key}={value}\n")
+
+            with open(env_file_path, 'w') as fh:
+                fh.writelines(new_lines)
+            os.chmod(env_file_path, stat.S_IRUSR | stat.S_IWUSR)
+            persisted = True
+        except Exception as file_err:
+            logger.warning(f"Could not write .env file: {file_err}")
+            persisted = False
+
+        SecurityLogger.log_event(
+            'platform_config_updated',
+            user_id=g.current_user['id'],
+            details=f"{platform} configuration updated by {g.current_user['email']}"
+        )
+
+        return jsonify({
+            'success': True,
+            'message': f'{platform.title()} configuration saved and applied',
+            'persisted_to_env': persisted,
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error updating platform config: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to update platform configuration'}), 500
+
+
 # ==================== AUDIT LOG & ACTIVITY ====================
 
 @admin_bp.route('/audit-logs', methods=['GET'])

@@ -4,7 +4,7 @@ import {
   Shield, Users, BarChart3, CreditCard, CheckCircle, XCircle, Clock,
   AlertTriangle, Crown, Zap, TrendingUp, Settings, DollarSign, Mail,
   Flag, Activity, UserPlus, Trash2, Ban, RefreshCw, Search, X,
-  ExternalLink, Copy, Eye, EyeOff, Save, ChevronRight,
+  ExternalLink, Copy, Eye, EyeOff, Save, ChevronRight, Globe,
 } from 'lucide-react';
 import { formatDateTime } from '../utils/timezone';
 import { UserGrowthChart } from '../components/admin/UserGrowthChart';
@@ -15,6 +15,7 @@ import { RevenueSummaryCards } from '../components/admin/RevenueSummaryCards';
 import { FailedPaymentsTable } from '../components/admin/FailedPaymentsTable';
 import { EmailComposer } from '../components/admin/EmailComposer';
 import { PostModerationTable } from '../components/admin/PostModerationTable';
+import { PlatformConfigTab } from '../components/admin/PlatformConfigTab';
 
 interface User {
   id: string;
@@ -195,7 +196,7 @@ function SubStatusBadge({ status }: { status: string }) {
   );
 }
 
-type Tab = 'users' | 'metrics' | 'analytics' | 'revenue' | 'email' | 'moderation' | 'square';
+type Tab = 'users' | 'metrics' | 'analytics' | 'revenue' | 'email' | 'moderation' | 'platforms' | 'square';
 
 export default function AdminPage() {
   const queryClient = useQueryClient();
@@ -375,6 +376,7 @@ export default function AdminPage() {
     { id: 'revenue',    label: 'Revenue',    icon: <DollarSign className="w-4 h-4" /> },
     { id: 'email',      label: 'Email',      icon: <Mail className="w-4 h-4" /> },
     { id: 'moderation', label: 'Moderation', icon: <Flag className="w-4 h-4" /> },
+    { id: 'platforms',  label: 'Platforms',  icon: <Globe className="w-4 h-4" /> },
     { id: 'square',     label: 'Square',     icon: <CreditCard className="w-4 h-4" /> },
   ];
 
@@ -653,6 +655,9 @@ export default function AdminPage() {
 
         {/* Moderation Tab */}
         {activeTab === 'moderation' && <PostModerationTable />}
+
+        {/* Platforms Tab */}
+        {activeTab === 'platforms' && <PlatformConfigTab />}
 
         {/* Square Tab */}
         {activeTab === 'square' && (
