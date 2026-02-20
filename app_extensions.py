@@ -19,7 +19,7 @@ import logging
 import time
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Callable
 from functools import wraps
 from flask import request, jsonify, g
@@ -32,7 +32,7 @@ from sqlalchemy import or_
 try:
     from database import db_session_scope, init_db
     from models import (
-        User, Account, Post, Media, PostAnalytics, PostStatus
+        User, Account, Post, Media, PostAnalytics, PostStatus, Webhook
     )
     from auth import (
         verify_token, decrypt_token
@@ -626,46 +626,68 @@ class WebhookManager:
         return session
 
     def register_webhook(self, user_id: str, url: str, events: List[str], secret: str = None) -> Dict:
-        """Register a webhook"""
+        """Register a webhook and persist it to the database"""
         if not self.enabled:
             return {'error': 'Webhooks not enabled'}
 
         webhook_id = str(uuid.uuid4())
 
-        # Store in database (add Webhook model if needed)
-        # For now, return success
-        return {
-            'id': webhook_id,
-            'url': url,
-            'events': events,
-            'active': True,
-            'created_at': datetime.utcnow().isoformat()
-        }
-    
-    def get_webhooks(self, user_id: str) -> List[Dict]:
-        """Get all webhooks for a user"""
-        if not self.enabled:
-            return {'error': 'Webhooks not enabled'}
-        
         try:
-            # TODO: Query from database when Webhook model is available
-            # For now, return empty list as webhooks are stored in memory
-            # during register_webhook but not persisted
-            logger.info(f"Getting webhooks for user {user_id}")
+            with db_session_scope() as session:
+                webhook = Webhook(
+                    id=webhook_id,
+                    user_id=user_id,
+                    url=url,
+                    events=events,
+                    secret=secret,
+                    active=True,
+                )
+                session.add(webhook)
+            return {
+                'id': webhook_id,
+                'url': url,
+                'events': events,
+                'active': True,
+                'created_at': datetime.now(timezone.utc).isoformat()
+            }
+        except Exception as e:
+            logger.error(f"Error registering webhook: {e}")
+            return {'error': str(e)}
+
+    def get_webhooks(self, user_id: str) -> List[Dict]:
+        """Get all active webhooks for a user from the database"""
+        if not self.enabled:
             return []
+
+        try:
+            with db_session_scope() as session:
+                webhooks = session.query(Webhook).filter_by(user_id=user_id, active=True).all()
+                return [
+                    {
+                        'id': w.id,
+                        'url': w.url,
+                        'events': w.events,
+                        'active': w.active,
+                        'created_at': w.created_at.isoformat() if w.created_at else None,
+                    }
+                    for w in webhooks
+                ]
         except Exception as e:
             logger.error(f"Error getting webhooks: {e}")
-            return {'error': str(e)}
-    
+            return []
+
     def delete_webhook(self, webhook_id: str, user_id: str) -> Dict:
-        """Delete a webhook (with authorization check)"""
+        """Delete a webhook (with ownership check) from the database"""
         if not self.enabled:
             return {'error': 'Webhooks not enabled'}
-        
+
         try:
-            # TODO: Delete from database when Webhook model is available
-            # For now, just return success
-            logger.info(f"Deleting webhook {webhook_id} for user {user_id}")
+            with db_session_scope() as session:
+                webhook = session.query(Webhook).filter_by(id=webhook_id, user_id=user_id).first()
+                if not webhook:
+                    return {'error': 'Webhook not found or access denied'}
+                session.delete(webhook)
+            logger.info(f"Deleted webhook {webhook_id} for user {user_id}")
             return {'success': True}
         except Exception as e:
             logger.error(f"Error deleting webhook: {e}")
