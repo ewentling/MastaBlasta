@@ -830,6 +830,16 @@ _PLATFORM_ENV_VARS = {
         'sensitive': {'REDDIT_CLIENT_SECRET'},
         'optional': set(),
     },
+    'pinterest': {
+        'keys': ['PINTEREST_APP_ID', 'PINTEREST_APP_SECRET', 'PINTEREST_REDIRECT_URI'],
+        'sensitive': {'PINTEREST_APP_SECRET'},
+        'optional': {'PINTEREST_REDIRECT_URI'},
+    },
+    'tiktok': {
+        'keys': ['TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET', 'TIKTOK_REDIRECT_URI'],
+        'sensitive': {'TIKTOK_CLIENT_SECRET'},
+        'optional': {'TIKTOK_REDIRECT_URI'},
+    },
     'openai': {
         'keys': ['OPENAI_API_KEY'],
         'sensitive': {'OPENAI_API_KEY'},

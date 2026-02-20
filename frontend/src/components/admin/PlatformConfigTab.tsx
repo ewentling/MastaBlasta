@@ -179,6 +179,50 @@ const PLATFORMS: PlatformDef[] = [
     devConsoleLabel: 'Reddit App Preferences',
   },
   {
+    id: 'pinterest',
+    name: 'Pinterest',
+    emoji: '📌',
+    color: 'bg-red-50',
+    requiredKeys: ['PINTEREST_APP_ID', 'PINTEREST_APP_SECRET'],
+    fields: [
+      { key: 'PINTEREST_APP_ID', label: 'App ID', placeholder: '1234567890123456789', hint: 'Found on your Pinterest App page under App ID' },
+      { key: 'PINTEREST_APP_SECRET', label: 'App Secret', sensitive: true, placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', hint: 'Keep this secret — never expose it publicly' },
+      { key: 'PINTEREST_REDIRECT_URI', label: 'Redirect URI', placeholder: 'https://yourdomain.com/api/oauth/pinterest/callback', hint: 'Must exactly match a URI registered in your Pinterest App' },
+    ],
+    steps: [
+      { title: 'Create a Pinterest Developer account', desc: 'Go to Pinterest for Developers and log in with your Pinterest account.', link: 'https://developers.pinterest.com', linkLabel: 'Pinterest for Developers →' },
+      { title: 'Create an App', desc: 'In the My Apps section, click "Connect app", choose "Create new app", and fill in the details.', link: 'https://developers.pinterest.com/apps', linkLabel: 'My Apps →' },
+      { title: 'Configure Redirect URI', desc: 'In your app settings, add your callback URL to the list of allowed Redirect URIs.', link: 'https://developers.pinterest.com/apps', linkLabel: 'App Settings →' },
+      { title: 'Copy App ID & Secret', desc: 'On your app detail page, copy the App ID and App Secret.', link: 'https://developers.pinterest.com/apps', linkLabel: 'App Details →' },
+      { title: 'Request API access', desc: 'Pinterest requires approval for production API access. Submit a request for the boards:read, pins:read, and pins:write scopes.', link: 'https://developers.pinterest.com/docs/getting-started/connect-app/', linkLabel: 'API Access Docs →' },
+      { title: 'Save & test', desc: 'Fill in the form, click Save, then try connecting a Pinterest account from the Accounts page.', link: null, linkLabel: null },
+    ],
+    devConsoleUrl: 'https://developers.pinterest.com/apps',
+    devConsoleLabel: 'Pinterest for Developers',
+  },
+  {
+    id: 'tiktok',
+    name: 'TikTok',
+    emoji: '🎵',
+    color: 'bg-pink-50',
+    requiredKeys: ['TIKTOK_CLIENT_KEY', 'TIKTOK_CLIENT_SECRET'],
+    fields: [
+      { key: 'TIKTOK_CLIENT_KEY', label: 'Client Key', placeholder: 'awxxxxxxxxxxxxxxxxxxxxxx', hint: 'Your TikTok App\'s Client Key from the TikTok for Developers portal' },
+      { key: 'TIKTOK_CLIENT_SECRET', label: 'Client Secret', sensitive: true, placeholder: 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx', hint: 'Keep this secret — never expose it publicly' },
+      { key: 'TIKTOK_REDIRECT_URI', label: 'Redirect URI', placeholder: 'https://yourdomain.com/api/oauth/tiktok/callback', hint: 'Must exactly match the redirect URI registered in your TikTok app' },
+    ],
+    steps: [
+      { title: 'Join TikTok for Developers', desc: 'Go to developers.tiktok.com and log in with a TikTok account to access the developer portal.', link: 'https://developers.tiktok.com', linkLabel: 'TikTok for Developers →' },
+      { title: 'Create an App', desc: 'Click "Create an app", fill in the basic information, and select "Web" as the platform.', link: 'https://developers.tiktok.com/apps', linkLabel: 'My Apps →' },
+      { title: 'Add Login Kit product', desc: 'Under your app\'s Products section, add "Login Kit" to enable OAuth user authentication.', link: 'https://developers.tiktok.com/apps', linkLabel: 'App Products →' },
+      { title: 'Configure Redirect URI', desc: 'In Login Kit settings, add your callback URL to the list of allowed Redirect URIs.', link: 'https://developers.tiktok.com/apps', linkLabel: 'Login Kit Settings →' },
+      { title: 'Copy Client Key & Secret', desc: 'On your app detail page, copy the Client Key and Client Secret.', link: 'https://developers.tiktok.com/apps', linkLabel: 'App Details →' },
+      { title: 'Save & test', desc: 'Fill in the form, click Save, then try connecting a TikTok account from the Accounts page.', link: null, linkLabel: null },
+    ],
+    devConsoleUrl: 'https://developers.tiktok.com/apps',
+    devConsoleLabel: 'TikTok for Developers',
+  },
+  {
     id: 'openai',
     name: 'OpenAI',
     emoji: '🤖',
@@ -313,6 +357,18 @@ export function PlatformConfigTab() {
               );
             })}
           </nav>
+        </div>
+        {/* Info: platforms that don't need admin OAuth setup */}
+        <div className="mt-3 bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-500 space-y-2">
+          <p className="font-semibold text-slate-600 uppercase tracking-wide text-[10px]">No admin setup needed</p>
+          <div className="flex items-start gap-1.5">
+            <span>🧵</span>
+            <span><strong>Threads</strong> — shares your Meta (Facebook) credentials above. Configure Meta to enable Threads.</span>
+          </div>
+          <div className="flex items-start gap-1.5">
+            <span>🦋</span>
+            <span><strong>Bluesky</strong> — users authenticate directly with their Bluesky handle + app password. No OAuth app credentials required.</span>
+          </div>
         </div>
       </div>
 
