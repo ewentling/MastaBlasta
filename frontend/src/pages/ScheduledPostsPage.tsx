@@ -83,8 +83,18 @@ function PostForm({ initial, onSubmit, isPending, submitLabel, onCancel }: PostF
   };
 
   const removeMedia = (i: number) => {
+    // Capture the current count before either setter runs to avoid a stale
+    // closure if the two state updates are batched differently.
+    const currentMediaFilesCount = mediaFiles.length;
     setMediaFiles(prev => prev.filter((_, idx) => idx !== i));
-    setUploadedMedia(prev => prev.filter((_, idx) => idx !== i));
+    // uploadedMedia may contain existing media (from editing) followed by newly
+    // uploaded media. mediaFiles contains only newly selected files. Compute the
+    // correct index into uploadedMedia using the captured count.
+    setUploadedMedia(prev => {
+      const existingCount = prev.length - currentMediaFilesCount;
+      const targetIndex = existingCount + i;
+      return prev.filter((_, idx) => idx !== targetIndex);
+    });
   };
 
   const handleOptimize = async () => {

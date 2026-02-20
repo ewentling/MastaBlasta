@@ -80,7 +80,7 @@ else:
 # Load production infrastructure if available
 try:
     from app_extensions import (
-        get_current_user, DB_ENABLED
+        get_current_user, DB_ENABLED, auth_required
     )
     from integrated_routes import integrated_bp
     PRODUCTION_MODE = True
@@ -88,6 +88,9 @@ try:
 except ImportError as e:
     PRODUCTION_MODE = False
     DB_ENABLED = False
+    # No-op fallback for development mode (no auth infrastructure available)
+    def auth_required(f):  # type: ignore[misc]
+        return f
     logger.warning(f"⚠ Running in development mode (in-memory storage): {e}")
 
 # Register integrated routes if production mode is enabled
@@ -6769,12 +6772,21 @@ def delete_post(post_id):
 
 
 @app.route('/api/posts/<post_id>', methods=['PATCH'])
+@auth_required
 def update_post(post_id):
     """Update a scheduled post's content, media, accounts and/or scheduled time"""
     post = posts_db.get(post_id)
 
     if not post:
         return jsonify({'error': 'Post not found'}), 404
+
+    # Ownership check: if the post was created by a specific user, only that user
+    # (or an admin) may edit it.
+    current_user = getattr(g, 'current_user', None)
+    if current_user:
+        post_owner = post.get('user_id')
+        if post_owner and post_owner != current_user['id'] and current_user.get('role') != 'admin':
+            return jsonify({'error': 'Forbidden'}), 403
 
     if post['status'] != 'scheduled':
         return jsonify({'error': 'Only scheduled posts can be edited'}), 400
@@ -7043,10 +7055,18 @@ def delete_shortened_url(short_code):
 
 
 @app.route('/api/urls/<short_code>', methods=['PATCH'])
+@auth_required
 def update_shortened_url(short_code):
     """Update the destination URL of a shortened link"""
     if short_code not in shortened_urls:
         return jsonify({'error': 'Short URL not found'}), 404
+
+    # Ownership check: only the creator (or an admin) may update a short link.
+    current_user = getattr(g, 'current_user', None)
+    if current_user:
+        url_owner = shortened_urls[short_code].get('user_id')
+        if url_owner and url_owner != current_user['id'] and current_user.get('role') != 'admin':
+            return jsonify({'error': 'Forbidden'}), 403
 
     data = request.get_json()
     if not data:

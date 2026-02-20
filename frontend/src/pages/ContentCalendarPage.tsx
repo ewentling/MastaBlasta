@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import enUS from 'date-fns/locale/en-US';
-import axios from 'axios';
-import { postsApi } from '../api';
+import { postsApi, api } from '../api';
 import { Calendar as CalendarIcon, Plus, X, Settings, CheckCircle, List } from 'lucide-react';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 
@@ -96,9 +95,7 @@ export default function ContentCalendarPage() {
 
   const handleGoogleCalendarAuth = async () => {
     try {
-      const response = await axios.get('/api/google-calendar/authorize', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      });
+      const response = await api.get('/google-calendar/authorize');
       
       const { authorization_url } = response.data;
       const popup = window.open(authorization_url, 'googleCalendarAuth', 'width=600,height=700');
@@ -129,9 +126,7 @@ export default function ContentCalendarPage() {
         end: event.end.toISOString(),
         event_id: event.id.startsWith('gcal-') ? event.id.replace('gcal-', '') : undefined
       }));
-      const response = await axios.post('/api/google-calendar/sync', { events: calendarEvents }, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      });
+      const response = await api.post('/google-calendar/sync', { events: calendarEvents });
       const { synced_count, total_events, errors } = response.data;
       if (errors?.length > 0) {
         alert(`Synced ${synced_count} of ${total_events} events. Some errors occurred:\n${errors.join('\n')}`);

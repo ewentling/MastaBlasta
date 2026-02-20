@@ -4,6 +4,9 @@ Admin API endpoints for subscription and user management
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone, timedelta
 import logging
+import re
+import stat
+import os
 from uuid import uuid4
 
 from app_extensions import auth_required, DB_ENABLED
@@ -17,6 +20,21 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
 
+
+def _sanitize_env_value(value: str) -> str:
+    """Sanitize a value before writing it to a .env file.
+
+    * Strips leading/trailing whitespace.
+    * Removes embedded newlines (which would break dotenv parsing).
+    * Wraps in double-quotes when the value contains spaces, ``#`` (which
+      dotenv treats as a comment start), or ``"``/``'`` characters so that
+      the file remains unambiguously parseable on restart.
+    """
+    value = value.strip().replace('\r', '').replace('\n', '')
+    if any(ch in value for ch in (' ', '\t', '#', '"', "'")):
+        # Escape any embedded double-quotes and wrap in double-quotes.
+        value = '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    return value
 
 # ==================== USER MANAGEMENT ====================
 
@@ -653,9 +671,6 @@ def update_square_config():
     Persists credentials to the .env file and applies them to the running
     process immediately so a server restart is not required.
     """
-    import os
-    import re
-
     try:
         data = request.get_json() or {}
 
@@ -667,15 +682,15 @@ def update_square_config():
         if data.get('environment') not in ('sandbox', 'production'):
             return jsonify({'error': 'environment must be "sandbox" or "production"'}), 400
 
-        # Map from request keys to env var names and option values
+        # Map from request keys to env var names and sanitized values
         env_map = {
-            'SQUARE_ACCESS_TOKEN': data.get('access_token', ''),
-            'SQUARE_ENVIRONMENT': data.get('environment', 'sandbox'),
-            'SQUARE_LOCATION_ID': data.get('location_id', ''),
-            'SQUARE_WEBHOOK_SIGNATURE_KEY': data.get('webhook_signature_key', ''),
-            'SQUARE_CATALOG_STARTER': data.get('catalog_starter', ''),
-            'SQUARE_CATALOG_PRO': data.get('catalog_pro', ''),
-            'SQUARE_CATALOG_ENTERPRISE': data.get('catalog_enterprise', ''),
+            'SQUARE_ACCESS_TOKEN': _sanitize_env_value(data.get('access_token', '')),
+            'SQUARE_ENVIRONMENT': _sanitize_env_value(data.get('environment', 'sandbox')),
+            'SQUARE_LOCATION_ID': _sanitize_env_value(data.get('location_id', '')),
+            'SQUARE_WEBHOOK_SIGNATURE_KEY': _sanitize_env_value(data.get('webhook_signature_key', '')),
+            'SQUARE_CATALOG_STARTER': _sanitize_env_value(data.get('catalog_starter', '')),
+            'SQUARE_CATALOG_PRO': _sanitize_env_value(data.get('catalog_pro', '')),
+            'SQUARE_CATALOG_ENTERPRISE': _sanitize_env_value(data.get('catalog_enterprise', '')),
         }
 
         # ── 1. Apply to running process immediately ──────────────────────────
@@ -729,7 +744,6 @@ def update_square_config():
                 fh.writelines(new_lines)
 
             # Restrict file permissions to owner-read-write only (security: no world-read)
-            import stat
             os.chmod(env_file_path, stat.S_IRUSR | stat.S_IWUSR)
 
             persisted = True
@@ -896,10 +910,6 @@ def get_platform_config():
 @admin_only
 def update_platform_config():
     """Persist platform OAuth credentials to .env and apply to running process immediately."""
-    import os
-    import re
-    import stat
-
     try:
         data = request.get_json() or {}
         platform = data.get('platform', '').lower()
@@ -910,9 +920,9 @@ def update_platform_config():
         meta = _PLATFORM_ENV_VARS[platform]
         env_map = {}
         for key in meta['keys']:
-            # Accept values keyed by env-var name
+            # Accept values keyed by env-var name; sanitize before storing
             if key in data.get('fields', {}):
-                env_map[key] = data['fields'][key]
+                env_map[key] = _sanitize_env_value(data['fields'][key])
 
         if not env_map:
             return jsonify({'error': 'No fields provided'}), 400

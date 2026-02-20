@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosRequestHeaders } from 'axios';
 import type {
   Platform,
   Account,
@@ -17,11 +17,22 @@ const api = axios.create({
   },
 });
 
+export { api };
+
 // Attach auth token to every request automatically
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
   if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`;
+    // config.headers may be an AxiosHeaders instance or a plain object;
+    // initialise it when absent and use the type-safe set() API when available.
+    if (!config.headers) {
+      config.headers = {} as AxiosRequestHeaders;
+    }
+    if (typeof (config.headers as AxiosRequestHeaders & { set?: Function }).set === 'function') {
+      (config.headers as AxiosRequestHeaders & { set: Function }).set('Authorization', `Bearer ${token}`);
+    } else {
+      (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+    }
   }
   return config;
 });
