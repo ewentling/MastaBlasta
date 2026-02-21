@@ -64,8 +64,8 @@ class VideoClipperService:
     # Minimum video length before clip analysis makes sense
     MIN_VIDEO_DURATION = 60  # seconds
 
-    # Gemini model – 1.5-flash has a 1M-token context window, ideal for long transcripts
-    GEMINI_MODEL = "gemini-1.5-flash"
+    # Gemini model – 2.0-flash has a 1M-token context window, ideal for long transcripts
+    GEMINI_MODEL = "gemini-2.0-flash"
 
     # Whisper model size: "base" is fast / low-RAM; switch to "medium" for higher accuracy
     WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
