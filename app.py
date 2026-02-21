@@ -7610,6 +7610,49 @@ def clips_create_clip():
     return jsonify(result)
 
 
+@app.route('/api/clips/analyze-and-create', methods=['POST'])
+def clips_analyze_and_create():
+    """
+    Full Gemini Clipper end-to-end pipeline:
+      1. Download the video (yt-dlp with anti-bot options)
+      2. Transcribe with Faster-Whisper (local, if installed)
+      3. Gemini 1.5 Flash identifies the N most viral moments
+      4. ffmpeg extracts each moment (stream-copy by default)
+      5. Source video deleted immediately after clips are created
+
+    Request body:
+    {
+        "video_url": "https://youtube.com/watch?v=...",
+        "num_clips": 3,
+        "reencode": false
+    }
+    """
+    data = request.get_json()
+
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    video_url = data.get('video_url', '').strip()
+    num_clips = data.get('num_clips', 3)
+    reencode = bool(data.get('reencode', False))
+
+    if not video_url:
+        return jsonify({'error': 'video_url is required'}), 400
+
+    if not (1 <= num_clips <= 10):
+        return jsonify({'error': 'num_clips must be between 1 and 10'}), 400
+
+    result = video_clipper.analyze_and_create_clips(
+        video_url, num_clips=num_clips, reencode=reencode
+    )
+
+    if not result.get('success'):
+        status_code = 503 if 'not enabled' in result.get('error', '') else 400
+        return jsonify(result), status_code
+
+    return jsonify(result)
+
+
 @app.route('/api/clips/schedule', methods=['POST'])
 def clips_schedule():
     """
