@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, Component } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -25,6 +25,38 @@ import { ThemeProvider } from './ThemeContext';
 import { AIProvider } from './contexts/AIContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import './App.css';
+
+// ==================== Error Boundary ====================
+interface ErrorBoundaryState { hasError: boolean; error: Error | null }
+class ErrorBoundary extends Component<{ children: React.ReactNode }, ErrorBoundaryState> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: '1rem', padding: '2rem', textAlign: 'center' }}>
+          <AlertTriangle size={48} style={{ color: '#f59e0b' }} />
+          <h2 style={{ color: 'var(--color-textPrimary)', fontSize: '1.5rem', fontWeight: '700' }}>Something went wrong</h2>
+          <p style={{ color: 'var(--color-textSecondary)', maxWidth: '400px' }}>
+            {this.state.error?.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.625rem 1.25rem', background: 'linear-gradient(120deg,#00e5ff,#7c4dff)', border: 'none', borderRadius: '0.5rem', color: 'white', fontWeight: '600', cursor: 'pointer' }}
+          >
+            <RefreshCw size={16} /> Reload page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -116,7 +148,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading...</div>;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: '1rem' }}>
+        <RefreshCw size={36} className="animate-spin" style={{ color: 'var(--color-accentPrimary, #00e5ff)' }} />
+        <p style={{ color: 'var(--color-textSecondary, #94a3b8)', fontSize: '0.9375rem' }}>Loading…</p>
+      </div>
+    );
   }
 
   if (!isAuthenticated) {
@@ -128,38 +165,42 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <AIProvider>
-          <QueryClientProvider client={queryClient}>
-            <Router>
-              <Routes>
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
-                <Route path="/subscription-info" element={<SubscriptionInfoPage />} />
-                <Route
-                  path="*"
-                  element={
-                    <ProtectedRoute>
-                      <div className="app-container">
-                        <Navigation />
-                        <main className="main-content">
-                          <Routes>
-                            {appRoutes.map(({ path, element }) => (
-                              <Route key={path} path={path} element={element} />
-                            ))}
-                          </Routes>
-                        </main>
-                      </div>
-                    </ProtectedRoute>
-                  }
-                />
-              </Routes>
-            </Router>
-          </QueryClientProvider>
-        </AIProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <ErrorBoundary>
+      <ThemeProvider>
+        <AuthProvider>
+          <AIProvider>
+            <QueryClientProvider client={queryClient}>
+              <Router>
+                <Routes>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/subscription-info" element={<SubscriptionInfoPage />} />
+                  <Route
+                    path="*"
+                    element={
+                      <ProtectedRoute>
+                        <div className="app-container">
+                          <Navigation />
+                          <main className="main-content">
+                            <ErrorBoundary>
+                              <Routes>
+                                {appRoutes.map(({ path, element }) => (
+                                  <Route key={path} path={path} element={element} />
+                                ))}
+                              </Routes>
+                            </ErrorBoundary>
+                          </main>
+                        </div>
+                      </ProtectedRoute>
+                    }
+                  />
+                </Routes>
+              </Router>
+            </QueryClientProvider>
+          </AIProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 

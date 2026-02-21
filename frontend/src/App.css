@@ -1321,3 +1321,8 @@ input:checked + .slider:hover {
 .rbc-agenda-event-cell {
   padding: 0.875rem;
 }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

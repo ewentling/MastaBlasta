@@ -34,7 +34,7 @@ def register():
         from auth import hash_password, generate_api_key, create_access_token, create_refresh_token
         from database import db_session_scope
         from models import User, UserRole
-        from security_enhancements import PasswordPolicy
+        from security_enhancements import PasswordPolicy, InputSanitizer
         import uuid
 
         data = request.get_json()
@@ -44,6 +44,10 @@ def register():
 
         if not email or not password:
             return jsonify({'error': 'Email and password required'}), 400
+
+        # Validate email format
+        if not InputSanitizer.validate_email(email):
+            return jsonify({'error': 'Invalid email format'}), 400
 
         # Validate password policy
         is_valid, message = PasswordPolicy.validate(password)
@@ -102,6 +106,7 @@ def login():
         from auth import verify_password, create_access_token, create_refresh_token
         from database import db_session_scope
         from models import User
+        from security_enhancements import AccountSecurity, SecurityLogger
 
         data = request.get_json()
         email = data.get('email')
@@ -110,14 +115,32 @@ def login():
         if not email or not password:
             return jsonify({'error': 'Email and password required'}), 400
 
+        # Check account lockout before hitting the DB
+        if AccountSecurity.is_account_locked(email):
+            remaining = AccountSecurity.get_lockout_remaining(email)
+            return jsonify({
+                'error': 'Account temporarily locked due to too many failed attempts',
+                'retry_after': remaining
+            }), 429
+
         with db_session_scope() as session:
             user = session.query(User).filter_by(email=email).first()
 
             if not user or not user.is_active:
+                AccountSecurity.record_login_attempt(email, success=False)
+                SecurityLogger.log_failed_login(email)
                 return jsonify({'error': 'Invalid credentials'}), 401
 
             if not verify_password(password, user.password_hash):
+                locked = AccountSecurity.record_login_attempt(email, success=False)
+                SecurityLogger.log_failed_login(email)
+                if locked:
+                    SecurityLogger.log_account_lockout(email)
+                    return jsonify({'error': 'Account temporarily locked due to too many failed attempts'}), 429
                 return jsonify({'error': 'Invalid credentials'}), 401
+
+            # Successful login – clear failure counters
+            AccountSecurity.record_login_attempt(email, success=True)
 
             # Update last login
             user.last_login = datetime.utcnow()
@@ -155,6 +178,7 @@ def change_password():
         from auth import verify_password, hash_password
         from database import db_session_scope
         from models import User
+        from security_enhancements import PasswordPolicy
 
         data = request.get_json()
         old_password = data.get('old_password')
@@ -163,8 +187,9 @@ def change_password():
         if not old_password or not new_password:
             return jsonify({'error': 'Old and new passwords required'}), 400
 
-        if len(new_password) < 8:
-            return jsonify({'error': 'New password must be at least 8 characters'}), 400
+        is_valid, message = PasswordPolicy.validate(new_password)
+        if not is_valid:
+            return jsonify({'error': message}), 400
 
         with db_session_scope() as session:
             user = session.query(User).filter_by(id=g.current_user['id']).first()
@@ -195,6 +220,59 @@ def change_password():
 def get_me():
     """Get current user profile"""
     return jsonify({'user': g.current_user})
+
+
+@integrated_bp.route('/auth/refresh', methods=['POST'])
+def refresh_access_token():
+    """Use a refresh token to obtain a new access token"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+
+    try:
+        from auth import decode_token, create_access_token, create_refresh_token
+        from database import db_session_scope
+        from models import User
+        from security_enhancements import RefreshTokenRotation
+
+        data = request.get_json() or {}
+        refresh_token = data.get('refresh_token')
+        if not refresh_token:
+            # Also accept from Authorization header (Bearer <refresh_token>)
+            auth_header = request.headers.get('Authorization', '')
+            if auth_header.startswith('Bearer '):
+                refresh_token = auth_header.split(' ', 1)[1]
+
+        if not refresh_token:
+            return jsonify({'error': 'Refresh token required'}), 400
+
+        # Reject already-used tokens (rotation)
+        if RefreshTokenRotation.is_token_used(refresh_token):
+            return jsonify({'error': 'Refresh token has already been used'}), 401
+
+        payload = decode_token(refresh_token)
+        if not payload or payload.get('type') != 'refresh':
+            return jsonify({'error': 'Invalid or expired refresh token'}), 401
+
+        user_id = payload['user_id']
+
+        with db_session_scope() as session:
+            user = session.query(User).filter_by(id=user_id, is_active=True).first()
+            if not user:
+                return jsonify({'error': 'User not found or inactive'}), 401
+
+            # Mark old refresh token as used and issue new pair
+            RefreshTokenRotation.mark_token_used(refresh_token)
+            new_access_token = create_access_token(user.id, user.role.value)
+            new_refresh_token = create_refresh_token(user.id)
+
+            return jsonify({
+                'access_token': new_access_token,
+                'refresh_token': new_refresh_token,
+            })
+
+    except Exception:
+        logger.error("Token refresh error")
+        return jsonify({'error': 'Token refresh failed'}), 500
 
 
 @integrated_bp.route('/auth/google', methods=['POST'])

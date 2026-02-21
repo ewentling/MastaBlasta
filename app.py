@@ -32,6 +32,7 @@ except ImportError:
     logger.warning("AI libraries not installed. AI features will be disabled.")
 
 app = Flask(__name__)
+_APP_START_TIME = time.time()  # Track uptime for health checks
 
 # Security: Validate SECRET_KEY
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -4009,13 +4010,31 @@ def publish_to_platforms(post_id, platforms, content, media, credentials_dict, p
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
-    return jsonify({
+    """Health check endpoint with database connectivity and uptime"""
+    uptime_seconds = int(time.time() - _APP_START_TIME)
+    health = {
         'status': 'healthy',
         'service': 'MastaBlasta',
         'version': '1.0.0',
-        'timestamp': datetime.now(timezone.utc).isoformat()
-    })
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'uptime_seconds': uptime_seconds,
+        'database': 'disabled',
+        'ai_enabled': AI_ENABLED,
+    }
+
+    if DB_ENABLED:
+        try:
+            from database import db_session_scope
+            from sqlalchemy import text
+            with db_session_scope() as session:
+                session.execute(text('SELECT 1'))
+            health['database'] = 'connected'
+        except Exception as db_err:
+            health['database'] = 'error'
+            health['status'] = 'degraded'
+            logger.warning(f"Health check: DB error: {db_err}")
+
+    return jsonify(health)
 
 
 @app.route('/api/accounts', methods=['GET'])
@@ -6918,6 +6937,9 @@ def shorten_url():
     if not original_url:
         return jsonify({'error': 'URL is required'}), 400
 
+    if not original_url.startswith(('http://', 'https://')):
+        return jsonify({'error': 'URL must start with http:// or https://'}), 400
+
     # Check if custom code is already taken
     if custom_code and custom_code in shortened_urls:
         return jsonify({'error': 'Custom code already exists'}), 400
@@ -8990,6 +9012,25 @@ def serve_frontend(path):
     if os.path.exists(os.path.join(frontend_path, 'index.html')) and not path.startswith('api/'):
         return send_from_directory(frontend_path, 'index.html')
     return jsonify({'error': 'Not found'}), 404
+
+
+@app.errorhandler(404)
+def not_found(e):
+    """Return JSON 404 for API routes, otherwise serve the SPA index.html"""
+    if request.path.startswith('/api/') or request.path.startswith('/u/'):
+        return jsonify({'error': 'Not found', 'status': 404}), 404
+    frontend_path = os.path.join(os.path.dirname(__file__), 'frontend', 'dist')
+    index = os.path.join(frontend_path, 'index.html')
+    if os.path.exists(index):
+        return send_from_directory(frontend_path, 'index.html')
+    return jsonify({'error': 'Not found', 'status': 404}), 404
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    """Return JSON 500 with a safe error message"""
+    logger.error(f"Internal server error: {e}")
+    return jsonify({'error': 'Internal server error', 'status': 500}), 500
 
 
 if __name__ == '__main__':
