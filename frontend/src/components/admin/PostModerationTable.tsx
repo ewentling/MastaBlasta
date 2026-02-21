@@ -7,7 +7,6 @@ export function PostModerationTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  // Fetch posts
   const { data, isLoading, error } = useQuery({
     queryKey: ['moderation-posts', search, page],
     queryFn: async () => {
@@ -27,7 +26,6 @@ export function PostModerationTable() {
     },
   });
 
-  // Flag post mutation
   const flagPostMutation = useMutation({
     mutationFn: async ({ postId, reason }: { postId: string; reason: string }) => {
       const response = await fetch(`/api/admin/moderation/posts/${postId}/flag`, {
@@ -47,7 +45,6 @@ export function PostModerationTable() {
     },
   });
 
-  // Delete post mutation
   const deletePostMutation = useMutation({
     mutationFn: async ({ postId, reason }: { postId: string; reason: string }) => {
       const response = await fetch(`/api/admin/moderation/posts/${postId}`, {
@@ -77,7 +74,6 @@ export function PostModerationTable() {
   const handleDeletePost = (postId: string) => {
     const reason = prompt('Enter reason for deleting this post:');
     if (!reason) return;
-
     if (window.confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
       deletePostMutation.mutate({ postId, reason });
     }
@@ -85,108 +81,92 @@ export function PostModerationTable() {
 
   const posts = data?.posts || [];
   const totalPages = data?.total_pages || 1;
+  const cardStyle = { background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' };
+
+  const getStatusStyle = (status: string) => {
+    if (status === 'published') return { background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399' };
+    if (status === 'scheduled') return { background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24' };
+    return { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#8090c2' };
+  };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold">Content Moderation</h3>
-        <div className="flex items-center gap-2 text-sm text-gray-600">
+    <div className="rounded-xl shadow-lg overflow-hidden" style={cardStyle}>
+      <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <h3 className="text-sm font-semibold text-white">Content Moderation</h3>
+        <div className="flex items-center gap-2 text-sm text-slate-400">
           <AlertTriangle className="w-4 h-4" />
           Total Posts: {data?.total || 0}
         </div>
       </div>
 
       {/* Search */}
-      <div className="mb-4">
+      <div className="px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-500" />
           <input
             type="text"
             value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search posts by content..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
           />
         </div>
       </div>
 
-      {/* Loading State */}
       {isLoading && (
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
         </div>
       )}
 
-      {/* Error State */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-800">Failed to load posts</p>
+        <div className="m-4 rounded-lg p-4" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
+          <p className="text-red-300">Failed to load posts</p>
         </div>
       )}
 
-      {/* Posts Table */}
       {!isLoading && !error && (
         <>
           {posts.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
+            <div className="text-center py-12 text-slate-500">
               <p>No posts found</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Content
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      User
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
+              <table className="min-w-full">
+                <thead>
+                  <tr style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Content</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">User</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Created</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody>
                   {posts.map((post: any) => (
-                    <tr key={post.id} className="hover:bg-gray-50">
+                    <tr key={post.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                       <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900 max-w-md">
-                          {post.content}
-                        </div>
+                        <div className="text-sm text-slate-300 max-w-md">{post.content}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">
-                          {post.user_email}
-                        </div>
+                        <div className="text-sm font-medium text-white">{post.user_email}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          post.status === 'published' ? 'bg-green-100 text-green-800' :
-                          post.status === 'scheduled' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
+                        <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full" style={getStatusStyle(post.status)}>
                           {post.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
                         {post.created_at ? new Date(post.created_at).toLocaleDateString() : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex gap-2">
+                        <div className="flex gap-3">
                           <button
                             onClick={() => handleFlagPost(post.id)}
                             disabled={flagPostMutation.isPending}
-                            className="text-yellow-600 hover:text-yellow-900 disabled:opacity-50"
+                            className="text-amber-400 hover:text-amber-300 disabled:opacity-50 transition-colors"
                             title="Flag post"
                           >
                             <Flag className="w-4 h-4" />
@@ -194,7 +174,7 @@ export function PostModerationTable() {
                           <button
                             onClick={() => handleDeletePost(post.id)}
                             disabled={deletePostMutation.isPending}
-                            className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                            className="text-red-400 hover:text-red-300 disabled:opacity-50 transition-colors"
                             title="Delete post"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -208,24 +188,23 @@ export function PostModerationTable() {
             </div>
           )}
 
-          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="mt-4 flex items-center justify-between">
-              <div className="text-sm text-gray-700">
-                Page {page} of {totalPages}
-              </div>
+            <div className="px-6 py-4 flex items-center justify-between" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="text-sm text-slate-400">Page {page} of {totalPages}</div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page === 1}
-                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1 text-sm rounded text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors hover:text-white"
+                  style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}
                 >
                   Previous
                 </button>
                 <button
                   onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                   disabled={page === totalPages}
-                  className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1 text-sm rounded text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors hover:text-white"
+                  style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}
                 >
                   Next
                 </button>
