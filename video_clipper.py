@@ -5,7 +5,7 @@ Four-step pipeline:
   1. Ingestion   – yt-dlp downloads the full video (anti-bot options).
   2. Transcription – Faster-Whisper runs locally to produce a timestamped
                     transcript (.json with start/end/text per segment).
-  3. Analysis    – Gemini 1.5 Flash reads the transcript and returns
+  3. Analysis    – Gemini 2.0 Flash reads the transcript and returns
                     the N most viral moments with precise timestamps.
   4. Extraction  – ffmpeg clips each moment (stream-copy by default for
                     lossless speed; re-encode optional for frame accuracy).
