@@ -22,8 +22,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Create missing user_id indexes."""
-    # Each create_index call is idempotent-safe: if the index already exists
-    # from a prior run the DB will raise an error caught by Alembic's autogen.
+    # Note: these indexes must not already exist; running this migration
+    # against a database that already has them will raise "index already exists".
     op.create_index('ix_accounts_user_id', 'accounts', ['user_id'])
     op.create_index('ix_posts_user_id', 'posts', ['user_id'])
     op.create_index('ix_media_user_id', 'media', ['user_id'])

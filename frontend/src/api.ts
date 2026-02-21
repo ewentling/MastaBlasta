@@ -23,7 +23,15 @@ export { api };
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
   if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`;
+    // Axios 1.x always initialises config.headers as an AxiosHeaders instance,
+    // but guard defensively for any edge-case where it might be absent.
+    if (!config.headers) {
+      config.headers = { Authorization: `Bearer ${token}` } as any;
+    } else if (typeof (config.headers as any).set === 'function') {
+      (config.headers as any).set('Authorization', `Bearer ${token}`);
+    } else {
+      (config.headers as any)['Authorization'] = `Bearer ${token}`;
+    }
   }
   return config;
 });
@@ -75,10 +83,22 @@ api.interceptors.response.use(
 
     // ── 429 Too Many Requests ──────────────────────────────────────────────
     if (status === 429) {
+      const config = error.config;
+      if (!config) return Promise.reject(error);
+
+      // Only auto-retry idempotent methods to avoid duplicating side effects
+      const method = (config.method ?? 'get').toLowerCase();
+      if (!['get', 'head', 'options'].includes(method)) return Promise.reject(error);
+
+      const cfgAny = config as any;
+      const retryCount: number = typeof cfgAny._retryCount === 'number' ? cfgAny._retryCount : 0;
+      if (retryCount >= 3) return Promise.reject(error);
+      cfgAny._retryCount = retryCount + 1;
+
       const retryAfter = Number(error.response.headers['retry-after'] ?? 1);
-      console.warn(`Rate limited. Retrying after ${retryAfter}s`);
+      console.warn(`Rate limited. Retrying after ${retryAfter}s (attempt ${cfgAny._retryCount}/3)`);
       await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-      return api.request(error.config);
+      return api.request(config);
     }
 
     // ── 401 Unauthorised – try a one-shot token refresh ───────────────────

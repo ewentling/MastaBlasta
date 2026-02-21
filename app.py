@@ -18,6 +18,23 @@ from typing import List, Dict, Any
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+try:
+    import openai
+    from PIL import Image, ImageEnhance
+    import io
+    import base64
+    from sklearn.linear_model import LinearRegression
+    from sklearn.preprocessing import StandardScaler
+    import numpy as np
+    import pandas as pd
+    AI_ENABLED = True
+except ImportError:
+    AI_ENABLED = False
+    logger.warning("AI libraries not installed. AI features will be disabled.")
+
+app = Flask(__name__)
+_APP_START_TIME = time.time()  # Track uptime for health checks
+
 # ── X-Request-ID correlation ──────────────────────────────────────────────────
 # Attach a unique request ID to every request so that log lines from the same
 # request can be correlated across services.  Clients can also pass their own
@@ -35,23 +52,6 @@ def _add_request_id_header(response):
     if hasattr(_flask_g, 'request_id'):
         response.headers['X-Request-ID'] = _flask_g.request_id
     return response
-
-try:
-    import openai
-    from PIL import Image, ImageEnhance
-    import io
-    import base64
-    from sklearn.linear_model import LinearRegression
-    from sklearn.preprocessing import StandardScaler
-    import numpy as np
-    import pandas as pd
-    AI_ENABLED = True
-except ImportError:
-    AI_ENABLED = False
-    logger.warning("AI libraries not installed. AI features will be disabled.")
-
-app = Flask(__name__)
-_APP_START_TIME = time.time()  # Track uptime for health checks
 
 # Security: Validate SECRET_KEY
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -175,24 +175,18 @@ except ImportError as e:
     logger.warning(f"⚠ Advanced features not available: {e}")
 
 # Apply security headers middleware (HSTS, CSP, X-Frame-Options, etc.)
+_prune_security_state_fn = None
 try:
     from security_enhancements import init_security_middleware, prune_security_state
     init_security_middleware(app)
     logger.info("✓ Security headers middleware applied")
-    # Prune in-memory security state (login_attempts, account_lockouts, rate limits) every 5 min
-    scheduler.add_job(
-        prune_security_state,
-        'interval',
-        minutes=5,
-        id='prune_security_state',
-        replace_existing=True,
-    )
-    logger.info("✓ Security state pruning job scheduled (every 5 minutes)")
+    _prune_security_state_fn = prune_security_state
 except ImportError as e:
     logger.warning(f"⚠ Security middleware not available: {e}")
 
 
 # ── Periodic subscription expiry job ─────────────────────────────────────────
+_expire_stale_subscriptions_fn = None
 if PRODUCTION_MODE and DB_ENABLED:
     def _expire_stale_subscriptions():
         """Mark subscriptions whose billing period or trial has ended as EXPIRED.
@@ -220,14 +214,7 @@ if PRODUCTION_MODE and DB_ENABLED:
         except Exception as e:
             logger.error(f"Subscription expiry job failed: {e}")
 
-    scheduler.add_job(
-        _expire_stale_subscriptions,
-        'interval',
-        hours=1,
-        id='expire_subscriptions',
-        replace_existing=True,
-    )
-    logger.info("✓ Subscription expiry job scheduled (every hour)")
+    _expire_stale_subscriptions_fn = _expire_stale_subscriptions
 
 
 # Helper functions
@@ -266,6 +253,26 @@ jobstores = {
 }
 scheduler = BackgroundScheduler(jobstores=jobstores, timezone='UTC')
 scheduler.start()
+
+# Register background jobs (must be done after scheduler.start())
+if _prune_security_state_fn is not None:
+    scheduler.add_job(
+        _prune_security_state_fn,
+        'interval',
+        minutes=5,
+        id='prune_security_state',
+        replace_existing=True,
+    )
+    logger.info("✓ Security state pruning job scheduled (every 5 minutes)")
+if _expire_stale_subscriptions_fn is not None:
+    scheduler.add_job(
+        _expire_stale_subscriptions_fn,
+        'interval',
+        hours=1,
+        id='expire_subscriptions',
+        replace_existing=True,
+    )
+    logger.info("✓ Subscription expiry job scheduled (every hour)")
 
 # In-memory storage for posts and accounts (in production, use a database)
 posts_db = {}

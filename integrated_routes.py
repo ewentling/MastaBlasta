@@ -489,8 +489,13 @@ def upload_media():
 @auth_required
 def list_media():
     """List user's media library"""
-    limit = min(100, max(1, int(request.args.get('limit', 50))))
-    offset = max(0, int(request.args.get('offset', 0)))
+    try:
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid pagination parameters; limit and offset must be integers'}), 400
+    limit = min(100, max(1, limit))
+    offset = max(0, offset)
 
     media_list = media_manager.list_media(g.current_user['id'], limit, offset)
     return jsonify({'media': media_list, 'limit': limit, 'offset': offset})
@@ -524,9 +529,11 @@ def download_media(media_id):
     try:
         resolved = Path(media['file_path']).resolve()
         media_root = MEDIA_DIR.resolve()
-        if not str(resolved).startswith(str(media_root)):
-            logger.warning(f"Path traversal attempt blocked: {media['file_path']}")
-            return jsonify({'error': 'Access denied'}), 403
+        # resolved.relative_to() raises ValueError if resolved is not inside media_root
+        resolved.relative_to(media_root)
+    except ValueError:
+        logger.warning(f"Path traversal attempt blocked: {media['file_path']}")
+        return jsonify({'error': 'Access denied'}), 403
     except Exception:
         return jsonify({'error': 'Invalid file path'}), 400
 
@@ -590,8 +597,13 @@ def list_posts():
     }
     filters = {k: v for k, v in filters.items() if v}
 
-    limit = min(100, max(1, int(request.args.get('limit', 50))))
-    offset = max(0, int(request.args.get('offset', 0)))
+    try:
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid pagination parameters; limit and offset must be integers'}), 400
+    limit = min(100, max(1, limit))
+    offset = max(0, offset)
 
     posts = db_manager.list_posts(g.current_user['id'], filters, limit, offset)
     return jsonify({'posts': posts, 'limit': limit, 'offset': offset})
@@ -759,8 +771,13 @@ def search_posts():
     }
     filters = {k: v for k, v in filters.items() if v is not None}
 
-    limit = min(100, max(1, int(request.args.get('limit', 50))))
-    offset = max(0, int(request.args.get('offset', 0)))
+    try:
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid pagination parameters; limit and offset must be integers'}), 400
+    limit = min(100, max(1, limit))
+    offset = max(0, offset)
 
     results = search_manager.search_posts(g.current_user['id'], query, filters, limit, offset)
     return jsonify(results)

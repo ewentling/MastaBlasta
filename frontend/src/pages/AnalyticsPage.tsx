@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart2, TrendingUp, Users, Eye, Heart, MessageCircle, Share2, Smile, Frown, Meh, Download } from 'lucide-react';
-import * as apiModule from '../api';
-const { api } = apiModule;
+import { api } from '../api';
 import { formatDateTime } from '../utils/timezone';
 
 export default function AnalyticsPage() {

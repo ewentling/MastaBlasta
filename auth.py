@@ -237,7 +237,7 @@ def create_default_admin(db_session):
     """
     Create default admin account for initial deployment.
     Email: admin@mastablasta.com
-    Password: ChangeMe123!
+    Password: randomly generated and printed to stdout once at startup.
     Must be changed on first login.
     """
     from models import User, UserRole
@@ -265,16 +265,22 @@ def create_default_admin(db_session):
         
         db_session.add(admin)
         db_session.commit()
-        
-        logger.warning("=" * 70)
-        logger.warning("🔐 DEFAULT ADMIN ACCOUNT CREATED")
-        logger.warning("=" * 70)
-        logger.warning("   Email: admin@mastablasta.com")
-        logger.warning(f"   Password: {default_password}")
-        logger.warning("")
-        logger.warning("⚠️  IMPORTANT: This password MUST be changed on first login!")
-        logger.warning("⚠️  This message is shown ONCE. Store the password securely.")
-        logger.warning("=" * 70)
+
+        # Print to stdout only — never to logger which writes to persistent log files.
+        # This ensures the credential is visible to the operator at startup but is
+        # not stored in systemd/journald or any log shipping pipeline.
+        import sys
+        border = "=" * 70
+        print(border, file=sys.stdout, flush=True)
+        print("🔐 DEFAULT ADMIN ACCOUNT CREATED", file=sys.stdout, flush=True)
+        print(border, file=sys.stdout, flush=True)
+        print("   Email: admin@mastablasta.com", file=sys.stdout, flush=True)
+        print(f"   Password: {default_password}", file=sys.stdout, flush=True)
+        print("", file=sys.stdout, flush=True)
+        print("⚠️  IMPORTANT: This password MUST be changed on first login!", file=sys.stdout, flush=True)
+        print("⚠️  This message is shown ONCE. Store the password securely.", file=sys.stdout, flush=True)
+        print(border, file=sys.stdout, flush=True)
+        logger.info("Default admin created — see startup stdout for credentials.")
         
     except Exception as e:
         logger.error(f"Error creating default admin: {e}")
