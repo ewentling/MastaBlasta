@@ -838,9 +838,9 @@ def register_webhook():
     if not url or not events:
         return jsonify({'error': 'URL and events required'}), 400
 
-    # Validate webhook URL to prevent SSRF attacks
-    if not InputSanitizer.validate_url(url):
-        return jsonify({'error': 'Invalid webhook URL. Must be a public https:// URL.'}), 400
+    # Validate webhook URL: must be a public HTTPS URL to prevent SSRF and MITM
+    if not InputSanitizer.validate_url(url, https_only=True):
+        return jsonify({'error': 'Webhook URL must be a public https:// URL'}), 400
 
     result = webhook_manager.register_webhook(g.current_user['id'], url, events, secret)
 

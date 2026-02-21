@@ -76,9 +76,13 @@ if is_production:
     CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=True)
     logger.info(f"✅ Production CORS enabled for: {ALLOWED_ORIGINS}")
 else:
-    # Development: Permissive but logged
-    CORS(app, origins='*', supports_credentials=True)
-    logger.warning("⚠️  Development mode: CORS allows all origins")
+    # Development: Restrict to common dev origins only.
+    # Note: browsers reject origins='*' with supports_credentials=True, so we enumerate
+    # safe localhost origins instead of using a wildcard.
+    _dev_origins = ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:33766',
+                    'http://127.0.0.1:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:33766']
+    CORS(app, origins=_dev_origins, supports_credentials=True)
+    logger.warning("⚠️  Development mode: CORS restricted to localhost origins")
 
 # ==================== Production Infrastructure Integration ====================
 # Load production infrastructure if available
@@ -151,6 +155,14 @@ try:
     logger.info("  - /api/advanced/ai-training/* - Custom AI model training")
 except ImportError as e:
     logger.warning(f"⚠ Advanced features not available: {e}")
+
+# Apply security headers middleware (HSTS, CSP, X-Frame-Options, etc.)
+try:
+    from security_enhancements import init_security_middleware
+    init_security_middleware(app)
+    logger.info("✓ Security headers middleware applied")
+except ImportError as e:
+    logger.warning(f"⚠ Security middleware not available: {e}")
 
 
 # Helper functions
@@ -4694,6 +4706,7 @@ def ai_compare_variations():
 
 
 @app.route('/api/ai/train-model', methods=['POST'])
+@auth_required
 def ai_train_model():
     """Train engagement prediction model on historical data"""
     data = request.get_json()

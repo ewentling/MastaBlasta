@@ -2,6 +2,7 @@
 Authentication and authorization utilities
 """
 import os
+import secrets
 import sys
 import uuid
 import bcrypt
@@ -248,9 +249,9 @@ def create_default_admin(db_session):
             logger.info("Default admin account already exists")
             return
         
-        # Create default admin
+        # Create default admin with a randomly generated password
         admin_id = str(uuid.uuid4())
-        default_password = 'ChangeMe123!'
+        default_password = secrets.token_urlsafe(16)  # 128-bit random password
         
         admin = User(
             id=admin_id,
@@ -259,7 +260,7 @@ def create_default_admin(db_session):
             full_name='System Administrator',
             role=UserRole.ADMIN,
             is_active=True,
-            password_must_change=True  # Force password change
+            password_must_change=True  # Force password change on first login
         )
         
         db_session.add(admin)
@@ -269,9 +270,10 @@ def create_default_admin(db_session):
         logger.warning("🔐 DEFAULT ADMIN ACCOUNT CREATED")
         logger.warning("=" * 70)
         logger.warning("   Email: admin@mastablasta.com")
-        logger.warning("   Password: ChangeMe123!")
+        logger.warning(f"   Password: {default_password}")
         logger.warning("")
         logger.warning("⚠️  IMPORTANT: This password MUST be changed on first login!")
+        logger.warning("⚠️  This message is shown ONCE. Store the password securely.")
         logger.warning("=" * 70)
         
     except Exception as e:
