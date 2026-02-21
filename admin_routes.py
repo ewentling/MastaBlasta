@@ -8,6 +8,7 @@ import re
 import stat
 import os
 from uuid import uuid4
+from sqlalchemy import or_
 
 from app_extensions import auth_required, DB_ENABLED
 from subscription_control import admin_only, get_user_subscription

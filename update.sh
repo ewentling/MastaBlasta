@@ -37,6 +37,54 @@ LOG_FILE="${SCRIPT_DIR}/update_$(date +%Y%m%d_%H%M%S).log"
 DRY_RUN=false
 SKIP_BACKUP=false
 DEPLOYMENT_TYPE=""
+BACKUP_PATH=""  # Set during create_backups(); used by rollback trap
+
+# Automatic rollback on failure
+_rollback_on_exit() {
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo -e "\n\033[0;31m[ERROR]\033[0m Update failed (exit code $exit_code). Attempting automatic database restore..." | tee -a "$LOG_FILE"
+        if [ -n "$BACKUP_PATH" ] && [ "$SKIP_BACKUP" != "true" ] && [ "$DRY_RUN" != "true" ]; then
+            # Restore database backup if it exists
+            DB_BACKUP_FILE="${BACKUP_PATH}/database_backup.sql"
+            if [ -f "$DB_BACKUP_FILE" ]; then
+                echo -e "\033[1;33m[WARNING]\033[0m Restoring database from: $DB_BACKUP_FILE" | tee -a "$LOG_FILE"
+                if [ -f ".env" ]; then
+                    source .env 2>/dev/null || true
+                fi
+                if [ -n "${DATABASE_URL:-}" ]; then
+                    if [[ $DATABASE_URL =~ postgresql://([^:]+):([^@]+)@([^:/]+):?([0-9]+)?/(.+) ]]; then
+                        DB_USER="${BASH_REMATCH[1]}"
+                        DB_PASS="${BASH_REMATCH[2]}"
+                        DB_HOST="${BASH_REMATCH[3]}"
+                        DB_PORT="${BASH_REMATCH[4]:-5432}"
+                        DB_NAME="${BASH_REMATCH[5]}"
+                        if command -v pg_restore &> /dev/null; then
+                            PGPASSWORD="$DB_PASS" pg_restore --clean --if-exists -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" "$DB_BACKUP_FILE" 2>&1 | tee -a "$LOG_FILE" \
+                                && echo -e "\033[0;32m[SUCCESS]\033[0m Database restored successfully." | tee -a "$LOG_FILE" \
+                                || echo -e "\033[0;31m[ERROR]\033[0m Automatic database restore failed. Restore manually with: pg_restore -d $DB_NAME $DB_BACKUP_FILE" | tee -a "$LOG_FILE"
+                        fi
+                    elif [[ $DATABASE_URL =~ postgresql://localhost/(.+) ]] || [[ $DATABASE_URL =~ postgresql:///(.+) ]]; then
+                        DB_NAME="${BASH_REMATCH[1]}"
+                        if command -v pg_restore &> /dev/null; then
+                            pg_restore --clean --if-exists -d "$DB_NAME" "$DB_BACKUP_FILE" 2>&1 | tee -a "$LOG_FILE" \
+                                && echo -e "\033[0;32m[SUCCESS]\033[0m Database restored successfully." | tee -a "$LOG_FILE" \
+                                || echo -e "\033[0;31m[ERROR]\033[0m Automatic database restore failed. Restore manually with: pg_restore -d $DB_NAME $DB_BACKUP_FILE" | tee -a "$LOG_FILE"
+                        fi
+                    fi
+                fi
+            fi
+            # Restore .env if it was backed up
+            ENV_BACKUP="${BACKUP_PATH}/.env.backup"
+            if [ -f "$ENV_BACKUP" ]; then
+                cp "$ENV_BACKUP" .env
+                echo -e "\033[0;32m[SUCCESS]\033[0m .env restored from backup." | tee -a "$LOG_FILE"
+            fi
+        fi
+        echo -e "\033[0;31m[ERROR]\033[0m Update did not complete successfully. See log: $LOG_FILE" | tee -a "$LOG_FILE"
+    fi
+}
+trap '_rollback_on_exit' EXIT
 
 # Function to print colored messages
 print_info() {
