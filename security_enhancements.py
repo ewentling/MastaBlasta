@@ -495,6 +495,45 @@ class RefreshTokenRotation:
         return token_hash in cls._used
 
 
+def prune_security_state() -> None:
+    """Prune expired entries from in-memory security state.
+
+    Call this from a periodic background job (e.g. every 5 minutes) to prevent
+    unbounded growth of the login_attempts and account_lockouts dicts across
+    the lifetime of the process.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=1)
+
+    # Prune login_attempts: remove emails with no recent failures
+    stale_emails = [
+        email for email, attempts in login_attempts.items()
+        if not any(t > cutoff for t in attempts)
+    ]
+    for email in stale_emails:
+        del login_attempts[email]
+
+    # Prune account_lockouts: remove expired lockouts
+    expired_lockouts = [email for email, exp in account_lockouts.items() if now >= exp]
+    for email in expired_lockouts:
+        del account_lockouts[email]
+
+    # Prune api_rate_limits: remove users with no recent requests
+    rate_cutoff = now - timedelta(seconds=RATE_LIMIT_WINDOW)
+    stale_users = [
+        uid for uid, times in api_rate_limits.items()
+        if not any(t > rate_cutoff for t in times)
+    ]
+    for uid in stale_users:
+        del api_rate_limits[uid]
+
+    logger.debug(
+        "Security state pruned: removed %d stale login entries, "
+        "%d expired lockouts, %d stale rate-limit entries",
+        len(stale_emails), len(expired_lockouts), len(stale_users)
+    )
+
+
 def init_security_middleware(app):
     """Initialize all security middleware"""
 

@@ -18,6 +18,24 @@ from typing import List, Dict, Any
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# ── X-Request-ID correlation ──────────────────────────────────────────────────
+# Attach a unique request ID to every request so that log lines from the same
+# request can be correlated across services.  Clients can also pass their own
+# request ID in the X-Request-ID header to end-to-end trace a call.
+from flask import g as _flask_g
+
+@app.before_request
+def _attach_request_id():
+    """Generate or propagate an X-Request-ID for the current request."""
+    _flask_g.request_id = request.headers.get('X-Request-ID') or secrets.token_hex(8)
+
+@app.after_request
+def _add_request_id_header(response):
+    """Echo the request ID back in the response so clients can correlate logs."""
+    if hasattr(_flask_g, 'request_id'):
+        response.headers['X-Request-ID'] = _flask_g.request_id
+    return response
+
 try:
     import openai
     from PIL import Image, ImageEnhance
@@ -158,11 +176,58 @@ except ImportError as e:
 
 # Apply security headers middleware (HSTS, CSP, X-Frame-Options, etc.)
 try:
-    from security_enhancements import init_security_middleware
+    from security_enhancements import init_security_middleware, prune_security_state
     init_security_middleware(app)
     logger.info("✓ Security headers middleware applied")
+    # Prune in-memory security state (login_attempts, account_lockouts, rate limits) every 5 min
+    scheduler.add_job(
+        prune_security_state,
+        'interval',
+        minutes=5,
+        id='prune_security_state',
+        replace_existing=True,
+    )
+    logger.info("✓ Security state pruning job scheduled (every 5 minutes)")
 except ImportError as e:
     logger.warning(f"⚠ Security middleware not available: {e}")
+
+
+# ── Periodic subscription expiry job ─────────────────────────────────────────
+if PRODUCTION_MODE and DB_ENABLED:
+    def _expire_stale_subscriptions():
+        """Mark subscriptions whose billing period or trial has ended as EXPIRED.
+
+        Runs every hour.  Without this job, subscriptions only appear expired
+        when is_expired() is called in-process; the DB column is never updated,
+        so admin queries and external integrations see stale data.
+        """
+        try:
+            from database import db_session_scope
+            from models import Subscription, SubscriptionStatus
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            with db_session_scope() as session:
+                expired = session.query(Subscription).filter(
+                    Subscription.status.in_([SubscriptionStatus.TRIAL, SubscriptionStatus.ACTIVE]),
+                ).all()
+                count = 0
+                for sub in expired:
+                    if sub.is_expired():
+                        sub.status = SubscriptionStatus.EXPIRED
+                        count += 1
+                if count:
+                    logger.info(f"Marked {count} subscription(s) as EXPIRED")
+        except Exception as e:
+            logger.error(f"Subscription expiry job failed: {e}")
+
+    scheduler.add_job(
+        _expire_stale_subscriptions,
+        'interval',
+        hours=1,
+        id='expire_subscriptions',
+        replace_existing=True,
+    )
+    logger.info("✓ Subscription expiry job scheduled (every hour)")
 
 
 # Helper functions

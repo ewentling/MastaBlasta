@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Check, Zap, Crown, TrendingUp, ChevronDown, ChevronUp } from 'lucide-react';
+import { api } from '../api';
 
 const SubscriptionInfoPage: React.FC = () => {
   const navigate = useNavigate();
@@ -116,21 +117,9 @@ const SubscriptionInfoPage: React.FC = () => {
     }
 
     try {
-      // Create Square checkout session
-      const response = await fetch('/api/square/create-checkout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ tier: tierName.toLowerCase() }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create checkout session');
-      }
-
-      const data = await response.json();
+      // Create Square checkout session (api client automatically includes auth header)
+      const response = await api.post('/square/create-checkout', { tier: tierName.toLowerCase() });
+      const data = response.data;
       
       // Redirect to Square checkout
       if (data.checkout_url) {

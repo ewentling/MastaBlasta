@@ -1,4 +1,4 @@
-import axios, { type AxiosRequestHeaders } from 'axios';
+import axios from 'axios';
 import type {
   Platform,
   Account,
@@ -23,32 +23,96 @@ export { api };
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
   if (token) {
-    // config.headers may be an AxiosHeaders instance or a plain object;
-    // initialise it when absent and use the type-safe set() API when available.
-    if (!config.headers) {
-      config.headers = {} as AxiosRequestHeaders;
-    }
-    if (typeof (config.headers as AxiosRequestHeaders & { set?: Function }).set === 'function') {
-      (config.headers as AxiosRequestHeaders & { set: Function }).set('Authorization', `Bearer ${token}`);
-    } else {
-      (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-    }
+    config.headers['Authorization'] = `Bearer ${token}`;
   }
   return config;
 });
 
-// Handle 401 responses by clearing stale credentials and redirecting to login
+// Track whether a refresh is already in-flight to prevent loops
+let _refreshing = false;
+let _refreshSubscribers: Array<(token: string | null) => void> = [];
+
+function _subscribeToRefresh(cb: (token: string | null) => void) {
+  _refreshSubscribers.push(cb);
+}
+
+function _notifyRefreshSubscribers(token: string | null) {
+  _refreshSubscribers.forEach((cb) => cb(token));
+  _refreshSubscribers = [];
+}
+
+async function _tryRefreshToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem('refreshToken');
+  if (!refreshToken) return null;
+  try {
+    const response = await axios.post('/api/v2/auth/refresh', { refresh_token: refreshToken });
+    const { access_token, refresh_token: newRefresh } = response.data;
+    if (access_token) {
+      localStorage.setItem('accessToken', access_token);
+      if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
+      return access_token;
+    }
+  } catch {
+    // Refresh failed – fall through to logout
+  }
+  return null;
+}
+
+function _logout() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
+}
+
+// Handle 401 (attempt token refresh once) and 429 (Retry-After) responses
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
+  async (error) => {
+    const status = error.response?.status;
+
+    // ── 429 Too Many Requests ──────────────────────────────────────────────
+    if (status === 429) {
+      const retryAfter = Number(error.response.headers['retry-after'] ?? 1);
+      console.warn(`Rate limited. Retrying after ${retryAfter}s`);
+      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
+      return api.request(error.config);
     }
+
+    // ── 401 Unauthorised – try a one-shot token refresh ───────────────────
+    if (status === 401 && !error.config?._retried) {
+      if (_refreshing) {
+        // Another request already triggered a refresh – wait for it
+        return new Promise((resolve, reject) => {
+          _subscribeToRefresh((token) => {
+            if (token) {
+              error.config.headers['Authorization'] = `Bearer ${token}`;
+              error.config._retried = true;
+              resolve(api.request(error.config));
+            } else {
+              reject(error);
+            }
+          });
+        });
+      }
+
+      _refreshing = true;
+      error.config._retried = true;
+
+      const newToken = await _tryRefreshToken();
+      _refreshing = false;
+      _notifyRefreshSubscribers(newToken);
+
+      if (newToken) {
+        error.config.headers['Authorization'] = `Bearer ${newToken}`;
+        return api.request(error.config);
+      }
+
+      _logout();
+    }
+
     return Promise.reject(error);
   }
 );
