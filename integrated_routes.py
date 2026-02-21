@@ -21,6 +21,17 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 integrated_bp = Blueprint('integrated', __name__, url_prefix='/api/v2')
 
+# Auth responses must never be cached by intermediaries
+_AUTH_ENDPOINTS = {'integrated.login', 'integrated.register', 'integrated.refresh_access_token', 'integrated.google_auth'}
+
+@integrated_bp.after_request
+def set_no_store_on_auth(response):
+    """Prevent caching of auth responses that contain tokens"""
+    if request.endpoint in _AUTH_ENDPOINTS:
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+        response.headers['Pragma'] = 'no-cache'
+    return response
+
 
 # ==================== AUTHENTICATION ROUTES ====================
 
@@ -93,7 +104,7 @@ def register():
 
     except Exception as e:
         logger.error(f"Registration error: {e}")
-        return jsonify({'error': 'Registration failed', 'details': str(e)}), 500
+        return jsonify({'error': 'Registration failed'}), 500
 
 
 @integrated_bp.route('/auth/login', methods=['POST'])
@@ -126,12 +137,14 @@ def login():
         with db_session_scope() as session:
             user = session.query(User).filter_by(email=email).first()
 
-            if not user or not user.is_active:
-                AccountSecurity.record_login_attempt(email, success=False)
-                SecurityLogger.log_failed_login(email)
-                return jsonify({'error': 'Invalid credentials'}), 401
+            # Always call verify_password (even for missing/inactive users) to equalise
+            # timing and prevent user-enumeration via response-time side-channel.
+            # The dummy hash is a real bcrypt digest so the work-factor is identical.
+            _DUMMY_HASH = '$2b$12$PBf5rMQEidQ2ftUyPNeg.OJnMKvkOT98PCYwwMtbPm2.1s00LQeyK'
+            candidate_hash = user.password_hash if (user and user.password_hash) else _DUMMY_HASH
+            password_ok = verify_password(password, candidate_hash)
 
-            if not verify_password(password, user.password_hash):
+            if not user or not user.is_active or not password_ok:
                 locked = AccountSecurity.record_login_attempt(email, success=False)
                 SecurityLogger.log_failed_login(email)
                 if locked:
@@ -316,6 +329,9 @@ def google_auth():
             if not email:
                 return jsonify({'error': 'Email not provided by Google'}), 400
 
+            if not idinfo.get('email_verified'):
+                return jsonify({'error': 'Google email address is not verified'}), 400
+
             with db_session_scope() as session:
                 # Look up user by google_id first (if present), then fall back to email
                 user = None
@@ -380,7 +396,7 @@ def google_auth():
 
     except Exception as e:
         logger.error(f"Google authentication error: {e}")
-        return jsonify({'error': 'Authentication failed', 'details': str(e)}), 500
+        return jsonify({'error': 'Authentication failed'}), 500
 
 
 # ==================== OAUTH ROUTES ====================
@@ -496,16 +512,28 @@ def get_media(media_id):
 @auth_required
 def download_media(media_id):
     """Download media file"""
+    from media_utils import MEDIA_DIR
+    from pathlib import Path
+
     media = media_manager.get_media(media_id)
 
     if not media:
         return jsonify({'error': 'Media not found'}), 404
 
-    # Check if file exists
-    if not os.path.exists(media['file_path']):
+    # Resolve and validate path to prevent path traversal attacks
+    try:
+        resolved = Path(media['file_path']).resolve()
+        media_root = MEDIA_DIR.resolve()
+        if not str(resolved).startswith(str(media_root)):
+            logger.warning(f"Path traversal attempt blocked: {media['file_path']}")
+            return jsonify({'error': 'Access denied'}), 403
+    except Exception:
+        return jsonify({'error': 'Invalid file path'}), 400
+
+    if not resolved.exists():
         return jsonify({'error': 'File not found on disk'}), 404
 
-    return send_file(media['file_path'], mimetype=media['mime_type'])
+    return send_file(str(resolved), mimetype=media['mime_type'])
 
 
 @integrated_bp.route('/media/<media_id>', methods=['DELETE'])
@@ -546,7 +574,7 @@ def create_post():
         return jsonify(post), 201
     except Exception as e:
         logger.error(f"Post creation error: {e}")
-        return jsonify({'error': 'Failed to create post', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to create post'}), 500
 
 
 @integrated_bp.route('/posts', methods=['GET'])
@@ -751,6 +779,9 @@ def bulk_create_posts():
     if not posts_data:
         return jsonify({'error': 'No posts provided'}), 400
 
+    if len(posts_data) > 100:
+        return jsonify({'error': 'Maximum 100 posts per bulk operation'}), 400
+
     results = bulk_ops_manager.bulk_create_posts(g.current_user['id'], posts_data)
     return jsonify(results)
 
@@ -765,6 +796,9 @@ def bulk_update_posts():
 
     if not updates:
         return jsonify({'error': 'No updates provided'}), 400
+
+    if len(updates) > 100:
+        return jsonify({'error': 'Maximum 100 updates per bulk operation'}), 400
 
     results = bulk_ops_manager.bulk_update_posts(g.current_user['id'], updates)
     return jsonify(results)
@@ -781,6 +815,9 @@ def bulk_delete_posts():
     if not post_ids:
         return jsonify({'error': 'No post IDs provided'}), 400
 
+    if len(post_ids) > 100:
+        return jsonify({'error': 'Maximum 100 IDs per bulk operation'}), 400
+
     results = bulk_ops_manager.bulk_delete_posts(g.current_user['id'], post_ids)
     return jsonify(results)
 
@@ -791,6 +828,7 @@ def bulk_delete_posts():
 @auth_required
 def register_webhook():
     """Register a webhook"""
+    from security_enhancements import InputSanitizer
     data = request.get_json() or {}
 
     url = data.get('url')
@@ -799,6 +837,10 @@ def register_webhook():
 
     if not url or not events:
         return jsonify({'error': 'URL and events required'}), 400
+
+    # Validate webhook URL to prevent SSRF attacks
+    if not InputSanitizer.validate_url(url):
+        return jsonify({'error': 'Invalid webhook URL. Must be a public https:// URL.'}), 400
 
     result = webhook_manager.register_webhook(g.current_user['id'], url, events, secret)
 
@@ -827,7 +869,6 @@ def list_webhooks():
         logger.error(f"Error listing webhooks: {e}", exc_info=True)
         return jsonify({
             'error': 'Failed to list webhooks',
-            'details': str(e)
         }), 500
 
 
@@ -851,7 +892,6 @@ def delete_webhook(webhook_id):
         logger.error(f"Error deleting webhook {webhook_id}: {e}", exc_info=True)
         return jsonify({
             'error': 'Failed to delete webhook',
-            'details': str(e)
         }), 500
 
 
@@ -970,7 +1010,6 @@ def get_analytics_overview():
         logger.error(f"Error getting analytics overview: {e}", exc_info=True)
         return jsonify({
             'error': 'Failed to get analytics overview',
-            'details': str(e)
         }), 500
 
 

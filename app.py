@@ -5,6 +5,7 @@ from apscheduler.jobstores.memory import MemoryJobStore
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps
+import secrets
 import uuid
 import os
 import logging
@@ -5620,7 +5621,7 @@ def oauth_init(platform):
                     # User has custom OAuth credentials
                     from oauth import TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth
                     
-                    state_token = str(uuid.uuid4())
+                    state_token = secrets.token_urlsafe(32)
                     oauth_states[state_token] = {
                         'platform': platform,
                         'user_id': user['id'],
@@ -5664,7 +5665,7 @@ def oauth_init(platform):
             TWITTER_CLIENT_ID, META_APP_ID, LINKEDIN_CLIENT_ID, GOOGLE_CLIENT_ID
         )
 
-        state_token = str(uuid.uuid4())
+        state_token = secrets.token_urlsafe(32)
         oauth_states[state_token] = {
             'platform': platform,
             'created_at': datetime.now(timezone.utc).isoformat()
@@ -5726,18 +5727,19 @@ def oauth_callback(platform):
     if not code:
         error = request.args.get('error', 'Authorization failed')
         error_description = request.args.get('error_description', '')
+        _frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
         return f"""
         <html>
             <body>
                 <script>
                     window.opener.postMessage({{
                         type: 'oauth_error',
-                        platform: '{platform}',
-                        error: '{error}: {error_description}'
-                    }}, '*');
+                        platform: {json.dumps(platform)},
+                        error: {json.dumps(f'{error}: {error_description}')}
+                    }}, {json.dumps(_frontend_url)});
                     window.close();
                 </script>
-                <p>Authorization failed: {error}. This window should close automatically.</p>
+                <p>Authorization failed. This window should close automatically.</p>
             </body>
         </html>
         """
@@ -5769,9 +5771,9 @@ def oauth_callback(platform):
                                 <script>
                                     window.opener.postMessage({{
                                         type: 'oauth_error',
-                                        platform: '{platform}',
+                                        platform: {json.dumps(platform)},
                                         error: 'Failed to decrypt OAuth credentials'
-                                    }}, '*');
+                                    }}, {json.dumps(os.getenv('FRONTEND_URL', 'http://localhost:5173'))});
                                     window.close();
                                 </script>
                                 <p>Failed to decrypt OAuth credentials. This window should close automatically.</p>
@@ -5919,6 +5921,7 @@ def oauth_callback(platform):
         }
 
     # Return HTML that posts message to opener window and closes popup
+    _frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
     return f"""
     <html>
         <head><title>Authorization Successful</title></head>
@@ -5926,9 +5929,9 @@ def oauth_callback(platform):
             <script>
                 window.opener.postMessage({{
                     type: 'oauth_success',
-                    platform: '{platform}',
+                    platform: {json.dumps(platform)},
                     data: {json.dumps(account_data)}
-                }}, '*');
+                }}, {json.dumps(_frontend_url)});
                 window.close();
             </script>
             <p>Authorization successful! This window should close automatically.</p>
@@ -6375,7 +6378,8 @@ def check_connection_health(account_id):
 
         return jsonify(status)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/reconnect-instructions/<platform>', methods=['GET'])
@@ -6387,7 +6391,8 @@ def get_reconnection_instructions(platform):
         instructions = ConnectionHealthMonitor.get_reconnection_instructions(platform)
         return jsonify(instructions)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/validate/<account_id>', methods=['POST'])
@@ -6407,7 +6412,8 @@ def validate_account(account_id):
         validation = PlatformAccountValidator.validate_account_setup(platform, access_token)
         return jsonify(validation)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/check-permissions/<account_id>', methods=['GET'])
@@ -6427,7 +6433,8 @@ def check_permissions(account_id):
         permissions = PlatformAccountValidator.check_permissions(platform, access_token)
         return jsonify(permissions)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/quick-connect/options', methods=['GET'])
@@ -6439,7 +6446,8 @@ def get_quick_connect_options():
         options = QuickConnectWizard.get_quick_connect_options()
         return jsonify(options)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/quick-connect/<platform>', methods=['POST'])
@@ -6457,7 +6465,8 @@ def quick_connect_platform(platform):
 
         return jsonify(connection_data)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/troubleshoot', methods=['POST'])
@@ -6477,7 +6486,8 @@ def troubleshoot_connection():
         diagnosis = ConnectionTroubleshooter.diagnose_connection_issue(platform, error_code, error_message)
         return jsonify(diagnosis)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/test-prerequisites/<platform>', methods=['GET'])
@@ -6489,7 +6499,8 @@ def test_connection_prerequisites(platform):
         test_results = ConnectionTroubleshooter.test_connection_prerequisites(platform)
         return jsonify(test_results)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/bulk-connect/prepare', methods=['POST'])
@@ -6508,7 +6519,8 @@ def prepare_bulk_connection():
         result = BulkConnectionManager.prepare_bulk_connection(platforms, user_id)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/auto-refresh/<account_id>', methods=['POST'])
@@ -6538,7 +6550,8 @@ def auto_refresh_token(account_id):
 
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/post', methods=['POST'])
@@ -8259,7 +8272,8 @@ def google_calendar_authorize():
             })
     except Exception as e:
         logger.error(f"Google Calendar authorization error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/google-calendar/callback', methods=['GET'])
@@ -8337,7 +8351,8 @@ def google_calendar_callback():
         """
     except Exception as e:
         logger.error(f"Google Calendar callback error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/google-calendar/sync', methods=['POST'])
@@ -8422,7 +8437,8 @@ def sync_google_calendar():
             })
     except Exception as e:
         logger.error(f"Google Calendar sync error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 # ==================== Google Drive Integration ====================
@@ -8457,7 +8473,8 @@ def google_drive_authorize():
             })
     except Exception as e:
         logger.error(f"Google Drive authorization error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/google-drive/callback', methods=['GET'])
@@ -8535,7 +8552,8 @@ def google_drive_callback():
         """
     except Exception as e:
         logger.error(f"Google Drive callback error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/google-drive/list', methods=['POST'])
@@ -8594,7 +8612,8 @@ def list_drive_files():
             return jsonify(files)
     except Exception as e:
         logger.error(f"Google Drive list error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 # ==================== Templates API ====================
