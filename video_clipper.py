@@ -691,17 +691,31 @@ class VideoClipperService:
                 "message": "Clip created. Original video deleted to save storage.",
             }
 
-        except subprocess.CalledProcessError:
+        except FileNotFoundError:
             return {
                 "success": False,
-                "error": "ffmpeg is not installed or failed. Install with: apt-get install ffmpeg",
+                "error": "ffmpeg is not installed or not found on PATH. Install with: apt-get install ffmpeg",
             }
         except Exception as exc:
             logger.error("download_and_clip_video error: %s", exc, exc_info=True)
             return {"success": False, "error": f"Unexpected error: {exc}"}
         finally:
-            # Always remove temp dir (except when we're returning the clip path from it)
-            pass  # caller is responsible for cleanup when temp_dir is in the result
+            # Clean up temp dir only when the clip was NOT written inside it.
+            # If the caller supplied a non-empty external output_path we check
+            # whether its parent directory resolves to temp_dir; if so, we
+            # leave the directory intact so the caller can read the clip.
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    temp_dir_abs = os.path.abspath(temp_dir)
+                    clip_dir_abs: Optional[str] = None
+                    if output_path and output_path.strip():
+                        clip_dir_abs = os.path.abspath(os.path.dirname(output_path))
+                    # Preserve temp_dir when the clip lives inside it
+                    if clip_dir_abs == temp_dir_abs:
+                        return  # caller owns temp_dir; leave it alone
+                    shutil.rmtree(temp_dir_abs, ignore_errors=True)
+                except Exception as cleanup_exc:
+                    logger.warning("Failed to cleanup temp_dir %s: %s", temp_dir, cleanup_exc)
 
     def analyze_and_create_clips(
         self,
@@ -798,13 +812,39 @@ class VideoClipperService:
             ts = int(datetime.now(timezone.utc).timestamp())
 
             for idx, clip in enumerate(clips, 1):
+                # Validate and clamp timestamps before calling ffmpeg
+                try:
+                    raw_start = float(clip.get("start_time", 0.0))
+                    raw_end = float(clip.get("end_time", 0.0))
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "  Clip %d/%d has non-numeric timestamps (start=%r, end=%r); skipping.",
+                        idx, len(clips), clip.get("start_time"), clip.get("end_time"),
+                    )
+                    continue
+
+                vid_duration = video_info.get("duration")
+                if isinstance(vid_duration, (int, float)) and vid_duration > 0:
+                    clip_start = max(0.0, min(raw_start, vid_duration))
+                    clip_end = max(0.0, min(raw_end, vid_duration))
+                else:
+                    clip_start = max(0.0, raw_start)
+                    clip_end = max(0.0, raw_end)
+
+                if clip_start >= clip_end:
+                    logger.warning(
+                        "  Clip %d/%d has invalid range after clamping (start=%.2f, end=%.2f); skipping.",
+                        idx, len(clips), clip_start, clip_end,
+                    )
+                    continue
+
                 clip_path = os.path.join(
                     output_dir, f"clip_{idx}_{safe_title}_{ts}.mp4"
                 )
                 result = self._clip_with_ffmpeg(
                     source_path,
-                    clip["start_time"],
-                    clip["end_time"],
+                    clip_start,
+                    clip_end,
                     clip_path,
                     reencode=reencode,
                 )

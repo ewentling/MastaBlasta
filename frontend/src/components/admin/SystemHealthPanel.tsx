@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Activity, Database, HardDrive, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 
@@ -30,7 +31,7 @@ export function SystemHealthPanel() {
     }
   };
 
-  const getStatusStyle = (status: string): React.CSSProperties => {
+  const getStatusStyle = (status: string): CSSProperties => {
     switch (status) {
       case 'healthy':
         return { background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)' };

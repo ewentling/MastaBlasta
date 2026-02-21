@@ -7611,6 +7611,7 @@ def clips_create_clip():
 
 
 @app.route('/api/clips/analyze-and-create', methods=['POST'])
+@auth_required
 def clips_analyze_and_create():
     """
     Full Gemini Clipper end-to-end pipeline:

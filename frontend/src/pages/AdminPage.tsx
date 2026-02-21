@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Shield, Users, BarChart3, CreditCard, CheckCircle, XCircle, Clock,
@@ -167,7 +168,7 @@ function Avatar({ name, email }: { name?: string; email: string }) {
 }
 
 function TierBadge({ tier }: { tier: string }) {
-  const map: Record<string, { style: React.CSSProperties; icon: React.ReactNode }> = {
+  const map: Record<string, { style: CSSProperties; icon: ReactNode }> = {
     free:       { style: { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#8090c2' }, icon: null },
     starter:    { style: { background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.25)', color: '#00e5ff' }, icon: <Zap className="w-3 h-3" /> },
     pro:        { style: { background: 'rgba(124,77,255,0.1)', border: '1px solid rgba(124,77,255,0.3)', color: '#a78bfa' }, icon: <Crown className="w-3 h-3" /> },
@@ -182,7 +183,7 @@ function TierBadge({ tier }: { tier: string }) {
 }
 
 function SubStatusBadge({ status }: { status: string }) {
-  const map: Record<string, React.CSSProperties> = {
+  const map: Record<string, CSSProperties> = {
     active:    { background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399' },
     trial:     { background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8' },
     suspended: { background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24' },
@@ -369,7 +370,7 @@ export default function AdminPage() {
     }
   };
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'users',      label: 'Users',      icon: <Users className="w-4 h-4" /> },
     { id: 'metrics',    label: 'Metrics',    icon: <BarChart3 className="w-4 h-4" /> },
     { id: 'analytics',  label: 'Analytics',  icon: <Activity className="w-4 h-4" /> },
@@ -491,9 +492,10 @@ export default function AdminPage() {
                   </thead>
                   <tbody style={{ borderTop: 'none' }}>
                     {filteredUsers.map((user) => (
-                      <tr key={user.id} className="transition-colors" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      <tr
+                        key={user.id}
+                        className="transition-colors hover:bg-white/5"
+                        style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
                       >
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
