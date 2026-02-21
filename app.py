@@ -46,6 +46,8 @@ if is_production and (not SECRET_KEY or SECRET_KEY == 'dev-secret-key-change-in-
 
 app.config['SECRET_KEY'] = SECRET_KEY
 app.config['SESSION_TYPE'] = 'filesystem'
+# Limit incoming request bodies to 512 MB (covers video uploads); rejects larger requests early
+app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 512 * 1024 * 1024))
 
 # Enhanced session security
 if is_production:
@@ -6908,12 +6910,11 @@ def index():
 # URL Shortening & Tracking Endpoints
 
 def generate_short_code():
-    """Generate a unique short code for URLs"""
-    import random
-    import string
-    chars = string.ascii_letters + string.digits
+    """Generate a cryptographically secure unique short code for URLs"""
+    import secrets
     while True:
-        code = ''.join(random.choice(chars) for _ in range(6))
+        # token_urlsafe(6) yields ~8 URL-safe chars from 6 random bytes
+        code = secrets.token_urlsafe(6)
         if code not in shortened_urls:
             return code
 
@@ -6939,6 +6940,13 @@ def shorten_url():
 
     if not original_url.startswith(('http://', 'https://')):
         return jsonify({'error': 'URL must start with http:// or https://'}), 400
+
+    # Validate custom code format and length
+    if custom_code:
+        if len(custom_code) > 32:
+            return jsonify({'error': 'Custom code must be 32 characters or fewer'}), 400
+        if not re.match(r'^[A-Za-z0-9_-]+$', custom_code):
+            return jsonify({'error': 'Custom code may only contain letters, digits, hyphens, and underscores'}), 400
 
     # Check if custom code is already taken
     if custom_code and custom_code in shortened_urls:

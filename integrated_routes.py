@@ -6,7 +6,7 @@ These routes implement the 9 improvements by using the managers from app_extensi
 """
 
 from flask import Blueprint, request, jsonify, g, send_file, session
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import os
 
@@ -37,10 +37,10 @@ def register():
         from security_enhancements import PasswordPolicy, InputSanitizer
         import uuid
 
-        data = request.get_json()
-        email = data.get('email')
+        data = request.get_json() or {}
+        email = data.get('email', '').strip().lower()
         password = data.get('password')
-        name = data.get('name', '')
+        name = data.get('name', '').strip()
 
         if not email or not password:
             return jsonify({'error': 'Email and password required'}), 400
@@ -70,7 +70,7 @@ def register():
                 api_key=generate_api_key(),
                 is_active=True,
                 auth_provider='email',
-                created_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc)
             )
             session.add(user)
             session.flush()
@@ -108,8 +108,8 @@ def login():
         from models import User
         from security_enhancements import AccountSecurity, SecurityLogger
 
-        data = request.get_json()
-        email = data.get('email')
+        data = request.get_json() or {}
+        email = data.get('email', '').strip().lower()
         password = data.get('password')
 
         if not email or not password:
@@ -143,7 +143,7 @@ def login():
             AccountSecurity.record_login_attempt(email, success=True)
 
             # Update last login
-            user.last_login = datetime.utcnow()
+            user.last_login = datetime.now(timezone.utc)
             session.flush()
 
             # Generate tokens
@@ -180,7 +180,7 @@ def change_password():
         from models import User
         from security_enhancements import PasswordPolicy
 
-        data = request.get_json()
+        data = request.get_json() or {}
         old_password = data.get('old_password')
         new_password = data.get('new_password')
 
@@ -290,7 +290,7 @@ def google_auth():
         import uuid
         import os
 
-        data = request.get_json()
+        data = request.get_json() or {}
         credential = data.get('credential')
 
         if not credential:
@@ -334,7 +334,7 @@ def google_auth():
 
                 if user:
                     # Update last login and google_id if needed
-                    user.last_login = datetime.utcnow()
+                    user.last_login = datetime.now(timezone.utc)
                     if google_id and not user.google_id:
                         user.google_id = google_id
                         user.auth_provider = 'google'
@@ -352,7 +352,7 @@ def google_auth():
                         is_active=True,
                         auth_provider='google',
                         google_id=google_id,
-                        created_at=datetime.utcnow()
+                        created_at=datetime.now(timezone.utc)
                     )
                     session.add(user)
 
@@ -473,8 +473,8 @@ def upload_media():
 @auth_required
 def list_media():
     """List user's media library"""
-    limit = int(request.args.get('limit', 50))
-    offset = int(request.args.get('offset', 0))
+    limit = min(100, max(1, int(request.args.get('limit', 50))))
+    offset = max(0, int(request.args.get('offset', 0)))
 
     media_list = media_manager.list_media(g.current_user['id'], limit, offset)
     return jsonify({'media': media_list, 'limit': limit, 'offset': offset})
@@ -539,7 +539,7 @@ def delete_media(media_id):
 @auth_required
 def create_post():
     """Create a new post"""
-    data = request.get_json()
+    data = request.get_json() or {}
 
     try:
         post = db_manager.create_post(g.current_user['id'], data)
@@ -562,8 +562,8 @@ def list_posts():
     }
     filters = {k: v for k, v in filters.items() if v}
 
-    limit = int(request.args.get('limit', 50))
-    offset = int(request.args.get('offset', 0))
+    limit = min(100, max(1, int(request.args.get('limit', 50))))
+    offset = max(0, int(request.args.get('offset', 0)))
 
     posts = db_manager.list_posts(g.current_user['id'], filters, limit, offset)
     return jsonify({'posts': posts, 'limit': limit, 'offset': offset})
@@ -585,7 +585,7 @@ def get_post(post_id):
 @auth_required
 def update_post(post_id):
     """Update post"""
-    data = request.get_json()
+    data = request.get_json() or {}
 
     post = db_manager.update_post(post_id, data)
 
@@ -705,7 +705,7 @@ def publish_post(post_id):
     if all('error' not in r for r in results.values()):
         db_manager.update_post(post_id, {
             'status': 'published',
-            'published_at': datetime.utcnow()
+            'published_at': datetime.now(timezone.utc)
         })
     else:
         db_manager.update_post(post_id, {'status': 'failed'})
@@ -731,8 +731,8 @@ def search_posts():
     }
     filters = {k: v for k, v in filters.items() if v is not None}
 
-    limit = int(request.args.get('limit', 50))
-    offset = int(request.args.get('offset', 0))
+    limit = min(100, max(1, int(request.args.get('limit', 50))))
+    offset = max(0, int(request.args.get('offset', 0)))
 
     results = search_manager.search_posts(g.current_user['id'], query, filters, limit, offset)
     return jsonify(results)
@@ -745,7 +745,7 @@ def search_posts():
 @role_required('editor')
 def bulk_create_posts():
     """Bulk create posts"""
-    data = request.get_json()
+    data = request.get_json() or {}
     posts_data = data.get('posts', [])
 
     if not posts_data:
@@ -760,7 +760,7 @@ def bulk_create_posts():
 @role_required('editor')
 def bulk_update_posts():
     """Bulk update posts"""
-    data = request.get_json()
+    data = request.get_json() or {}
     updates = data.get('updates', [])
 
     if not updates:
@@ -775,7 +775,7 @@ def bulk_update_posts():
 @role_required('admin')
 def bulk_delete_posts():
     """Bulk delete posts"""
-    data = request.get_json()
+    data = request.get_json() or {}
     post_ids = data.get('post_ids', [])
 
     if not post_ids:
@@ -791,7 +791,7 @@ def bulk_delete_posts():
 @auth_required
 def register_webhook():
     """Register a webhook"""
-    data = request.get_json()
+    data = request.get_json() or {}
 
     url = data.get('url')
     events = data.get('events', [])
@@ -1105,7 +1105,7 @@ def update_account_display_name(account_id):
     from database import db_session_scope
     from models import Account
     
-    data = request.get_json()
+    data = request.get_json() or {}
     if not data or 'display_name' not in data:
         return jsonify({'error': 'display_name is required'}), 400
     
@@ -1150,7 +1150,7 @@ def get_status():
         'media': media_manager.enabled,
         'analytics': analytics_collector.enabled,
         'webhooks': webhook_manager.enabled,
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.now(timezone.utc).isoformat()
     })
 
 
