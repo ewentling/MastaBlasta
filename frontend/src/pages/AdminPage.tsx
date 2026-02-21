@@ -167,30 +167,30 @@ function Avatar({ name, email }: { name?: string; email: string }) {
 }
 
 function TierBadge({ tier }: { tier: string }) {
-  const map: Record<string, { cls: string; icon: React.ReactNode }> = {
-    free:       { cls: 'bg-slate-100 text-slate-600 border border-slate-200', icon: null },
-    starter:    { cls: 'bg-blue-50 text-blue-700 border border-blue-200', icon: <Zap className="w-3 h-3" /> },
-    pro:        { cls: 'bg-violet-50 text-violet-700 border border-violet-200', icon: <Crown className="w-3 h-3" /> },
-    enterprise: { cls: 'bg-amber-50 text-amber-700 border border-amber-200', icon: <TrendingUp className="w-3 h-3" /> },
+  const map: Record<string, { style: React.CSSProperties; icon: React.ReactNode }> = {
+    free:       { style: { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#8090c2' }, icon: null },
+    starter:    { style: { background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.25)', color: '#00e5ff' }, icon: <Zap className="w-3 h-3" /> },
+    pro:        { style: { background: 'rgba(124,77,255,0.1)', border: '1px solid rgba(124,77,255,0.3)', color: '#a78bfa' }, icon: <Crown className="w-3 h-3" /> },
+    enterprise: { style: { background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24' }, icon: <TrendingUp className="w-3 h-3" /> },
   };
-  const { cls, icon } = map[tier] ?? map.free;
+  const { style, icon } = map[tier] ?? map.free;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={style}>
       {icon}{tier.toUpperCase()}
     </span>
   );
 }
 
 function SubStatusBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    active:    'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    trial:     'bg-sky-50 text-sky-700 border border-sky-200',
-    suspended: 'bg-amber-50 text-amber-700 border border-amber-200',
-    cancelled: 'bg-red-50 text-red-700 border border-red-200',
-    expired:   'bg-slate-100 text-slate-600 border border-slate-200',
+  const map: Record<string, React.CSSProperties> = {
+    active:    { background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399' },
+    trial:     { background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8' },
+    suspended: { background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24' },
+    cancelled: { background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5' },
+    expired:   { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#8090c2' },
   };
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? map.expired}`}>
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" style={map[status] ?? map.expired}>
       {status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
@@ -381,10 +381,10 @@ export default function AdminPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen">
 
       {/* Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-8 shadow-lg">
+      <div className="px-6 py-8" style={{ background: 'linear-gradient(135deg, rgba(2,4,18,0.95) 0%, rgba(12,18,50,0.9) 100%)', borderBottom: '1px solid rgba(0,229,255,0.15)', backdropFilter: 'blur(20px)' }}>
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-blue-500/20 border border-blue-500/30 rounded-xl flex items-center justify-center">
@@ -417,7 +417,7 @@ export default function AdminPage() {
       </div>
 
       {/* Tab bar */}
-      <div className="bg-white border-b border-slate-200 shadow-sm">
+      <div style={{ background: 'rgba(5,7,30,0.9)', borderBottom: '1px solid rgba(0,229,255,0.15)', backdropFilter: 'blur(20px)' }}>
         <div className="max-w-7xl mx-auto px-6">
           <nav className="flex gap-1 -mb-px overflow-x-auto">
             {tabs.map((tab) => (
@@ -426,8 +426,8 @@ export default function AdminPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-4 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
                   activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                    ? 'border-cyan-400 text-cyan-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'
                 }`}
               >
                 {tab.icon}
@@ -443,21 +443,23 @@ export default function AdminPage() {
 
         {/* Users Tab */}
         {activeTab === 'users' && (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }} className="rounded-xl overflow-hidden shadow-lg">
+            <div className="px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
                   type="text"
-                  placeholder="Search by name, email, or role\u2026"
+                  placeholder="Search by name, email, or role…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
+                  className="w-full pl-9 pr-4 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 placeholder-slate-500"
                 />
               </div>
               <button
                 onClick={() => setShowAddUser(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap text-white"
+                style={{ background: 'linear-gradient(120deg, #00e5ff 0%, #7c4dff 100%)' }}
               >
                 <UserPlus className="w-4 h-4" />
                 Add User
@@ -467,7 +469,7 @@ export default function AdminPage() {
             {usersLoading ? (
               <div className="py-16 text-center text-slate-400">
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />
-                Loading users\u2026
+                Loading users…
               </div>
             ) : filteredUsers.length === 0 ? (
               <div className="py-16 text-center text-slate-400">
@@ -478,38 +480,41 @@ export default function AdminPage() {
               <div className="overflow-x-auto">
                 <table className="min-w-full">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">User</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Role</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Plan</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Subscription</th>
-                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Joined</th>
-                      <th className="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                    <tr style={{ background: 'rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">User</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Role</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Plan</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Subscription</th>
+                      <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Joined</th>
+                      <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody style={{ borderTop: 'none' }}>
                     {filteredUsers.map((user) => (
-                      <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                      <tr key={user.id} className="transition-colors" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                      >
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
                             <Avatar name={user.full_name} email={user.email} />
                             <div>
-                              <p className="text-sm font-medium text-slate-900">{user.full_name || '\u2014'}</p>
-                              <p className="text-xs text-slate-500">{user.email}</p>
+                              <p className="text-sm font-medium text-white">{user.full_name || '—'}</p>
+                              <p className="text-xs text-slate-400">{user.email}</p>
                             </div>
-                            <span className={`inline-block w-2 h-2 rounded-full ${user.is_active ? 'bg-emerald-400' : 'bg-slate-300'}`} />
+                            <span className={`inline-block w-2 h-2 rounded-full ${user.is_active ? 'bg-emerald-400' : 'bg-slate-600'}`} />
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full capitalize">{user.role}</span>
+                          <span className="text-xs font-medium text-slate-300 px-2 py-0.5 rounded-full capitalize" style={{ background: 'rgba(255,255,255,0.08)' }}>{user.role}</span>
                         </td>
                         <td className="px-6 py-4">
-                          {user.subscription ? <TierBadge tier={user.subscription.tier} /> : <span className="text-slate-400 text-xs">\u2014</span>}
+                          {user.subscription ? <TierBadge tier={user.subscription.tier} /> : <span className="text-slate-500 text-xs">—</span>}
                         </td>
                         <td className="px-6 py-4">
-                          {user.subscription ? <SubStatusBadge status={user.subscription.status} /> : <span className="text-slate-400 text-xs">\u2014</span>}
+                          {user.subscription ? <SubStatusBadge status={user.subscription.status} /> : <span className="text-slate-500 text-xs">—</span>}
                         </td>
-                        <td className="px-6 py-4 text-sm text-slate-500">
+                        <td className="px-6 py-4 text-sm text-slate-400">
                           {formatDateTime.date(user.created_at)}
                         </td>
                         <td className="px-6 py-4">
@@ -523,7 +528,8 @@ export default function AdminPage() {
                                   admin_notes: user.subscription?.admin_notes || '',
                                 });
                               }}
-                              className="text-xs font-medium text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                              className="text-xs font-medium text-cyan-400 hover:text-cyan-300 px-2 py-1 rounded transition-colors"
+                              style={{ background: 'rgba(0,229,255,0.08)' }}
                             >
                               Details
                             </button>
@@ -533,7 +539,7 @@ export default function AdminPage() {
                                   <button
                                     onClick={() => { setSuspendReason(''); setSelectedUser(user.id); }}
                                     title="Suspend user"
-                                    className="p-1.5 rounded hover:bg-amber-50 text-amber-500 hover:text-amber-700 transition-colors"
+                                    className="p-1.5 rounded text-amber-400 hover:text-amber-300 transition-colors"
                                   >
                                     <Ban className="w-4 h-4" />
                                   </button>
@@ -542,7 +548,7 @@ export default function AdminPage() {
                                     onClick={() => activateMutation.mutate(user.id)}
                                     disabled={activateMutation.isPending}
                                     title="Activate user"
-                                    className="p-1.5 rounded hover:bg-emerald-50 text-emerald-500 hover:text-emerald-700 transition-colors disabled:opacity-50"
+                                    className="p-1.5 rounded text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50"
                                   >
                                     <CheckCircle className="w-4 h-4" />
                                   </button>
@@ -550,7 +556,7 @@ export default function AdminPage() {
                                 <button
                                   onClick={() => setDeleteTarget(user)}
                                   title="Delete user"
-                                  className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600 transition-colors"
+                                  className="p-1.5 rounded text-slate-500 hover:text-red-400 transition-colors"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -562,7 +568,7 @@ export default function AdminPage() {
                     ))}
                   </tbody>
                 </table>
-                <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-500">
+                <div className="px-6 py-3 text-xs text-slate-500" style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
                   Showing {filteredUsers.length} of {usersData?.total ?? 0} users
                 </div>
               </div>
@@ -576,46 +582,46 @@ export default function AdminPage() {
             {metricsLoading ? (
               <div className="py-16 text-center text-slate-400">
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />
-                Loading metrics\u2026
+                Loading metrics…
               </div>
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                   {[
-                    { label: 'Total Users', value: metricsData?.users.total, icon: <Users className="w-5 h-5" />, color: 'text-blue-500', bg: 'bg-blue-50', sub: `${metricsData?.users.active} active \u00b7 ${metricsData?.users.inactive} inactive` },
-                    { label: 'Posts / Month', value: metricsData?.usage_this_month.posts_created, icon: <BarChart3 className="w-5 h-5" />, color: 'text-emerald-500', bg: 'bg-emerald-50', sub: undefined },
-                    { label: 'API Calls', value: metricsData?.usage_this_month.api_calls?.toLocaleString(), icon: <Zap className="w-5 h-5" />, color: 'text-violet-500', bg: 'bg-violet-50', sub: undefined },
-                    { label: 'AI Requests', value: metricsData?.usage_this_month.ai_requests, icon: <Activity className="w-5 h-5" />, color: 'text-amber-500', bg: 'bg-amber-50', sub: undefined },
+                    { label: 'Total Users', value: metricsData?.users.total, icon: <Users className="w-5 h-5" />, color: 'text-cyan-400', iconBg: 'rgba(0,229,255,0.1)', sub: `${metricsData?.users.active} active · ${metricsData?.users.inactive} inactive` },
+                    { label: 'Posts / Month', value: metricsData?.usage_this_month.posts_created, icon: <BarChart3 className="w-5 h-5" />, color: 'text-emerald-400', iconBg: 'rgba(52,211,153,0.1)', sub: undefined },
+                    { label: 'API Calls', value: metricsData?.usage_this_month.api_calls?.toLocaleString(), icon: <Zap className="w-5 h-5" />, color: 'text-violet-400', iconBg: 'rgba(124,77,255,0.1)', sub: undefined },
+                    { label: 'AI Requests', value: metricsData?.usage_this_month.ai_requests, icon: <Activity className="w-5 h-5" />, color: 'text-amber-400', iconBg: 'rgba(251,191,36,0.1)', sub: undefined },
                   ].map((card) => (
-                    <div key={card.label} className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                    <div key={card.label} className="rounded-xl p-6 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <div className="flex items-center justify-between mb-4">
-                        <p className="text-sm font-medium text-slate-600">{card.label}</p>
-                        <div className={`w-9 h-9 ${card.bg} ${card.color} rounded-lg flex items-center justify-center`}>{card.icon}</div>
+                        <p className="text-sm font-medium text-slate-400">{card.label}</p>
+                        <div className={`w-9 h-9 ${card.color} rounded-lg flex items-center justify-center`} style={{ background: card.iconBg }}>{card.icon}</div>
                       </div>
-                      <p className="text-3xl font-bold text-slate-900">{card.value ?? '\u2014'}</p>
+                      <p className="text-3xl font-bold text-white">{card.value ?? '—'}</p>
                       {card.sub && <p className="text-xs text-slate-500 mt-1">{card.sub}</p>}
                     </div>
                   ))}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-4 uppercase tracking-wide">By Tier</h3>
+                  <div className="rounded-xl p-6 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <h3 className="text-xs font-semibold text-slate-400 mb-4 uppercase tracking-wide">By Tier</h3>
                     <div className="space-y-3">
                       {Object.entries(metricsData?.subscriptions.by_tier || {}).map(([tier, count]) => (
                         <div key={tier} className="flex items-center justify-between">
                           <TierBadge tier={tier} />
-                          <span className="text-xl font-bold text-slate-900">{count as number}</span>
+                          <span className="text-xl font-bold text-white">{count as number}</span>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-4 uppercase tracking-wide">By Status</h3>
+                  <div className="rounded-xl p-6 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <h3 className="text-xs font-semibold text-slate-400 mb-4 uppercase tracking-wide">By Status</h3>
                     <div className="space-y-3">
                       {Object.entries(metricsData?.subscriptions.by_status || {}).map(([status, count]) => (
                         <div key={status} className="flex items-center justify-between">
                           <SubStatusBadge status={status} />
-                          <span className="text-xl font-bold text-slate-900">{count as number}</span>
+                          <span className="text-xl font-bold text-white">{count as number}</span>
                         </div>
                       ))}
                     </div>
@@ -665,20 +671,20 @@ export default function AdminPage() {
 
             {/* ── Status bar ─────────────────────────────────────────────────── */}
             {squareConfigLoading ? (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center text-slate-400">
+              <div className="rounded-xl p-8 text-center text-slate-400" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />Loading…
               </div>
             ) : squareConfig && (
               <>
                 {/* Config status summary */}
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+                <div className="rounded-xl p-6 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
                   <div className="flex items-center justify-between mb-5">
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${squareConfig.configured ? 'bg-emerald-50' : 'bg-amber-50'}`}>
                         <CreditCard className={`w-5 h-5 ${squareConfig.configured ? 'text-emerald-600' : 'text-amber-600'}`} />
                       </div>
                       <div>
-                        <h2 className="text-base font-semibold text-slate-900">Square Payment Integration</h2>
+                        <h2 className="text-base font-semibold text-white">Square Payment Integration</h2>
                         <p className="text-xs text-slate-500 mt-0.5">
                           {squareConfig.configured
                             ? `Connected · ${squareConfig.environment === 'production' ? 'Production' : 'Sandbox'} mode`
@@ -691,7 +697,7 @@ export default function AdminPage() {
                         href="https://developer.squareup.com/apps"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+                        className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg transition-colors" style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                         Square Developer Console
@@ -699,7 +705,7 @@ export default function AdminPage() {
                       <button
                         onClick={handleTestSquareConnection}
                         disabled={testingConnection || !squareConfig.configured}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors" style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)' }}
                       >
                         {testingConnection ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                         {testingConnection ? 'Testing…' : 'Test Connection'}
@@ -709,8 +715,8 @@ export default function AdminPage() {
 
                   {/* Connection test result */}
                   {connectionTestResult && (
-                    <div className={`mb-5 p-3 rounded-lg flex items-center gap-3 text-sm ${connectionTestResult.success ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
-                      {connectionTestResult.success ? <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <XCircle className="w-4 h-4 text-red-600 flex-shrink-0" />}
+                    <div className={`mb-5 p-3 rounded-lg flex items-center gap-3 text-sm border ${connectionTestResult.success ? 'border-emerald-500/40 text-emerald-300' : 'border-red-500/40 text-red-300'}`} style={{ background: connectionTestResult.success ? 'rgba(52,211,153,0.1)' : 'rgba(239,68,68,0.1)' }}>
+                      {connectionTestResult.success ? <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" /> : <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />}
                       {connectionTestResult.message}
                     </div>
                   )}
@@ -727,9 +733,9 @@ export default function AdminPage() {
                         ? squareConfig.configured_fields?.catalog_starter || squareConfig.configured_fields?.catalog_pro || squareConfig.configured_fields?.catalog_enterprise
                         : squareConfig.configured_fields?.[key as keyof typeof squareConfig.configured_fields];
                       return (
-                        <div key={key} className={`flex items-center gap-2 p-3 rounded-lg border ${isOk ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
-                          {isOk ? <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" /> : <XCircle className="w-4 h-4 text-slate-300 flex-shrink-0" />}
-                          <span className={`text-xs font-medium ${isOk ? 'text-emerald-700' : 'text-slate-400'}`}>{label}</span>
+                        <div key={key} className={`flex items-center gap-2 p-3 rounded-lg border ${isOk ? 'border-emerald-500/40' : 'border-white/10'}`} style={{ background: isOk ? 'rgba(52,211,153,0.1)' : 'rgba(255,255,255,0.04)' }}>
+                          {isOk ? <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" /> : <XCircle className="w-4 h-4 text-slate-600 flex-shrink-0" />}
+                          <span className={`text-xs font-medium ${isOk ? 'text-emerald-400' : 'text-slate-500'}`}>{label}</span>
                         </div>
                       );
                     })}
@@ -738,7 +744,7 @@ export default function AdminPage() {
 
                 {/* Save result banner */}
                 {squareSaveResult && (
-                  <div className={`p-4 rounded-lg flex items-center gap-3 text-sm ${squareSaveResult.success ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-red-50 border border-red-200 text-red-800'}`}>
+                  <div className={`p-4 rounded-lg flex items-center gap-3 text-sm border ${squareSaveResult.success ? 'border-emerald-500/40 text-emerald-300' : 'border-red-500/40 text-red-300'}`} style={{ background: squareSaveResult.success ? 'rgba(52,211,153,0.1)' : 'rgba(239,68,68,0.1)' }}>
                     {squareSaveResult.success ? <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />}
                     {squareSaveResult.message}
                   </div>
@@ -748,8 +754,8 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
                   {/* Setup Guide */}
-                  <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                    <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-4">Setup Guide</h3>
+                  <div className="lg:col-span-2 rounded-xl p-6 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">Setup Guide</h3>
                     <ol className="space-y-4">
                       {[
                         {
@@ -798,7 +804,7 @@ export default function AdminPage() {
                         <li key={step} className="flex gap-3">
                           <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-900 text-white text-xs font-bold flex items-center justify-center mt-0.5">{step}</span>
                           <div>
-                            <p className="text-sm font-medium text-slate-800">{title}</p>
+                            <p className="text-sm font-medium text-slate-200">{title}</p>
                             <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{desc}</p>
                             {link && (
                               <a href={link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 mt-1">
@@ -812,37 +818,38 @@ export default function AdminPage() {
                   </div>
 
                   {/* Credentials Form */}
-                  <div className="lg:col-span-3 bg-white rounded-xl border border-slate-200 shadow-sm">
-                    <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Credentials</h3>
+                  <div className="lg:col-span-3 rounded-xl shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Credentials</h3>
                       {squareFormDirty && (
-                        <span className="text-xs text-amber-600 font-medium">Unsaved changes</span>
+                        <span className="text-xs text-amber-400 font-medium">Unsaved changes</span>
                       )}
                     </div>
                     <div className="p-6 space-y-5">
 
                       {/* Environment */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">Environment</label>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Environment</label>
                         <div className="flex gap-3">
                           {(['sandbox', 'production'] as const).map((env) => (
                             <button
                               key={env}
                               onClick={() => handleSquareFieldChange('environment', env)}
-                              className={`flex-1 py-2.5 text-sm font-medium rounded-lg border-2 transition-colors ${
+                              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${
                                 squareForm.environment === env
                                   ? env === 'production'
-                                    ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
-                                    : 'border-blue-600 bg-blue-50 text-blue-700'
-                                  : 'border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50'
+                                    ? 'border-emerald-400 text-emerald-300'
+                                    : 'border-cyan-400 text-cyan-300'
+                                  : 'text-slate-400 hover:text-slate-200'
                               }`}
+                              style={{ border: squareForm.environment === env ? (env === 'production' ? '2px solid rgba(52,211,153,0.6)' : '2px solid rgba(0,229,255,0.6)') : '2px solid rgba(255,255,255,0.1)', background: squareForm.environment === env ? (env === 'production' ? 'rgba(52,211,153,0.1)' : 'rgba(0,229,255,0.1)') : 'rgba(255,255,255,0.04)' }}
                             >
                               {env === 'sandbox' ? '🧪 Sandbox' : '🚀 Production'}
                             </button>
                           ))}
                         </div>
                         {squareForm.environment === 'production' && (
-                          <p className="mt-1.5 text-xs text-amber-600 flex items-center gap-1">
+                          <p className="mt-1.5 text-xs text-amber-400 flex items-center gap-1">
                             <AlertTriangle className="w-3.5 h-3.5" />
                             Production mode processes real payments.
                           </p>
@@ -851,10 +858,10 @@ export default function AdminPage() {
 
                       {/* Access Token */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
                           Access Token <span className="text-red-500">*</span>
                           {squareConfig.configured_fields?.access_token && !squareForm.access_token && (
-                            <span className="ml-2 text-emerald-600 normal-case font-normal">✓ saved</span>
+                            <span className="ml-2 text-emerald-400 normal-case font-normal">✓ saved</span>
                           )}
                         </label>
                         <div className="relative">
@@ -863,25 +870,25 @@ export default function AdminPage() {
                             value={squareForm.access_token}
                             onChange={(e) => handleSquareFieldChange('access_token', e.target.value)}
                           placeholder={squareConfig.configured_fields?.access_token ? '(saved — enter new value to replace)' : 'EAAAl...'}
-                            className="w-full pl-3 pr-10 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                            className="w-full pl-3 pr-10 py-2.5 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
                           />
                           <button
                             type="button"
                             onClick={() => setShowAccessToken((v) => !v)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
                           >
                             {showAccessToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
                         </div>
-                        <p className="mt-1 text-xs text-slate-400">Found in Square Developer Console → Credentials</p>
+                        <p className="mt-1 text-xs text-slate-500">Found in Square Developer Console → Credentials</p>
                       </div>
 
                       {/* Location ID */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
                           Location ID <span className="text-red-500">*</span>
                           {squareConfig.configured_fields?.location_id && (
-                            <span className="ml-2 text-emerald-600 normal-case font-normal">✓ saved</span>
+                            <span className="ml-2 text-emerald-400 normal-case font-normal">✓ saved</span>
                           )}
                         </label>
                         <input
@@ -889,11 +896,11 @@ export default function AdminPage() {
                           value={squareForm.location_id}
                           onChange={(e) => handleSquareFieldChange('location_id', e.target.value)}
                           placeholder={squareConfig.location_id || 'L0XXXXXXXXXXXXXXXXXX'}
-                          className="w-full px-3 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                          className="w-full px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
                         />
                         <p className="mt-1 text-xs text-slate-400">
                           Found in{' '}
-                          <a href="https://squareup.com/dashboard/locations" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                          <a href="https://squareup.com/dashboard/locations" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">
                             Square Dashboard → Locations
                           </a>
                         </p>
@@ -901,10 +908,10 @@ export default function AdminPage() {
 
                       {/* Webhook Signature Key */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5">
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
                           Webhook Signature Key
                           {squareConfig.configured_fields?.webhook_signature_key && !squareForm.webhook_signature_key && (
-                            <span className="ml-2 text-emerald-600 normal-case font-normal">✓ saved</span>
+                            <span className="ml-2 text-emerald-400 normal-case font-normal">✓ saved</span>
                           )}
                         </label>
                         <div className="relative">
@@ -913,22 +920,22 @@ export default function AdminPage() {
                             value={squareForm.webhook_signature_key}
                             onChange={(e) => handleSquareFieldChange('webhook_signature_key', e.target.value)}
                             placeholder={squareConfig.configured_fields?.webhook_signature_key ? '(saved — enter new value to replace)' : 'Optional — required for webhook verification'}
-                            className="w-full pl-3 pr-10 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                            className="w-full pl-3 pr-10 py-2.5 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
                           />
                           <button
                             type="button"
                             onClick={() => setShowWebhookKey((v) => !v)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
                           >
                             {showWebhookKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
                         </div>
-                        <p className="mt-1 text-xs text-slate-400">Set your webhook endpoint to: <code className="bg-slate-100 px-1 rounded">/api/square/webhook</code></p>
+                        <p className="mt-1 text-xs text-slate-500">Set your webhook endpoint to: <code className="px-1 rounded text-cyan-400" style={{ background: 'rgba(0,229,255,0.1)' }}>/api/square/webhook</code></p>
                       </div>
 
                       {/* Catalog IDs */}
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
+                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
                           Subscription Catalog IDs
                         </label>
                         <div className="space-y-3">
@@ -938,13 +945,13 @@ export default function AdminPage() {
                             { field: 'catalog_enterprise', label: '📈 Enterprise Plan', configKey: 'catalog_enterprise', placeholder: 'CATALOG_ITEM_ID_FOR_ENTERPRISE' },
                           ].map(({ field, label, configKey, placeholder }) => (
                             <div key={field} className="flex items-center gap-3">
-                              <span className="text-xs font-medium text-slate-500 w-28 flex-shrink-0">{label}</span>
+                              <span className="text-xs font-medium text-slate-400 w-28 flex-shrink-0">{label}</span>
                               <input
                                 type="text"
                                 value={squareForm[field as keyof typeof squareForm]}
                                 onChange={(e) => handleSquareFieldChange(field, e.target.value)}
                                 placeholder={squareConfig[configKey] || placeholder}
-                                className="flex-1 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                                className="flex-1 px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
                               />
                               {squareConfig.configured_fields?.[configKey as keyof typeof squareConfig.configured_fields] && (
                                 <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
@@ -952,9 +959,9 @@ export default function AdminPage() {
                             </div>
                           ))}
                         </div>
-                        <p className="mt-2 text-xs text-slate-400">
+                        <p className="mt-2 text-xs text-slate-500">
                           Create subscription items in{' '}
-                          <a href="https://squareup.com/dashboard/items" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                          <a href="https://squareup.com/dashboard/items" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">
                             Square Dashboard → Items
                           </a>{' '}
                           and paste their Catalog Object IDs here.
@@ -966,12 +973,12 @@ export default function AdminPage() {
                         <button
                           onClick={() => saveSquareConfigMutation.mutate(squareForm)}
                           disabled={saveSquareConfigMutation.isPending || !squareFormDirty}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          className="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors" style={{ background: 'linear-gradient(120deg, #00e5ff 0%, #7c4dff 100%)' }}
                         >
                           {saveSquareConfigMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                           {saveSquareConfigMutation.isPending ? 'Saving…' : 'Save Configuration'}
                         </button>
-                        <p className="text-xs text-slate-400">Changes apply immediately — no restart needed</p>
+                        <p className="text-xs text-slate-500">Changes apply immediately — no restart needed</p>
                       </div>
                     </div>
                   </div>
@@ -1025,97 +1032,97 @@ export default function AdminPage() {
 
       {/* Add User Modal */}
       {showAddUser && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
+          <div className="rounded-2xl shadow-2xl w-full max-w-md" style={{ background: 'rgba(5,7,30,0.98)', border: '1px solid rgba(0,229,255,0.2)' }}>
+            <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center">
-                  <UserPlus className="w-5 h-5 text-blue-600" />
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: 'rgba(0,229,255,0.1)' }}>
+                  <UserPlus className="w-5 h-5 text-cyan-400" />
                 </div>
-                <h2 className="text-lg font-semibold text-slate-900">Add New User</h2>
+                <h2 className="text-lg font-semibold text-white">Add New User</h2>
               </div>
-              <button onClick={() => { setShowAddUser(false); setAddUserError(''); }} className="text-slate-400 hover:text-slate-600">
+              <button onClick={() => { setShowAddUser(false); setAddUserError(''); }} className="text-slate-500 hover:text-slate-300">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <div className="p-6 space-y-4">
               {addUserError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
+                <div className="p-3 rounded-lg text-sm text-red-300 flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" />{addUserError}
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email <span className="text-red-500">*</span></label>
-                <input type="email" value={addUserForm.email} onChange={(e) => setAddUserForm({ ...addUserForm, email: e.target.value })} placeholder="user@example.com" className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-slate-300 mb-1">Email <span className="text-red-400">*</span></label>
+                <input type="email" value={addUserForm.email} onChange={(e) => setAddUserForm({ ...addUserForm, email: e.target.value })} placeholder="user@example.com" className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-                <input type="text" value={addUserForm.full_name} onChange={(e) => setAddUserForm({ ...addUserForm, full_name: e.target.value })} placeholder="Jane Smith" className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-slate-300 mb-1">Full Name</label>
+                <input type="text" value={addUserForm.full_name} onChange={(e) => setAddUserForm({ ...addUserForm, full_name: e.target.value })} placeholder="Jane Smith" className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-                <select value={addUserForm.role} onChange={(e) => setAddUserForm({ ...addUserForm, role: e.target.value })} className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <label className="block text-sm font-medium text-slate-300 mb-1">Role</label>
+                <select value={addUserForm.role} onChange={(e) => setAddUserForm({ ...addUserForm, role: e.target.value })} className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white" style={{ background: 'rgba(5,7,30,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}>
                   <option value="viewer">Viewer</option>
                   <option value="editor">Editor</option>
                   <option value="admin">Admin</option>
                 </select>
                 {addUserForm.role === 'admin' && (
-                  <p className="mt-1.5 text-xs text-amber-600 flex items-center gap-1">
+                  <p className="mt-1.5 text-xs text-amber-400 flex items-center gap-1">
                     <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                     Admin users have full access to all system settings.
                   </p>
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Password <span className="text-red-500">*</span></label>
-                <input type="password" value={addUserForm.password} onChange={(e) => setAddUserForm({ ...addUserForm, password: e.target.value })} placeholder="Min. 8 characters" className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <label className="block text-sm font-medium text-slate-300 mb-1">Password <span className="text-red-400">*</span></label>
+                <input type="password" value={addUserForm.password} onChange={(e) => setAddUserForm({ ...addUserForm, password: e.target.value })} placeholder="Min. 8 characters" className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
               </div>
             </div>
-            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3 rounded-b-2xl">
-              <button onClick={() => { setShowAddUser(false); setAddUserError(''); }} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
-              <button onClick={() => createUserMutation.mutate(addUserForm)} disabled={!addUserForm.email || addUserForm.password.length < 8 || createUserMutation.isPending} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                {createUserMutation.isPending ? 'Creating\u2026' : 'Create User'}
+            <div className="px-6 py-4 flex justify-end gap-3 rounded-b-2xl" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
+              <button onClick={() => { setShowAddUser(false); setAddUserError(''); }} className="px-4 py-2 text-sm font-medium text-slate-300 rounded-lg transition-colors hover:text-white" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>Cancel</button>
+              <button onClick={() => createUserMutation.mutate(addUserForm)} disabled={!addUserForm.email || addUserForm.password.length < 8 || createUserMutation.isPending} className="px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors" style={{ background: 'linear-gradient(120deg, #00e5ff 0%, #7c4dff 100%)' }}>
+                {createUserMutation.isPending ? 'Creating…' : 'Create User'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Delete Confirmation */}
+            {/* Delete Confirmation */}
       {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
+          <div className="rounded-2xl shadow-2xl w-full max-w-sm" style={{ background: 'rgba(5,7,30,0.98)', border: '1px solid rgba(239,68,68,0.3)' }}>
             <div className="p-6 text-center">
-              <div className="w-14 h-14 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trash2 className="w-7 h-7 text-red-500" />
+              <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(239,68,68,0.1)' }}>
+                <Trash2 className="w-7 h-7 text-red-400" />
               </div>
-              <h2 className="text-lg font-semibold text-slate-900 mb-2">Delete User</h2>
-              <p className="text-sm text-slate-500">
-                Are you sure you want to permanently delete <strong className="text-slate-700">{deleteTarget.email}</strong>? This action cannot be undone.
+              <h2 className="text-lg font-semibold text-white mb-2">Delete User</h2>
+              <p className="text-sm text-slate-400">
+                Are you sure you want to permanently delete <strong className="text-slate-200">{deleteTarget.email}</strong>? This action cannot be undone.
               </p>
             </div>
             <div className="px-6 pb-6 flex gap-3">
-              <button onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">Cancel</button>
-              <button onClick={() => deleteUserMutation.mutate(deleteTarget.id)} disabled={deleteUserMutation.isPending} className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
-                {deleteUserMutation.isPending ? 'Deleting\u2026' : 'Delete'}
+              <button onClick={() => setDeleteTarget(null)} className="flex-1 px-4 py-2 text-sm font-medium text-slate-300 rounded-lg transition-colors hover:text-white" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}>Cancel</button>
+              <button onClick={() => deleteUserMutation.mutate(deleteTarget.id)} disabled={deleteUserMutation.isPending} className="flex-1 px-4 py-2 text-sm font-medium text-white rounded-lg disabled:opacity-50 transition-colors" style={{ background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' }}>
+                {deleteUserMutation.isPending ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* User Details Modal */}
+            {/* User Details Modal */}
       {selectedUser && userDetails && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white px-6 py-5 border-b border-slate-100 flex items-center gap-4 rounded-t-2xl">
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
+          <div className="rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" style={{ background: 'rgba(5,7,30,0.98)', border: '1px solid rgba(0,229,255,0.2)' }}>
+            <div className="sticky top-0 px-6 py-5 flex items-center gap-4 rounded-t-2xl" style={{ background: 'rgba(5,7,30,0.98)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
               <Avatar name={userDetails.full_name} email={userDetails.email} />
               <div className="flex-1 min-w-0">
-                <h2 className="font-semibold text-slate-900 truncate">{userDetails.full_name || userDetails.email}</h2>
-                <p className="text-sm text-slate-500 truncate">{userDetails.email}</p>
+                <h2 className="font-semibold text-white truncate">{userDetails.full_name || userDetails.email}</h2>
+                <p className="text-sm text-slate-400 truncate">{userDetails.email}</p>
               </div>
-              <span className={`inline-block w-2 h-2 rounded-full ${userDetails.is_active ? 'bg-emerald-400' : 'bg-slate-300'}`} />
-              <button onClick={() => { setSelectedUser(null); setEditingSubscription(false); setSuspendReason(''); }} className="text-slate-400 hover:text-slate-600">
+              <span className={`inline-block w-2 h-2 rounded-full ${userDetails.is_active ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+              <button onClick={() => { setSelectedUser(null); setEditingSubscription(false); setSuspendReason(''); }} className="text-slate-500 hover:text-slate-300">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1126,11 +1133,11 @@ export default function AdminPage() {
                   { label: 'Role', value: userDetails.role },
                   { label: 'Auth Provider', value: userDetails.auth_provider },
                   { label: 'Joined', value: formatDateTime.date(userDetails.created_at) },
-                  { label: 'Last Login', value: userDetails.last_login ? formatDateTime.date(userDetails.last_login) : '\u2014' },
+                  { label: 'Last Login', value: userDetails.last_login ? formatDateTime.date(userDetails.last_login) : '—' },
                 ].map((item) => (
-                  <div key={item.label} className="bg-slate-50 rounded-lg p-3">
+                  <div key={item.label} className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                     <p className="text-xs text-slate-500 mb-1">{item.label}</p>
-                    <p className="text-sm font-medium text-slate-900 capitalize">{item.value}</p>
+                    <p className="text-sm font-medium text-slate-200 capitalize">{item.value}</p>
                   </div>
                 ))}
               </div>
@@ -1138,25 +1145,25 @@ export default function AdminPage() {
               {userDetails.subscription && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Subscription</h3>
+                    <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Subscription</h3>
                     {!editingSubscription && (
-                      <button onClick={() => setEditingSubscription(true)} className="text-xs text-blue-600 hover:text-blue-700 font-medium">Edit</button>
+                      <button onClick={() => setEditingSubscription(true)} className="text-xs text-cyan-400 hover:text-cyan-300 font-medium">Edit</button>
                     )}
                   </div>
                   {editingSubscription ? (
-                    <div className="space-y-3 bg-slate-50 rounded-xl p-4">
+                    <div className="space-y-3 rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Tier</label>
-                          <select value={subscriptionForm.tier} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, tier: e.target.value })} className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          <label className="block text-xs font-medium text-slate-400 mb-1">Tier</label>
+                          <select value={subscriptionForm.tier} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, tier: e.target.value })} className="w-full text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white" style={{ background: 'rgba(5,7,30,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}>
                             <option value="starter">Starter</option>
                             <option value="pro">Pro</option>
                             <option value="enterprise">Enterprise</option>
                           </select>
                         </div>
                         <div>
-                          <label className="block text-xs font-medium text-slate-600 mb-1">Status</label>
-                          <select value={subscriptionForm.status} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, status: e.target.value })} className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                          <label className="block text-xs font-medium text-slate-400 mb-1">Status</label>
+                          <select value={subscriptionForm.status} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, status: e.target.value })} className="w-full text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white" style={{ background: 'rgba(5,7,30,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}>
                             <option value="trial">Trial</option>
                             <option value="active">Active</option>
                             <option value="cancelled">Cancelled</option>
@@ -1166,28 +1173,28 @@ export default function AdminPage() {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-slate-600 mb-1">Admin Notes</label>
-                        <textarea value={subscriptionForm.admin_notes} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, admin_notes: e.target.value })} className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" rows={2} />
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Admin Notes</label>
+                        <textarea value={subscriptionForm.admin_notes} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, admin_notes: e.target.value })} className="w-full text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} rows={2} />
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => updateSubscriptionMutation.mutate({ userId: selectedUser, data: subscriptionForm })} disabled={updateSubscriptionMutation.isPending} className="flex-1 bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">Save</button>
-                        <button onClick={() => setEditingSubscription(false)} className="flex-1 border border-slate-200 text-sm px-4 py-2 rounded-lg hover:bg-slate-50">Cancel</button>
+                        <button onClick={() => updateSubscriptionMutation.mutate({ userId: selectedUser, data: subscriptionForm })} disabled={updateSubscriptionMutation.isPending} className="flex-1 text-white text-sm px-4 py-2 rounded-lg disabled:opacity-50" style={{ background: 'linear-gradient(120deg, #00e5ff 0%, #7c4dff 100%)' }}>Save</button>
+                        <button onClick={() => setEditingSubscription(false)} className="flex-1 text-sm px-4 py-2 rounded-lg text-slate-300 hover:text-white" style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}>Cancel</button>
                       </div>
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-slate-50 rounded-lg p-3">
+                      <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                         <p className="text-xs text-slate-500 mb-1">Tier</p>
                         <TierBadge tier={userDetails.subscription.tier} />
                       </div>
-                      <div className="bg-slate-50 rounded-lg p-3">
+                      <div className="rounded-lg p-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                         <p className="text-xs text-slate-500 mb-1">Status</p>
                         <SubStatusBadge status={userDetails.subscription.status} />
                       </div>
                       {userDetails.subscription.current_period_end && (
-                        <div className="bg-slate-50 rounded-lg p-3 col-span-2">
+                        <div className="rounded-lg p-3 col-span-2" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
                           <p className="text-xs text-slate-500 mb-1">Period Ends</p>
-                          <p className="text-sm font-medium text-slate-900">{formatDateTime.full(userDetails.subscription.current_period_end)}</p>
+                          <p className="text-sm font-medium text-slate-200">{formatDateTime.full(userDetails.subscription.current_period_end)}</p>
                         </div>
                       )}
                     </div>
@@ -1197,7 +1204,7 @@ export default function AdminPage() {
 
               {userDetails.usage && (
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">Usage This Month</h3>
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Usage This Month</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
                       { label: 'Posts', value: userDetails.usage.posts_created },
@@ -1205,8 +1212,8 @@ export default function AdminPage() {
                       { label: 'AI Requests', value: userDetails.usage.ai_requests },
                       { label: 'Storage', value: `${userDetails.usage.storage_used_mb.toFixed(1)} MB` },
                     ].map((stat) => (
-                      <div key={stat.label} className="bg-slate-50 rounded-lg p-3 text-center">
-                        <p className="text-xl font-bold text-slate-900">{stat.value}</p>
+                      <div key={stat.label} className="rounded-lg p-3 text-center" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                        <p className="text-xl font-bold text-white">{stat.value}</p>
                         <p className="text-xs text-slate-500 mt-0.5">{stat.label}</p>
                       </div>
                     ))}
@@ -1215,22 +1222,24 @@ export default function AdminPage() {
               )}
 
               {userDetails.role !== 'admin' && (
-                <div className="border-t border-slate-100 pt-4">
-                  <h3 className="text-sm font-semibold text-slate-700 uppercase tracking-wide mb-3">Actions</h3>
+                <div className="pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Actions</h3>
                   <div className="flex flex-col gap-3">
                     {userDetails.is_active && userDetails.subscription?.status !== 'suspended' && (
                       <div className="flex gap-2">
                         <input
                           type="text"
-                          placeholder="Suspension reason (required)\u2026"
+                          placeholder="Suspension reason (required)…"
                           value={suspendReason}
                           onChange={(e) => setSuspendReason(e.target.value)}
-                          className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                          className="flex-1 text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-500 text-white placeholder-slate-600"
+                          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
                         />
                         <button
                           onClick={() => suspendMutation.mutate({ userId: selectedUser, reason: suspendReason })}
                           disabled={!suspendReason.trim() || suspendMutation.isPending}
-                          className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded-lg hover:bg-amber-600 disabled:opacity-50 whitespace-nowrap"
+                          className="flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-50 whitespace-nowrap"
+                          style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' }}
                         >
                           <Ban className="w-4 h-4" />
                           Suspend
@@ -1241,10 +1250,11 @@ export default function AdminPage() {
                       <button
                         onClick={() => activateMutation.mutate(selectedUser)}
                         disabled={activateMutation.isPending}
-                        className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                        className="flex items-center justify-center gap-2 w-full px-4 py-2 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+                        style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' }}
                       >
                         <CheckCircle className="w-4 h-4" />
-                        {activateMutation.isPending ? 'Activating\u2026' : 'Activate User'}
+                        {activateMutation.isPending ? 'Activating…' : 'Activate User'}
                       </button>
                     )}
                   </div>

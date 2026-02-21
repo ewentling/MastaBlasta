@@ -118,155 +118,163 @@ export function EmailComposer() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex items-center gap-2 mb-6">
-        <Mail className="w-6 h-6 text-blue-600" />
-        <h3 className="text-lg font-semibold">Email Composer</h3>
+    <div className="rounded-xl shadow-lg overflow-hidden" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="flex items-center gap-2 px-6 py-5" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+        <Mail className="w-6 h-6 text-cyan-400" />
+        <h3 className="text-sm font-semibold text-white">Email Composer</h3>
       </div>
 
-      {/* Template Selector */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Email Template (Optional)
-        </label>
-        <select
-          value={selectedTemplate}
-          onChange={(e) => handleTemplateSelect(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">Custom Email</option>
-          {templates.map((template: EmailTemplate) => (
-            <option key={template.id} value={template.id}>
-              {template.name} - {template.description}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Recipient Type */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Recipients
-        </label>
-        <div className="flex gap-4">
-          <label className="flex items-center">
-            <input
-              type="radio"
-              value="single"
-              checked={recipientType === 'single'}
-              onChange={(e) => setRecipientType(e.target.value as 'single')}
-              className="mr-2"
-            />
-            Single User
+      <div className="p-6 space-y-4">
+        {/* Template Selector */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+            Email Template (Optional)
           </label>
-          <label className="flex items-center">
-            <input
-              type="radio"
-              value="all"
-              checked={recipientType === 'all'}
-              onChange={(e) => setRecipientType(e.target.value as 'all')}
-              className="mr-2"
-            />
-            All Users
-          </label>
+          <select
+            value={selectedTemplate}
+            onChange={(e) => handleTemplateSelect(e.target.value)}
+            className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white"
+            style={{ background: 'rgba(5,7,30,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            <option value="">Custom Email</option>
+            {templates.map((template: EmailTemplate) => (
+              <option key={template.id} value={template.id}>
+                {template.name} - {template.description}
+              </option>
+            ))}
+          </select>
         </div>
-      </div>
 
-      {/* User Email (if single recipient) */}
-      {recipientType === 'single' && (
-        <div className="mb-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            User Email
+        {/* Recipient Type */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+            Recipients
+          </label>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+              <input
+                type="radio"
+                value="single"
+                checked={recipientType === 'single'}
+                onChange={(e) => setRecipientType(e.target.value as 'single')}
+                className="accent-cyan-400"
+              />
+              Single User
+            </label>
+            <label className="flex items-center gap-2 text-slate-300 cursor-pointer">
+              <input
+                type="radio"
+                value="all"
+                checked={recipientType === 'all'}
+                onChange={(e) => setRecipientType(e.target.value as 'all')}
+                className="accent-cyan-400"
+              />
+              All Users
+            </label>
+          </div>
+        </div>
+
+        {/* User Email (if single recipient) */}
+        {recipientType === 'single' && (
+          <div>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+              User Email
+            </label>
+            <input
+              type="email"
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
+              placeholder="user@example.com"
+              className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+            />
+          </div>
+        )}
+
+        {/* Subject */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+            Subject
           </label>
           <input
-            type="email"
-            value={userEmail}
-            onChange={(e) => setUserEmail(e.target.value)}
-            placeholder="user@example.com"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            type="text"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="Email subject"
+            className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
           />
         </div>
-      )}
 
-      {/* Subject */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Subject
-        </label>
-        <input
-          type="text"
-          value={subject}
-          onChange={(e) => setSubject(e.target.value)}
-          placeholder="Email subject"
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-      </div>
-
-      {/* Body */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Message Body
-        </label>
-        <textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Email content..."
-          rows={8}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <p className="mt-1 text-xs text-gray-500">
-          Use variables like {'{user_name}'}, {'{upgrade_link}'} in your template
-        </p>
-      </div>
-
-      {/* Preview */}
-      {showPreview && previewMutation.data && (
-        <div className="mb-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-          <h4 className="font-medium mb-2">Preview:</h4>
-          <div className="mb-2">
-            <span className="font-medium">Subject:</span> {previewMutation.data.preview.subject}
-          </div>
-          <div>
-            <span className="font-medium">Body:</span>
-            <div className="mt-1 whitespace-pre-wrap">{previewMutation.data.preview.body}</div>
-          </div>
+        {/* Body */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
+            Message Body
+          </label>
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Email content..."
+            rows={8}
+            className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+          />
+          <p className="mt-1 text-xs text-slate-500">
+            Use variables like {'{user_name}'}, {'{upgrade_link}'} in your template
+          </p>
         </div>
-      )}
 
-      {/* Actions */}
-      <div className="flex gap-3">
-        <button
-          onClick={handlePreview}
-          disabled={!subject || !body || previewMutation.isPending}
-          className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {previewMutation.isPending ? (
-            <Loader className="w-4 h-4 animate-spin" />
-          ) : (
-            <Eye className="w-4 h-4" />
-          )}
-          Preview
-        </button>
-        <button
-          onClick={handleSendEmail}
-          disabled={!subject || !body || sendEmailMutation.isPending}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {sendEmailMutation.isPending ? (
-            <Loader className="w-4 h-4 animate-spin" />
-          ) : (
-            <Send className="w-4 h-4" />
-          )}
-          Send Email
-        </button>
-      </div>
+        {/* Preview */}
+        {showPreview && previewMutation.data && (
+          <div className="p-4 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <h4 className="font-medium text-slate-200 mb-2">Preview:</h4>
+            <div className="mb-2 text-sm text-slate-300">
+              <span className="font-medium text-slate-400">Subject:</span> {previewMutation.data.preview.subject}
+            </div>
+            <div className="text-sm text-slate-300">
+              <span className="font-medium text-slate-400">Body:</span>
+              <div className="mt-1 whitespace-pre-wrap">{previewMutation.data.preview.body}</div>
+            </div>
+          </div>
+        )}
 
-      {/* Note */}
-      <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <p className="text-sm text-yellow-800">
-          <strong>Note:</strong> Email service integration required for actual delivery. 
-          Currently logs email intent for testing.
-        </p>
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button
+            onClick={handlePreview}
+            disabled={!subject || !body || previewMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-slate-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:text-white transition-colors"
+            style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)' }}
+          >
+            {previewMutation.isPending ? (
+              <Loader className="w-4 h-4 animate-spin" />
+            ) : (
+              <Eye className="w-4 h-4" />
+            )}
+            Preview
+          </button>
+          <button
+            onClick={handleSendEmail}
+            disabled={!subject || !body || sendEmailMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 text-sm text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            style={{ background: 'linear-gradient(120deg, #00e5ff 0%, #7c4dff 100%)' }}
+          >
+            {sendEmailMutation.isPending ? (
+              <Loader className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+            Send Email
+          </button>
+        </div>
+
+        {/* Note */}
+        <div className="p-3 rounded-lg" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
+          <p className="text-sm text-amber-300">
+            <strong>Note:</strong> Email service integration required for actual delivery.
+            Currently logs email intent for testing.
+          </p>
+        </div>
       </div>
     </div>
   );
