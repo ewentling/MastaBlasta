@@ -5,7 +5,7 @@ Four-step pipeline:
   1. Ingestion   – yt-dlp downloads the full video (anti-bot options).
   2. Transcription – Faster-Whisper runs locally to produce a timestamped
                     transcript (.json with start/end/text per segment).
-  3. Analysis    – Gemini 1.5 Flash reads the transcript and returns
+  3. Analysis    – Gemini 2.0 Flash reads the transcript and returns
                     the N most viral moments with precise timestamps.
   4. Extraction  – ffmpeg clips each moment (stream-copy by default for
                     lossless speed; re-encode optional for frame accuracy).
@@ -64,8 +64,8 @@ class VideoClipperService:
     # Minimum video length before clip analysis makes sense
     MIN_VIDEO_DURATION = 60  # seconds
 
-    # Gemini model – 1.5-flash has a 1M-token context window, ideal for long transcripts
-    GEMINI_MODEL = "gemini-1.5-flash"
+    # Gemini model – 2.0-flash has a 1M-token context window, ideal for long transcripts
+    GEMINI_MODEL = "gemini-2.0-flash"
 
     # Whisper model size: "base" is fast / low-RAM; switch to "medium" for higher accuracy
     WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
