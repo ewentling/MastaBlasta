@@ -86,7 +86,7 @@ class Account(Base):
     __tablename__ = 'accounts'
 
     id = Column(String(36), primary_key=True)
-    user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
     platform = Column(String(50), nullable=False, index=True)
     platform_user_id = Column(String(255))
     platform_username = Column(String(255))
@@ -114,7 +114,7 @@ class Post(Base):
     __tablename__ = 'posts'
 
     id = Column(String(36), primary_key=True)
-    user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
     content = Column(Text, nullable=False)
     post_type = Column(String(50))  # standard, thread, reel, story, etc.
     status = Column(Enum(PostStatus), default=PostStatus.DRAFT, nullable=False, index=True)
@@ -151,7 +151,7 @@ class Media(Base):
     __tablename__ = 'media'
 
     id = Column(String(36), primary_key=True)
-    user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255))
     file_path = Column(String(512), nullable=False)
@@ -210,7 +210,7 @@ class Template(Base):
     __tablename__ = 'templates'
 
     id = Column(String(36), primary_key=True)
-    user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
     category = Column(String(100))
@@ -256,7 +256,7 @@ class SocialMonitor(Base):
     __tablename__ = 'social_monitors'
 
     id = Column(String(36), primary_key=True)
-    user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     keywords = Column(JSON, nullable=False)  # List of keywords/hashtags
     platforms = Column(JSON, nullable=False)  # Platforms to monitor
@@ -304,7 +304,7 @@ class URLShortener(Base):
     id = Column(String(36), primary_key=True)
     short_code = Column(String(20), unique=True, nullable=False, index=True)
     original_url = Column(Text, nullable=False)
-    user_id = Column(String(36), ForeignKey('users.id'))
+    user_id = Column(String(36), ForeignKey('users.id'), index=True)
     post_id = Column(String(36), ForeignKey('posts.id'))
     clicks = Column(Integer, default=0)
     url_metadata = Column(JSON)  # UTM parameters, etc.
@@ -345,7 +345,7 @@ class ResponseTemplate(Base):
     __tablename__ = 'response_templates'
 
     id = Column(String(36), primary_key=True)
-    user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
     name = Column(String(255), nullable=False)
     trigger_keywords = Column(JSON)  # Keywords that trigger this response
     response_text = Column(Text, nullable=False)
@@ -366,7 +366,7 @@ class ChatbotInteraction(Base):
     __tablename__ = 'chatbot_interactions'
 
     id = Column(String(36), primary_key=True)
-    user_id = Column(String(36), ForeignKey('users.id'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
     platform = Column(String(50), nullable=False)
     platform_user_id = Column(String(255), nullable=False)
     message = Column(Text, nullable=False)

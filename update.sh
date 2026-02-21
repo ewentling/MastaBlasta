@@ -37,6 +37,58 @@ LOG_FILE="${SCRIPT_DIR}/update_$(date +%Y%m%d_%H%M%S).log"
 DRY_RUN=false
 SKIP_BACKUP=false
 DEPLOYMENT_TYPE=""
+BACKUP_PATH=""  # Set during create_backups(); used by rollback trap
+
+# Automatic rollback on failure
+_rollback_on_exit() {
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        echo -e "\n\033[0;31m[ERROR]\033[0m Update failed (exit code $exit_code). Attempting automatic database restore..." | tee -a "$LOG_FILE"
+        if [ -n "$BACKUP_PATH" ] && [ "$SKIP_BACKUP" != "true" ] && [ "$DRY_RUN" != "true" ]; then
+            # Restore database backup if it exists
+            DB_BACKUP_FILE="${BACKUP_PATH}/database_backup.dump"
+            if [ -f "$DB_BACKUP_FILE" ]; then
+                echo -e "\033[1;33m[WARNING]\033[0m Restoring database from: $DB_BACKUP_FILE" | tee -a "$LOG_FILE"
+                if [ -f ".env" ]; then
+                    source .env 2>/dev/null || true
+                fi
+                if [ -n "${DATABASE_URL:-}" ]; then
+                    if [[ $DATABASE_URL =~ postgresql://([^:]+):([^@]+)@([^:/]+):?([0-9]+)?/(.+) ]]; then
+                        DB_USER="${BASH_REMATCH[1]}"
+                        DB_PASS="${BASH_REMATCH[2]}"
+                        DB_HOST="${BASH_REMATCH[3]}"
+                        DB_PORT="${BASH_REMATCH[4]:-5432}"
+                        DB_NAME="${BASH_REMATCH[5]}"
+                        if command -v pg_restore &> /dev/null; then
+                            _PGPASSFILE_RESTORE="$(mktemp)"
+                            echo "${DB_HOST}:${DB_PORT}:${DB_NAME}:${DB_USER}:${DB_PASS}" > "$_PGPASSFILE_RESTORE"
+                            chmod 600 "$_PGPASSFILE_RESTORE"
+                            PGPASSFILE="$_PGPASSFILE_RESTORE" pg_restore --clean --if-exists -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" "$DB_BACKUP_FILE" 2>&1 | tee -a "$LOG_FILE" \
+                                && echo -e "\033[0;32m[SUCCESS]\033[0m Database restored successfully." | tee -a "$LOG_FILE" \
+                                || echo -e "\033[0;31m[ERROR]\033[0m Automatic database restore failed. Restore manually with: pg_restore -d $DB_NAME $DB_BACKUP_FILE" | tee -a "$LOG_FILE"
+                            rm -f "$_PGPASSFILE_RESTORE"
+                        fi
+                    elif [[ $DATABASE_URL =~ postgresql://localhost/(.+) ]] || [[ $DATABASE_URL =~ postgresql:///(.+) ]]; then
+                        DB_NAME="${BASH_REMATCH[1]}"
+                        if command -v pg_restore &> /dev/null; then
+                            pg_restore --clean --if-exists -d "$DB_NAME" "$DB_BACKUP_FILE" 2>&1 | tee -a "$LOG_FILE" \
+                                && echo -e "\033[0;32m[SUCCESS]\033[0m Database restored successfully." | tee -a "$LOG_FILE" \
+                                || echo -e "\033[0;31m[ERROR]\033[0m Automatic database restore failed. Restore manually with: pg_restore -d $DB_NAME $DB_BACKUP_FILE" | tee -a "$LOG_FILE"
+                        fi
+                    fi
+                fi
+            fi
+            # Restore .env if it was backed up
+            ENV_BACKUP="${BACKUP_PATH}/.env.backup"
+            if [ -f "$ENV_BACKUP" ]; then
+                cp "$ENV_BACKUP" .env
+                echo -e "\033[0;32m[SUCCESS]\033[0m .env restored from backup." | tee -a "$LOG_FILE"
+            fi
+        fi
+        echo -e "\033[0;31m[ERROR]\033[0m Update did not complete successfully. See log: $LOG_FILE" | tee -a "$LOG_FILE"
+    fi
+}
+trap '_rollback_on_exit' EXIT
 
 # Function to print colored messages
 print_info() {
@@ -241,7 +293,7 @@ create_backups() {
         if [ -n "${DATABASE_URL:-}" ]; then
             # Use pg_dump if available
             if command -v pg_dump &> /dev/null; then
-                DB_BACKUP_FILE="${BACKUP_PATH}/database_backup.sql"
+                DB_BACKUP_FILE="${BACKUP_PATH}/database_backup.dump"
                 
                 # Parse DATABASE_URL to extract components
                 # Format: postgresql://user:password@host:port/database
@@ -252,7 +304,11 @@ create_backups() {
                     DB_PORT="${BASH_REMATCH[4]:-5432}"
                     DB_NAME="${BASH_REMATCH[5]}"
                     
-                    PGPASSWORD="$DB_PASS" pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -F c -f "$DB_BACKUP_FILE" 2>&1 | tee -a "$LOG_FILE"
+                    _PGPASSFILE_DUMP="$(mktemp)"
+                    echo "${DB_HOST}:${DB_PORT}:${DB_NAME}:${DB_USER}:${DB_PASS}" > "$_PGPASSFILE_DUMP"
+                    chmod 600 "$_PGPASSFILE_DUMP"
+                    PGPASSFILE="$_PGPASSFILE_DUMP" pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -F c -f "$DB_BACKUP_FILE" 2>&1 | tee -a "$LOG_FILE"
+                    rm -f "$_PGPASSFILE_DUMP"
                     
                     if [ -f "$DB_BACKUP_FILE" ]; then
                         BACKUP_SIZE=$(du -h "$DB_BACKUP_FILE" | cut -f1)
@@ -263,7 +319,7 @@ create_backups() {
                 elif [[ $DATABASE_URL =~ postgresql://localhost/(.+) ]] || [[ $DATABASE_URL =~ postgresql:///(.+) ]]; then
                     # Simple format without credentials
                     DB_NAME="${BASH_REMATCH[1]}"
-                    DB_BACKUP_FILE="${BACKUP_PATH}/database_backup.sql"
+                    DB_BACKUP_FILE="${BACKUP_PATH}/database_backup.dump"
                     pg_dump -d "$DB_NAME" -F c -f "$DB_BACKUP_FILE" 2>&1 | tee -a "$LOG_FILE"
                     
                     if [ -f "$DB_BACKUP_FILE" ]; then
@@ -305,7 +361,7 @@ $(git status --short)
 $(git log -1 --oneline)
 
 To Restore:
-1. Database: pg_restore -d mastablasta ${BACKUP_PATH}/database_backup.sql
+1. Database: pg_restore -d mastablasta ${BACKUP_PATH}/database_backup.dump
 2. Media: tar -xzf ${BACKUP_PATH}/media_backup.tar.gz
 3. Config: cp ${BACKUP_PATH}/.env.backup .env
 EOF
@@ -857,7 +913,7 @@ ${BACKUP_DIR}/${LATEST_BACKUP}
 
 To rollback:
 1. Restore database:
-   pg_restore -d mastablasta ${BACKUP_DIR}/${LATEST_BACKUP}/database_backup.sql
+   pg_restore -d mastablasta ${BACKUP_DIR}/${LATEST_BACKUP}/database_backup.dump
 
 2. Restore media files:
    rm -rf media && tar -xzf ${BACKUP_DIR}/${LATEST_BACKUP}/media_backup.tar.gz

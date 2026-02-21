@@ -5,6 +5,7 @@ from apscheduler.jobstores.memory import MemoryJobStore
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import wraps
+import secrets
 import uuid
 import os
 import logging
@@ -32,6 +33,25 @@ except ImportError:
     logger.warning("AI libraries not installed. AI features will be disabled.")
 
 app = Flask(__name__)
+_APP_START_TIME = time.time()  # Track uptime for health checks
+
+# ── X-Request-ID correlation ──────────────────────────────────────────────────
+# Attach a unique request ID to every request so that log lines from the same
+# request can be correlated across services.  Clients can also pass their own
+# request ID in the X-Request-ID header to end-to-end trace a call.
+from flask import g as _flask_g
+
+@app.before_request
+def _attach_request_id():
+    """Generate or propagate an X-Request-ID for the current request."""
+    _flask_g.request_id = request.headers.get('X-Request-ID') or secrets.token_hex(8)
+
+@app.after_request
+def _add_request_id_header(response):
+    """Echo the request ID back in the response so clients can correlate logs."""
+    if hasattr(_flask_g, 'request_id'):
+        response.headers['X-Request-ID'] = _flask_g.request_id
+    return response
 
 # Security: Validate SECRET_KEY
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -45,6 +65,8 @@ if is_production and (not SECRET_KEY or SECRET_KEY == 'dev-secret-key-change-in-
 
 app.config['SECRET_KEY'] = SECRET_KEY
 app.config['SESSION_TYPE'] = 'filesystem'
+# Limit incoming request bodies to 512 MB (covers video uploads); rejects larger requests early
+app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_CONTENT_LENGTH', 512 * 1024 * 1024))
 
 # Enhanced session security
 if is_production:
@@ -72,9 +94,13 @@ if is_production:
     CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=True)
     logger.info(f"✅ Production CORS enabled for: {ALLOWED_ORIGINS}")
 else:
-    # Development: Permissive but logged
-    CORS(app, origins='*', supports_credentials=True)
-    logger.warning("⚠️  Development mode: CORS allows all origins")
+    # Development: Restrict to common dev origins only.
+    # Note: browsers reject origins='*' with supports_credentials=True, so we enumerate
+    # safe localhost origins instead of using a wildcard.
+    _dev_origins = ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:33766',
+                    'http://127.0.0.1:5173', 'http://127.0.0.1:3000', 'http://127.0.0.1:33766']
+    CORS(app, origins=_dev_origins, supports_credentials=True)
+    logger.warning("⚠️  Development mode: CORS restricted to localhost origins")
 
 # ==================== Production Infrastructure Integration ====================
 # Load production infrastructure if available
@@ -148,6 +174,48 @@ try:
 except ImportError as e:
     logger.warning(f"⚠ Advanced features not available: {e}")
 
+# Apply security headers middleware (HSTS, CSP, X-Frame-Options, etc.)
+_prune_security_state_fn = None
+try:
+    from security_enhancements import init_security_middleware, prune_security_state
+    init_security_middleware(app)
+    logger.info("✓ Security headers middleware applied")
+    _prune_security_state_fn = prune_security_state
+except ImportError as e:
+    logger.warning(f"⚠ Security middleware not available: {e}")
+
+
+# ── Periodic subscription expiry job ─────────────────────────────────────────
+_expire_stale_subscriptions_fn = None
+if PRODUCTION_MODE and DB_ENABLED:
+    def _expire_stale_subscriptions():
+        """Mark subscriptions whose billing period or trial has ended as EXPIRED.
+
+        Runs every hour.  Without this job, subscriptions only appear expired
+        when is_expired() is called in-process; the DB column is never updated,
+        so admin queries and external integrations see stale data.
+        """
+        try:
+            from database import db_session_scope
+            from models import Subscription, SubscriptionStatus
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc)
+            with db_session_scope() as session:
+                expired = session.query(Subscription).filter(
+                    Subscription.status.in_([SubscriptionStatus.TRIAL, SubscriptionStatus.ACTIVE]),
+                ).all()
+                count = 0
+                for sub in expired:
+                    if sub.is_expired():
+                        sub.status = SubscriptionStatus.EXPIRED
+                        count += 1
+                if count:
+                    logger.info(f"Marked {count} subscription(s) as EXPIRED")
+        except Exception as e:
+            logger.error(f"Subscription expiry job failed: {e}")
+
+    _expire_stale_subscriptions_fn = _expire_stale_subscriptions
+
 
 # Helper functions
 def use_database():
@@ -185,6 +253,26 @@ jobstores = {
 }
 scheduler = BackgroundScheduler(jobstores=jobstores, timezone='UTC')
 scheduler.start()
+
+# Register background jobs (must be done after scheduler.start())
+if _prune_security_state_fn is not None:
+    scheduler.add_job(
+        _prune_security_state_fn,
+        'interval',
+        minutes=5,
+        id='prune_security_state',
+        replace_existing=True,
+    )
+    logger.info("✓ Security state pruning job scheduled (every 5 minutes)")
+if _expire_stale_subscriptions_fn is not None:
+    scheduler.add_job(
+        _expire_stale_subscriptions_fn,
+        'interval',
+        hours=1,
+        id='expire_subscriptions',
+        replace_existing=True,
+    )
+    logger.info("✓ Subscription expiry job scheduled (every hour)")
 
 # In-memory storage for posts and accounts (in production, use a database)
 posts_db = {}
@@ -4009,13 +4097,31 @@ def publish_to_platforms(post_id, platforms, content, media, credentials_dict, p
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
-    return jsonify({
+    """Health check endpoint with database connectivity and uptime"""
+    uptime_seconds = int(time.time() - _APP_START_TIME)
+    health = {
         'status': 'healthy',
         'service': 'MastaBlasta',
         'version': '1.0.0',
-        'timestamp': datetime.now(timezone.utc).isoformat()
-    })
+        'timestamp': datetime.now(timezone.utc).isoformat(),
+        'uptime_seconds': uptime_seconds,
+        'database': 'disabled',
+        'ai_enabled': AI_ENABLED,
+    }
+
+    if DB_ENABLED:
+        try:
+            from database import db_session_scope
+            from sqlalchemy import text
+            with db_session_scope() as session:
+                session.execute(text('SELECT 1'))
+            health['database'] = 'connected'
+        except Exception as db_err:
+            health['database'] = 'error'
+            health['status'] = 'degraded'
+            logger.warning(f"Health check: DB error: {db_err}")
+
+    return jsonify(health)
 
 
 @app.route('/api/accounts', methods=['GET'])
@@ -4672,6 +4778,7 @@ def ai_compare_variations():
 
 
 @app.route('/api/ai/train-model', methods=['POST'])
+@auth_required
 def ai_train_model():
     """Train engagement prediction model on historical data"""
     data = request.get_json()
@@ -5599,7 +5706,7 @@ def oauth_init(platform):
                     # User has custom OAuth credentials
                     from oauth import TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth
                     
-                    state_token = str(uuid.uuid4())
+                    state_token = secrets.token_urlsafe(32)
                     oauth_states[state_token] = {
                         'platform': platform,
                         'user_id': user['id'],
@@ -5643,7 +5750,7 @@ def oauth_init(platform):
             TWITTER_CLIENT_ID, META_APP_ID, LINKEDIN_CLIENT_ID, GOOGLE_CLIENT_ID
         )
 
-        state_token = str(uuid.uuid4())
+        state_token = secrets.token_urlsafe(32)
         oauth_states[state_token] = {
             'platform': platform,
             'created_at': datetime.now(timezone.utc).isoformat()
@@ -5705,18 +5812,19 @@ def oauth_callback(platform):
     if not code:
         error = request.args.get('error', 'Authorization failed')
         error_description = request.args.get('error_description', '')
+        _frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
         return f"""
         <html>
             <body>
                 <script>
                     window.opener.postMessage({{
                         type: 'oauth_error',
-                        platform: '{platform}',
-                        error: '{error}: {error_description}'
-                    }}, '*');
+                        platform: {json.dumps(platform)},
+                        error: {json.dumps(f'{error}: {error_description}')}
+                    }}, {json.dumps(_frontend_url)});
                     window.close();
                 </script>
-                <p>Authorization failed: {error}. This window should close automatically.</p>
+                <p>Authorization failed. This window should close automatically.</p>
             </body>
         </html>
         """
@@ -5748,9 +5856,9 @@ def oauth_callback(platform):
                                 <script>
                                     window.opener.postMessage({{
                                         type: 'oauth_error',
-                                        platform: '{platform}',
+                                        platform: {json.dumps(platform)},
                                         error: 'Failed to decrypt OAuth credentials'
-                                    }}, '*');
+                                    }}, {json.dumps(os.getenv('FRONTEND_URL', 'http://localhost:5173'))});
                                     window.close();
                                 </script>
                                 <p>Failed to decrypt OAuth credentials. This window should close automatically.</p>
@@ -5898,6 +6006,7 @@ def oauth_callback(platform):
         }
 
     # Return HTML that posts message to opener window and closes popup
+    _frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:5173')
     return f"""
     <html>
         <head><title>Authorization Successful</title></head>
@@ -5905,9 +6014,9 @@ def oauth_callback(platform):
             <script>
                 window.opener.postMessage({{
                     type: 'oauth_success',
-                    platform: '{platform}',
+                    platform: {json.dumps(platform)},
                     data: {json.dumps(account_data)}
-                }}, '*');
+                }}, {json.dumps(_frontend_url)});
                 window.close();
             </script>
             <p>Authorization successful! This window should close automatically.</p>
@@ -6354,7 +6463,8 @@ def check_connection_health(account_id):
 
         return jsonify(status)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/reconnect-instructions/<platform>', methods=['GET'])
@@ -6366,7 +6476,8 @@ def get_reconnection_instructions(platform):
         instructions = ConnectionHealthMonitor.get_reconnection_instructions(platform)
         return jsonify(instructions)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/validate/<account_id>', methods=['POST'])
@@ -6386,7 +6497,8 @@ def validate_account(account_id):
         validation = PlatformAccountValidator.validate_account_setup(platform, access_token)
         return jsonify(validation)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/check-permissions/<account_id>', methods=['GET'])
@@ -6406,7 +6518,8 @@ def check_permissions(account_id):
         permissions = PlatformAccountValidator.check_permissions(platform, access_token)
         return jsonify(permissions)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/quick-connect/options', methods=['GET'])
@@ -6418,7 +6531,8 @@ def get_quick_connect_options():
         options = QuickConnectWizard.get_quick_connect_options()
         return jsonify(options)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/quick-connect/<platform>', methods=['POST'])
@@ -6436,7 +6550,8 @@ def quick_connect_platform(platform):
 
         return jsonify(connection_data)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/troubleshoot', methods=['POST'])
@@ -6456,7 +6571,8 @@ def troubleshoot_connection():
         diagnosis = ConnectionTroubleshooter.diagnose_connection_issue(platform, error_code, error_message)
         return jsonify(diagnosis)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/test-prerequisites/<platform>', methods=['GET'])
@@ -6468,7 +6584,8 @@ def test_connection_prerequisites(platform):
         test_results = ConnectionTroubleshooter.test_connection_prerequisites(platform)
         return jsonify(test_results)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/bulk-connect/prepare', methods=['POST'])
@@ -6487,7 +6604,8 @@ def prepare_bulk_connection():
         result = BulkConnectionManager.prepare_bulk_connection(platforms, user_id)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/connection/auto-refresh/<account_id>', methods=['POST'])
@@ -6517,7 +6635,8 @@ def auto_refresh_token(account_id):
 
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/post', methods=['POST'])
@@ -6889,12 +7008,11 @@ def index():
 # URL Shortening & Tracking Endpoints
 
 def generate_short_code():
-    """Generate a unique short code for URLs"""
-    import random
-    import string
-    chars = string.ascii_letters + string.digits
+    """Generate a cryptographically secure unique short code for URLs"""
+    import secrets
     while True:
-        code = ''.join(random.choice(chars) for _ in range(6))
+        # token_urlsafe(6) yields ~8 URL-safe chars from 6 random bytes
+        code = secrets.token_urlsafe(6)
         if code not in shortened_urls:
             return code
 
@@ -6917,6 +7035,16 @@ def shorten_url():
 
     if not original_url:
         return jsonify({'error': 'URL is required'}), 400
+
+    if not original_url.startswith(('http://', 'https://')):
+        return jsonify({'error': 'URL must start with http:// or https://'}), 400
+
+    # Validate custom code format and length
+    if custom_code:
+        if len(custom_code) > 32:
+            return jsonify({'error': 'Custom code must be 32 characters or fewer'}), 400
+        if not re.match(r'^[A-Za-z0-9_-]+$', custom_code):
+            return jsonify({'error': 'Custom code may only contain letters, digits, hyphens, and underscores'}), 400
 
     # Check if custom code is already taken
     if custom_code and custom_code in shortened_urls:
@@ -8229,7 +8357,8 @@ def google_calendar_authorize():
             })
     except Exception as e:
         logger.error(f"Google Calendar authorization error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/google-calendar/callback', methods=['GET'])
@@ -8307,7 +8436,8 @@ def google_calendar_callback():
         """
     except Exception as e:
         logger.error(f"Google Calendar callback error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/google-calendar/sync', methods=['POST'])
@@ -8392,7 +8522,8 @@ def sync_google_calendar():
             })
     except Exception as e:
         logger.error(f"Google Calendar sync error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 # ==================== Google Drive Integration ====================
@@ -8427,7 +8558,8 @@ def google_drive_authorize():
             })
     except Exception as e:
         logger.error(f"Google Drive authorization error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/google-drive/callback', methods=['GET'])
@@ -8505,7 +8637,8 @@ def google_drive_callback():
         """
     except Exception as e:
         logger.error(f"Google Drive callback error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 @app.route('/api/google-drive/list', methods=['POST'])
@@ -8564,7 +8697,8 @@ def list_drive_files():
             return jsonify(files)
     except Exception as e:
         logger.error(f"Google Drive list error: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.error(f'Unexpected error: {e}')
+        return jsonify({'error': 'An unexpected error occurred'}), 500
 
 
 # ==================== Templates API ====================
@@ -8990,6 +9124,25 @@ def serve_frontend(path):
     if os.path.exists(os.path.join(frontend_path, 'index.html')) and not path.startswith('api/'):
         return send_from_directory(frontend_path, 'index.html')
     return jsonify({'error': 'Not found'}), 404
+
+
+@app.errorhandler(404)
+def not_found(e):
+    """Return JSON 404 for API routes, otherwise serve the SPA index.html"""
+    if request.path.startswith('/api/') or request.path.startswith('/u/'):
+        return jsonify({'error': 'Not found', 'status': 404}), 404
+    frontend_path = os.path.join(os.path.dirname(__file__), 'frontend', 'dist')
+    index = os.path.join(frontend_path, 'index.html')
+    if os.path.exists(index):
+        return send_from_directory(frontend_path, 'index.html')
+    return jsonify({'error': 'Not found', 'status': 404}), 404
+
+
+@app.errorhandler(500)
+def internal_error(e):
+    """Return JSON 500 with a safe error message"""
+    logger.error(f"Internal server error: {e}")
+    return jsonify({'error': 'Internal server error', 'status': 500}), 500
 
 
 if __name__ == '__main__':

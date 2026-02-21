@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart2, TrendingUp, Users, Eye, Heart, MessageCircle, Share2, Smile, Frown, Meh, Download } from 'lucide-react';
-import * as api from '../api';
+import { api } from '../api';
 import { formatDateTime } from '../utils/timezone';
 
 export default function AnalyticsPage() {
@@ -12,13 +12,13 @@ export default function AnalyticsPage() {
   // Fetch dashboard analytics
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
     queryKey: ['analytics-dashboard', selectedPeriod],
-    queryFn: () => fetch(`/api/analytics/dashboard?days=${selectedPeriod}`).then(res => res.json())
+    queryFn: () => api.get(`/analytics/dashboard?days=${selectedPeriod}`).then(r => r.data)
   });
 
   // Fetch individual post analytics if selected
   const { data: postAnalytics, isLoading: postLoading } = useQuery({
     queryKey: ['post-analytics', selectedPostId],
-    queryFn: () => selectedPostId ? fetch(`/api/analytics/posts/${selectedPostId}`).then(res => res.json()) : null,
+    queryFn: () => selectedPostId ? api.get(`/analytics/posts/${selectedPostId}`).then(r => r.data) : null,
     enabled: !!selectedPostId
   });
 

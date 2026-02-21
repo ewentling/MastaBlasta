@@ -8,6 +8,7 @@ import re
 import stat
 import os
 from uuid import uuid4
+from sqlalchemy import or_
 
 from app_extensions import auth_required, DB_ENABLED
 from subscription_control import admin_only, get_user_subscription
@@ -56,9 +57,14 @@ def list_users():
         provider_filter = request.args.get('provider', '').strip()
         sort_by = request.args.get('sort_by', 'created_at')
         sort_order = request.args.get('sort_order', 'desc')
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 50))
-        
+        try:
+            page = int(request.args.get('page', 1))
+            per_page = int(request.args.get('per_page', 50))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid pagination parameters; page and per_page must be integers'}), 400
+        page = max(1, page)
+        per_page = min(100, max(1, per_page))
+
         with db_session_scope() as db_session:
             # Build base query with join
             query = db_session.query(User).outerjoin(Subscription, User.id == Subscription.user_id)
@@ -1002,9 +1008,14 @@ def get_audit_logs():
         event_type = request.args.get('event_type', '').strip()
         start_date = request.args.get('start_date', '').strip()
         end_date = request.args.get('end_date', '').strip()
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 50))
-        
+        try:
+            page = int(request.args.get('page', 1))
+            per_page = int(request.args.get('per_page', 50))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid pagination parameters; page and per_page must be integers'}), 400
+        page = max(1, page)
+        per_page = min(100, max(1, per_page))
+
         # Get security events from SecurityLogger
         # Note: In production, this should query a database table
         # For now, we'll return sample data showing the structure
@@ -1132,9 +1143,9 @@ def admin_reset_password():
             import secrets
             temp_password = secrets.token_urlsafe(12)
             
-            # Hash and set password
-            import bcrypt
-            user.password_hash = bcrypt.hashpw(temp_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            # Hash using the centralised auth helper (keeps bcrypt params consistent)
+            from auth import hash_password
+            user.password_hash = hash_password(temp_password)
             user.password_must_change = True
             
             # Log the action
@@ -1801,9 +1812,14 @@ def get_posts_for_moderation():
         search = request.args.get('search', '').strip()
         user_id = request.args.get('user_id', '').strip()
         platform = request.args.get('platform', '').strip()
-        page = int(request.args.get('page', 1))
-        per_page = int(request.args.get('per_page', 50))
-        
+        try:
+            page = int(request.args.get('page', 1))
+            per_page = int(request.args.get('per_page', 50))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid pagination parameters; page and per_page must be integers'}), 400
+        page = max(1, page)
+        per_page = min(100, max(1, per_page))
+
         with db_session_scope() as db_session:
             query = db_session.query(Post)
             

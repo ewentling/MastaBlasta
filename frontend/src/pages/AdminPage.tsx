@@ -420,15 +420,15 @@ export default function AdminPage() {
       {/* Tab bar */}
       <div style={{ background: 'rgba(5,7,30,0.9)', borderBottom: '1px solid rgba(0,229,255,0.15)', backdropFilter: 'blur(20px)' }}>
         <div className="max-w-7xl mx-auto px-6">
-          <nav className="flex gap-1 -mb-px overflow-x-auto">
+          <nav className="flex gap-2 -mb-px overflow-x-auto">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors rounded-t-lg ${
                   activeTab === tab.id
-                    ? 'border-cyan-400 text-cyan-400'
-                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'
+                    ? 'border-cyan-400 text-cyan-400 bg-cyan-400/10'
+                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500 hover:bg-white/5'
                 }`}
               >
                 {tab.icon}

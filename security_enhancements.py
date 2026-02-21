@@ -280,23 +280,53 @@ class InputSanitizer:
         return f"{name}{ext}"
 
     @staticmethod
-    def validate_url(url: str) -> bool:
-        """Validate URL format and scheme"""
-        if not url.startswith(('http://', 'https://')):
+    def validate_url(url: str, https_only: bool = False) -> bool:
+        """Validate URL format and scheme, blocking SSRF targets.
+
+        Uses urllib.parse for robust parsing so that encoded, IPv6, and
+        octal IP representations are all normalised before the check.
+
+        Args:
+            url: The URL to validate.
+            https_only: If True, reject plain http:// URLs.
+        """
+        from urllib.parse import urlparse
+        import ipaddress
+
+        if https_only:
+            if not url.startswith('https://'):
+                return False
+        elif not url.startswith(('http://', 'https://')):
             return False
 
-        # Prevent SSRF to private IPs
-        blocked_patterns = [
-            'localhost',
-            '127.0.0.1',
-            '0.0.0.0',
-            '169.254.169.254',  # AWS metadata
-            '10.',
-            '192.168.',
-            '172.16.',
-        ]
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            return False
 
-        return not any(pattern in url.lower() for pattern in blocked_patterns)
+        hostname = parsed.hostname or ''
+
+        # Try to parse as an IP address (handles IPv6, dotted-decimal, etc.)
+        try:
+            addr = ipaddress.ip_address(hostname)
+            # Reject private, loopback, link-local, and reserved ranges
+            if (addr.is_private or addr.is_loopback or
+                    addr.is_link_local or addr.is_reserved or
+                    addr.is_multicast or addr.is_unspecified):
+                return False
+        except ValueError:
+            # Not a bare IP – apply hostname-level string checks
+            _blocked_patterns = [
+                'localhost', 'metadata.google.internal', '169.254.', 'metadata.google',
+                '10.', '192.168.', '172.16.', '172.17.', '172.18.',
+                '172.19.', '172.20.', '172.21.', '172.22.', '172.23.',
+                '172.24.', '172.25.', '172.26.', '172.27.', '172.28.',
+                '172.29.', '172.30.', '172.31.',
+            ]
+            if any(p in hostname.lower() for p in _blocked_patterns):
+                return False
+
+        return True
 
 
 class SecurityHeaders:
@@ -431,22 +461,77 @@ __all__ = [
 
 
 class RefreshTokenRotation:
-    """Refresh token rotation for enhanced security"""
+    """Refresh token rotation for enhanced security.
 
-    # In production, use Redis with TTL
-    used_refresh_tokens = set()
+    Stores (hash -> expiry) so the set is automatically pruned on each
+    operation, preventing unbounded memory growth.  The TTL mirrors the
+    refresh token lifetime (30 days).
+    """
+
+    _TTL = timedelta(days=30)
+    # Maps sha256(token) -> expiry datetime
+    _used: Dict[str, datetime] = {}
+
+    @classmethod
+    def _prune(cls):
+        """Remove expired entries to bound memory use."""
+        now = datetime.now(timezone.utc)
+        expired = [h for h, exp in cls._used.items() if now >= exp]
+        for h in expired:
+            del cls._used[h]
 
     @classmethod
     def mark_token_used(cls, token: str):
-        """Mark refresh token as used"""
+        """Mark refresh token as used."""
+        cls._prune()
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        cls.used_refresh_tokens.add(token_hash)
+        cls._used[token_hash] = datetime.now(timezone.utc) + cls._TTL
 
     @classmethod
     def is_token_used(cls, token: str) -> bool:
-        """Check if token has been used"""
+        """Check if token has been used and has not yet expired."""
+        cls._prune()
         token_hash = hashlib.sha256(token.encode()).hexdigest()
-        return token_hash in cls.used_refresh_tokens
+        return token_hash in cls._used
+
+
+def prune_security_state() -> None:
+    """Prune expired entries from in-memory security state.
+
+    Call this from a periodic background job (e.g. every 5 minutes) to prevent
+    unbounded growth of the login_attempts and account_lockouts dicts across
+    the lifetime of the process.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=1)
+
+    # Prune login_attempts: remove emails with no recent failures
+    stale_emails = [
+        email for email, attempts in login_attempts.items()
+        if not any(t > cutoff for t in attempts)
+    ]
+    for email in stale_emails:
+        del login_attempts[email]
+
+    # Prune account_lockouts: remove expired lockouts
+    expired_lockouts = [email for email, exp in account_lockouts.items() if now >= exp]
+    for email in expired_lockouts:
+        del account_lockouts[email]
+
+    # Prune api_rate_limits: remove users with no recent requests
+    rate_cutoff = now - timedelta(seconds=RATE_LIMIT_WINDOW)
+    stale_users = [
+        uid for uid, times in api_rate_limits.items()
+        if not any(t > rate_cutoff for t in times)
+    ]
+    for uid in stale_users:
+        del api_rate_limits[uid]
+
+    logger.debug(
+        "Security state pruned: removed %d stale login entries, "
+        "%d expired lockouts, %d stale rate-limit entries",
+        len(stale_emails), len(expired_lockouts), len(stale_users)
+    )
 
 
 def init_security_middleware(app):

@@ -2,6 +2,7 @@
 Authentication and authorization utilities
 """
 import os
+import secrets
 import sys
 import uuid
 import bcrypt
@@ -236,7 +237,7 @@ def create_default_admin(db_session):
     """
     Create default admin account for initial deployment.
     Email: admin@mastablasta.com
-    Password: ChangeMe123!
+    Password: randomly generated and printed to stdout once at startup.
     Must be changed on first login.
     """
     from models import User, UserRole
@@ -248,9 +249,9 @@ def create_default_admin(db_session):
             logger.info("Default admin account already exists")
             return
         
-        # Create default admin
+        # Create default admin with a randomly generated password
         admin_id = str(uuid.uuid4())
-        default_password = 'ChangeMe123!'
+        default_password = secrets.token_urlsafe(16)  # 128-bit random password
         
         admin = User(
             id=admin_id,
@@ -259,20 +260,27 @@ def create_default_admin(db_session):
             full_name='System Administrator',
             role=UserRole.ADMIN,
             is_active=True,
-            password_must_change=True  # Force password change
+            password_must_change=True  # Force password change on first login
         )
         
         db_session.add(admin)
         db_session.commit()
-        
-        logger.warning("=" * 70)
-        logger.warning("🔐 DEFAULT ADMIN ACCOUNT CREATED")
-        logger.warning("=" * 70)
-        logger.warning("   Email: admin@mastablasta.com")
-        logger.warning("   Password: ChangeMe123!")
-        logger.warning("")
-        logger.warning("⚠️  IMPORTANT: This password MUST be changed on first login!")
-        logger.warning("=" * 70)
+
+        # Print to stdout only — never to logger which writes to persistent log files.
+        # This ensures the credential is visible to the operator at startup but is
+        # not stored in systemd/journald or any log shipping pipeline.
+        import sys
+        border = "=" * 70
+        print(border, file=sys.stdout, flush=True)
+        print("🔐 DEFAULT ADMIN ACCOUNT CREATED", file=sys.stdout, flush=True)
+        print(border, file=sys.stdout, flush=True)
+        print("   Email: admin@mastablasta.com", file=sys.stdout, flush=True)
+        print(f"   Password: {default_password}", file=sys.stdout, flush=True)
+        print("", file=sys.stdout, flush=True)
+        print("⚠️  IMPORTANT: This password MUST be changed on first login!", file=sys.stdout, flush=True)
+        print("⚠️  This message is shown ONCE. Store the password securely.", file=sys.stdout, flush=True)
+        print(border, file=sys.stdout, flush=True)
+        logger.info("Default admin created — see startup stdout for credentials.")
         
     except Exception as e:
         logger.error(f"Error creating default admin: {e}")

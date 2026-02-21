@@ -13,7 +13,9 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Configuration
-MEDIA_DIR = Path('/home/runner/work/MastaBlasta/MastaBlasta/media')
+# Configuration – MEDIA_DIR can be overridden by the MEDIA_DIR environment variable;
+# defaults to a 'media' directory relative to this file so the app is portable.
+MEDIA_DIR = Path(os.environ.get('MEDIA_DIR', str(Path(__file__).parent / 'media')))
 THUMBNAIL_DIR = MEDIA_DIR / 'thumbnails'
 ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.mkv', '.webm'}

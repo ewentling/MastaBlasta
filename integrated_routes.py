@@ -6,7 +6,7 @@ These routes implement the 9 improvements by using the managers from app_extensi
 """
 
 from flask import Blueprint, request, jsonify, g, send_file, session
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 import os
 
@@ -21,6 +21,17 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 integrated_bp = Blueprint('integrated', __name__, url_prefix='/api/v2')
 
+# Auth responses must never be cached by intermediaries
+_AUTH_ENDPOINTS = {'integrated.login', 'integrated.register', 'integrated.refresh_access_token', 'integrated.google_auth'}
+
+@integrated_bp.after_request
+def set_no_store_on_auth(response):
+    """Prevent caching of auth responses that contain tokens"""
+    if request.endpoint in _AUTH_ENDPOINTS:
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+        response.headers['Pragma'] = 'no-cache'
+    return response
+
 
 # ==================== AUTHENTICATION ROUTES ====================
 
@@ -34,16 +45,20 @@ def register():
         from auth import hash_password, generate_api_key, create_access_token, create_refresh_token
         from database import db_session_scope
         from models import User, UserRole
-        from security_enhancements import PasswordPolicy
+        from security_enhancements import PasswordPolicy, InputSanitizer
         import uuid
 
-        data = request.get_json()
-        email = data.get('email')
+        data = request.get_json() or {}
+        email = data.get('email', '').strip().lower()
         password = data.get('password')
-        name = data.get('name', '')
+        name = data.get('name', '').strip()
 
         if not email or not password:
             return jsonify({'error': 'Email and password required'}), 400
+
+        # Validate email format
+        if not InputSanitizer.validate_email(email):
+            return jsonify({'error': 'Invalid email format'}), 400
 
         # Validate password policy
         is_valid, message = PasswordPolicy.validate(password)
@@ -66,7 +81,7 @@ def register():
                 api_key=generate_api_key(),
                 is_active=True,
                 auth_provider='email',
-                created_at=datetime.utcnow()
+                created_at=datetime.now(timezone.utc)
             )
             session.add(user)
             session.flush()
@@ -89,7 +104,7 @@ def register():
 
     except Exception as e:
         logger.error(f"Registration error: {e}")
-        return jsonify({'error': 'Registration failed', 'details': str(e)}), 500
+        return jsonify({'error': 'Registration failed'}), 500
 
 
 @integrated_bp.route('/auth/login', methods=['POST'])
@@ -102,25 +117,46 @@ def login():
         from auth import verify_password, create_access_token, create_refresh_token
         from database import db_session_scope
         from models import User
+        from security_enhancements import AccountSecurity, SecurityLogger
 
-        data = request.get_json()
-        email = data.get('email')
+        data = request.get_json() or {}
+        email = data.get('email', '').strip().lower()
         password = data.get('password')
 
         if not email or not password:
             return jsonify({'error': 'Email and password required'}), 400
 
+        # Check account lockout before hitting the DB
+        if AccountSecurity.is_account_locked(email):
+            remaining = AccountSecurity.get_lockout_remaining(email)
+            return jsonify({
+                'error': 'Account temporarily locked due to too many failed attempts',
+                'retry_after': remaining
+            }), 429
+
         with db_session_scope() as session:
             user = session.query(User).filter_by(email=email).first()
 
-            if not user or not user.is_active:
+            # Always call verify_password (even for missing/inactive users) to equalise
+            # timing and prevent user-enumeration via response-time side-channel.
+            # The dummy hash is a real bcrypt digest so the work-factor is identical.
+            _DUMMY_HASH = '$2b$12$PBf5rMQEidQ2ftUyPNeg.OJnMKvkOT98PCYwwMtbPm2.1s00LQeyK'
+            candidate_hash = user.password_hash if (user and user.password_hash) else _DUMMY_HASH
+            password_ok = verify_password(password, candidate_hash)
+
+            if not user or not user.is_active or not password_ok:
+                locked = AccountSecurity.record_login_attempt(email, success=False)
+                SecurityLogger.log_failed_login(email)
+                if locked:
+                    SecurityLogger.log_account_lockout(email)
+                    return jsonify({'error': 'Account temporarily locked due to too many failed attempts'}), 429
                 return jsonify({'error': 'Invalid credentials'}), 401
 
-            if not verify_password(password, user.password_hash):
-                return jsonify({'error': 'Invalid credentials'}), 401
+            # Successful login – clear failure counters
+            AccountSecurity.record_login_attempt(email, success=True)
 
             # Update last login
-            user.last_login = datetime.utcnow()
+            user.last_login = datetime.now(timezone.utc)
             session.flush()
 
             # Generate tokens
@@ -155,16 +191,18 @@ def change_password():
         from auth import verify_password, hash_password
         from database import db_session_scope
         from models import User
+        from security_enhancements import PasswordPolicy
 
-        data = request.get_json()
+        data = request.get_json() or {}
         old_password = data.get('old_password')
         new_password = data.get('new_password')
 
         if not old_password or not new_password:
             return jsonify({'error': 'Old and new passwords required'}), 400
 
-        if len(new_password) < 8:
-            return jsonify({'error': 'New password must be at least 8 characters'}), 400
+        is_valid, message = PasswordPolicy.validate(new_password)
+        if not is_valid:
+            return jsonify({'error': message}), 400
 
         with db_session_scope() as session:
             user = session.query(User).filter_by(id=g.current_user['id']).first()
@@ -197,6 +235,59 @@ def get_me():
     return jsonify({'user': g.current_user})
 
 
+@integrated_bp.route('/auth/refresh', methods=['POST'])
+def refresh_access_token():
+    """Use a refresh token to obtain a new access token"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+
+    try:
+        from auth import decode_token, create_access_token, create_refresh_token
+        from database import db_session_scope
+        from models import User
+        from security_enhancements import RefreshTokenRotation
+
+        data = request.get_json() or {}
+        refresh_token = data.get('refresh_token')
+        if not refresh_token:
+            # Also accept from Authorization header (Bearer <refresh_token>)
+            auth_header = request.headers.get('Authorization', '')
+            if auth_header.startswith('Bearer '):
+                refresh_token = auth_header.split(' ', 1)[1]
+
+        if not refresh_token:
+            return jsonify({'error': 'Refresh token required'}), 400
+
+        # Reject already-used tokens (rotation)
+        if RefreshTokenRotation.is_token_used(refresh_token):
+            return jsonify({'error': 'Refresh token has already been used'}), 401
+
+        payload = decode_token(refresh_token)
+        if not payload or payload.get('type') != 'refresh':
+            return jsonify({'error': 'Invalid or expired refresh token'}), 401
+
+        user_id = payload['user_id']
+
+        with db_session_scope() as session:
+            user = session.query(User).filter_by(id=user_id, is_active=True).first()
+            if not user:
+                return jsonify({'error': 'User not found or inactive'}), 401
+
+            # Mark old refresh token as used and issue new pair
+            RefreshTokenRotation.mark_token_used(refresh_token)
+            new_access_token = create_access_token(user.id, user.role.value)
+            new_refresh_token = create_refresh_token(user.id)
+
+            return jsonify({
+                'access_token': new_access_token,
+                'refresh_token': new_refresh_token,
+            })
+
+    except Exception:
+        logger.error("Token refresh error")
+        return jsonify({'error': 'Token refresh failed'}), 500
+
+
 @integrated_bp.route('/auth/google', methods=['POST'])
 def google_auth():
     """Authenticate user with Google One Tap"""
@@ -212,7 +303,7 @@ def google_auth():
         import uuid
         import os
 
-        data = request.get_json()
+        data = request.get_json() or {}
         credential = data.get('credential')
 
         if not credential:
@@ -238,6 +329,9 @@ def google_auth():
             if not email:
                 return jsonify({'error': 'Email not provided by Google'}), 400
 
+            if not idinfo.get('email_verified'):
+                return jsonify({'error': 'Google email address is not verified'}), 400
+
             with db_session_scope() as session:
                 # Look up user by google_id first (if present), then fall back to email
                 user = None
@@ -256,7 +350,7 @@ def google_auth():
 
                 if user:
                     # Update last login and google_id if needed
-                    user.last_login = datetime.utcnow()
+                    user.last_login = datetime.now(timezone.utc)
                     if google_id and not user.google_id:
                         user.google_id = google_id
                         user.auth_provider = 'google'
@@ -274,7 +368,7 @@ def google_auth():
                         is_active=True,
                         auth_provider='google',
                         google_id=google_id,
-                        created_at=datetime.utcnow()
+                        created_at=datetime.now(timezone.utc)
                     )
                     session.add(user)
 
@@ -302,7 +396,7 @@ def google_auth():
 
     except Exception as e:
         logger.error(f"Google authentication error: {e}")
-        return jsonify({'error': 'Authentication failed', 'details': str(e)}), 500
+        return jsonify({'error': 'Authentication failed'}), 500
 
 
 # ==================== OAUTH ROUTES ====================
@@ -395,8 +489,13 @@ def upload_media():
 @auth_required
 def list_media():
     """List user's media library"""
-    limit = int(request.args.get('limit', 50))
-    offset = int(request.args.get('offset', 0))
+    try:
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid pagination parameters; limit and offset must be integers'}), 400
+    limit = min(100, max(1, limit))
+    offset = max(0, offset)
 
     media_list = media_manager.list_media(g.current_user['id'], limit, offset)
     return jsonify({'media': media_list, 'limit': limit, 'offset': offset})
@@ -418,16 +517,30 @@ def get_media(media_id):
 @auth_required
 def download_media(media_id):
     """Download media file"""
+    from media_utils import MEDIA_DIR
+    from pathlib import Path
+
     media = media_manager.get_media(media_id)
 
     if not media:
         return jsonify({'error': 'Media not found'}), 404
 
-    # Check if file exists
-    if not os.path.exists(media['file_path']):
+    # Resolve and validate path to prevent path traversal attacks
+    try:
+        resolved = Path(media['file_path']).resolve()
+        media_root = MEDIA_DIR.resolve()
+        # resolved.relative_to() raises ValueError if resolved is not inside media_root
+        resolved.relative_to(media_root)
+    except ValueError:
+        logger.warning(f"Path traversal attempt blocked: {media['file_path']}")
+        return jsonify({'error': 'Access denied'}), 403
+    except Exception:
+        return jsonify({'error': 'Invalid file path'}), 400
+
+    if not resolved.exists():
         return jsonify({'error': 'File not found on disk'}), 404
 
-    return send_file(media['file_path'], mimetype=media['mime_type'])
+    return send_file(str(resolved), mimetype=media['mime_type'])
 
 
 @integrated_bp.route('/media/<media_id>', methods=['DELETE'])
@@ -461,14 +574,14 @@ def delete_media(media_id):
 @auth_required
 def create_post():
     """Create a new post"""
-    data = request.get_json()
+    data = request.get_json() or {}
 
     try:
         post = db_manager.create_post(g.current_user['id'], data)
         return jsonify(post), 201
     except Exception as e:
         logger.error(f"Post creation error: {e}")
-        return jsonify({'error': 'Failed to create post', 'details': str(e)}), 500
+        return jsonify({'error': 'Failed to create post'}), 500
 
 
 @integrated_bp.route('/posts', methods=['GET'])
@@ -484,8 +597,13 @@ def list_posts():
     }
     filters = {k: v for k, v in filters.items() if v}
 
-    limit = int(request.args.get('limit', 50))
-    offset = int(request.args.get('offset', 0))
+    try:
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid pagination parameters; limit and offset must be integers'}), 400
+    limit = min(100, max(1, limit))
+    offset = max(0, offset)
 
     posts = db_manager.list_posts(g.current_user['id'], filters, limit, offset)
     return jsonify({'posts': posts, 'limit': limit, 'offset': offset})
@@ -507,7 +625,7 @@ def get_post(post_id):
 @auth_required
 def update_post(post_id):
     """Update post"""
-    data = request.get_json()
+    data = request.get_json() or {}
 
     post = db_manager.update_post(post_id, data)
 
@@ -627,7 +745,7 @@ def publish_post(post_id):
     if all('error' not in r for r in results.values()):
         db_manager.update_post(post_id, {
             'status': 'published',
-            'published_at': datetime.utcnow()
+            'published_at': datetime.now(timezone.utc)
         })
     else:
         db_manager.update_post(post_id, {'status': 'failed'})
@@ -653,8 +771,13 @@ def search_posts():
     }
     filters = {k: v for k, v in filters.items() if v is not None}
 
-    limit = int(request.args.get('limit', 50))
-    offset = int(request.args.get('offset', 0))
+    try:
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid pagination parameters; limit and offset must be integers'}), 400
+    limit = min(100, max(1, limit))
+    offset = max(0, offset)
 
     results = search_manager.search_posts(g.current_user['id'], query, filters, limit, offset)
     return jsonify(results)
@@ -667,11 +790,14 @@ def search_posts():
 @role_required('editor')
 def bulk_create_posts():
     """Bulk create posts"""
-    data = request.get_json()
+    data = request.get_json() or {}
     posts_data = data.get('posts', [])
 
     if not posts_data:
         return jsonify({'error': 'No posts provided'}), 400
+
+    if len(posts_data) > 100:
+        return jsonify({'error': 'Maximum 100 posts per bulk operation'}), 400
 
     results = bulk_ops_manager.bulk_create_posts(g.current_user['id'], posts_data)
     return jsonify(results)
@@ -682,11 +808,14 @@ def bulk_create_posts():
 @role_required('editor')
 def bulk_update_posts():
     """Bulk update posts"""
-    data = request.get_json()
+    data = request.get_json() or {}
     updates = data.get('updates', [])
 
     if not updates:
         return jsonify({'error': 'No updates provided'}), 400
+
+    if len(updates) > 100:
+        return jsonify({'error': 'Maximum 100 updates per bulk operation'}), 400
 
     results = bulk_ops_manager.bulk_update_posts(g.current_user['id'], updates)
     return jsonify(results)
@@ -697,11 +826,14 @@ def bulk_update_posts():
 @role_required('admin')
 def bulk_delete_posts():
     """Bulk delete posts"""
-    data = request.get_json()
+    data = request.get_json() or {}
     post_ids = data.get('post_ids', [])
 
     if not post_ids:
         return jsonify({'error': 'No post IDs provided'}), 400
+
+    if len(post_ids) > 100:
+        return jsonify({'error': 'Maximum 100 IDs per bulk operation'}), 400
 
     results = bulk_ops_manager.bulk_delete_posts(g.current_user['id'], post_ids)
     return jsonify(results)
@@ -713,7 +845,8 @@ def bulk_delete_posts():
 @auth_required
 def register_webhook():
     """Register a webhook"""
-    data = request.get_json()
+    from security_enhancements import InputSanitizer
+    data = request.get_json() or {}
 
     url = data.get('url')
     events = data.get('events', [])
@@ -721,6 +854,10 @@ def register_webhook():
 
     if not url or not events:
         return jsonify({'error': 'URL and events required'}), 400
+
+    # Validate webhook URL: must be a public HTTPS URL to prevent SSRF and MITM
+    if not InputSanitizer.validate_url(url, https_only=True):
+        return jsonify({'error': 'Webhook URL must be a public https:// URL'}), 400
 
     result = webhook_manager.register_webhook(g.current_user['id'], url, events, secret)
 
@@ -749,7 +886,6 @@ def list_webhooks():
         logger.error(f"Error listing webhooks: {e}", exc_info=True)
         return jsonify({
             'error': 'Failed to list webhooks',
-            'details': str(e)
         }), 500
 
 
@@ -773,7 +909,6 @@ def delete_webhook(webhook_id):
         logger.error(f"Error deleting webhook {webhook_id}: {e}", exc_info=True)
         return jsonify({
             'error': 'Failed to delete webhook',
-            'details': str(e)
         }), 500
 
 
@@ -892,7 +1027,6 @@ def get_analytics_overview():
         logger.error(f"Error getting analytics overview: {e}", exc_info=True)
         return jsonify({
             'error': 'Failed to get analytics overview',
-            'details': str(e)
         }), 500
 
 
@@ -1027,7 +1161,7 @@ def update_account_display_name(account_id):
     from database import db_session_scope
     from models import Account
     
-    data = request.get_json()
+    data = request.get_json() or {}
     if not data or 'display_name' not in data:
         return jsonify({'error': 'display_name is required'}), 400
     
@@ -1072,7 +1206,7 @@ def get_status():
         'media': media_manager.enabled,
         'analytics': analytics_collector.enabled,
         'webhooks': webhook_manager.enabled,
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.now(timezone.utc).isoformat()
     })
 
 

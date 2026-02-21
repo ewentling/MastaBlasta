@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { Upload, FileText, CheckCircle, XCircle, AlertCircle, Download } from 'lucide-react';
+import { api } from '../api';
 
 interface CSVRow {
   content: string;
@@ -21,16 +22,12 @@ export default function BulkImportPage() {
   // Fetch import history
   const { data: importsData } = useQuery({
     queryKey: ['bulk-imports'],
-    queryFn: () => fetch('/api/bulk-import').then(res => res.json())
+    queryFn: () => api.get('/bulk-import').then(r => r.data)
   });
 
   const validateMutation = useMutation({
     mutationFn: (data: CSVRow[]) =>
-      fetch('/api/bulk-import/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: data })
-      }).then(res => res.json()),
+      api.post('/bulk-import/validate', { rows: data }).then(r => r.data),
     onSuccess: (data) => {
       setValidationResult(data);
       setShowPreview(true);
@@ -47,11 +44,7 @@ export default function BulkImportPage() {
       setTimeout(() => setImportProgress({ step: 'Scheduling', current: Math.floor(total * 0.6), total, success: Math.floor(total * 0.6), error: 0 }), 1000);
       setTimeout(() => setImportProgress({ step: 'Completing', current: Math.floor(total * 0.9), total, success: Math.floor(total * 0.9), error: 0 }), 1500);
       
-      return fetch('/api/bulk-import/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      }).then(res => res.json());
+      return api.post('/bulk-import/execute', data).then(r => r.data);
     },
     onSuccess: (data) => {
       setImportProgress({ step: 'Complete', current: csvData.length, total: csvData.length, success: data.success || csvData.length, error: data.errors || 0 });
