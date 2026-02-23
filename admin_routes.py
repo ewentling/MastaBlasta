@@ -1714,50 +1714,281 @@ def get_email_templates():
     return jsonify({'templates': templates}), 200
 
 
+@admin_bp.route('/email/smtp-config', methods=['GET'])
+@auth_required
+@admin_only
+def get_smtp_config():
+    """Get SMTP configuration (sensitive values masked)"""
+    host = os.getenv('SMTP_HOST', '')
+    user = os.getenv('SMTP_USER', '')
+    password = os.getenv('SMTP_PASSWORD', '')
+    configured_fields = {
+        'host': bool(host),
+        'port': bool(os.getenv('SMTP_PORT', '')),
+        'user': bool(user),
+        'password': bool(password),
+        'from_email': bool(os.getenv('SMTP_FROM_EMAIL', '')),
+    }
+    return jsonify({
+        'host': host,
+        'port': os.getenv('SMTP_PORT', '587'),
+        'user': user,
+        'password': '********' if password else '',
+        'from_email': os.getenv('SMTP_FROM_EMAIL', ''),
+        'from_name': os.getenv('SMTP_FROM_NAME', ''),
+        'use_tls': os.getenv('SMTP_USE_TLS', 'true').lower() == 'true',
+        'configured': bool(host and user and password),
+        'configured_fields': configured_fields,
+    }), 200
+
+
+@admin_bp.route('/email/smtp-config', methods=['POST'])
+@auth_required
+@admin_only
+def update_smtp_config():
+    """Save SMTP configuration to .env and apply to running process"""
+    try:
+        data = request.get_json() or {}
+
+        required_fields = ['host', 'port', 'user', 'from_email']
+        missing = [f for f in required_fields if not str(data.get(f, '')).strip()]
+        if missing:
+            return jsonify({'error': 'Missing required fields', 'missing': missing}), 400
+
+        env_map = {
+            'SMTP_HOST': _sanitize_env_value(str(data.get('host', ''))),
+            'SMTP_PORT': _sanitize_env_value(str(data.get('port', '587'))),
+            'SMTP_USER': _sanitize_env_value(str(data.get('user', ''))),
+            'SMTP_FROM_EMAIL': _sanitize_env_value(str(data.get('from_email', ''))),
+            'SMTP_FROM_NAME': _sanitize_env_value(str(data.get('from_name', ''))),
+            'SMTP_USE_TLS': _sanitize_env_value('true' if data.get('use_tls', True) else 'false'),
+        }
+        # Only update password if a new value is provided
+        new_password = str(data.get('password', '')).strip()
+        if new_password:
+            env_map['SMTP_PASSWORD'] = _sanitize_env_value(new_password)
+
+        # Apply to running process immediately
+        for key, value in env_map.items():
+            os.environ[key] = value
+
+        # Persist to .env
+        env_file_path = os.path.join(os.path.dirname(__file__), '.env')
+        try:
+            if os.path.exists(env_file_path):
+                with open(env_file_path) as fh:
+                    lines = fh.readlines()
+            else:
+                lines = []
+            updated_keys = set()
+            new_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if not stripped or stripped.startswith('#'):
+                    new_lines.append(line)
+                    continue
+                match = re.match(r'^([A-Z_][A-Z0-9_]*)\s*=', line)
+                if match and match.group(1) in env_map:
+                    key = match.group(1)
+                    new_lines.append(f"{key}={env_map[key]}\n")
+                    updated_keys.add(key)
+                else:
+                    new_lines.append(line)
+            for key, value in env_map.items():
+                if key not in updated_keys:
+                    new_lines.append(f"{key}={value}\n")
+            with open(env_file_path, 'w') as fh:
+                fh.writelines(new_lines)
+            os.chmod(env_file_path, stat.S_IRUSR | stat.S_IWUSR)
+            persisted = True
+        except Exception as file_err:
+            logger.warning(f"Could not write .env file: {file_err}")
+            persisted = False
+
+        SecurityLogger.log_event(
+            'smtp_config_updated',
+            user_id=g.current_user['id'],
+            details=f"SMTP configuration updated by {g.current_user['email']}"
+        )
+
+        return jsonify({
+            'success': True,
+            'message': 'SMTP configuration saved and applied',
+            'persisted_to_env': persisted,
+        }), 200
+
+    except Exception as e:
+        logger.error(f"Error updating SMTP config: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to update SMTP configuration'}), 500
+
+
+@admin_bp.route('/email/smtp-test', methods=['POST'])
+@auth_required
+@admin_only
+def test_smtp_connection():
+    """Test SMTP connection with current configuration"""
+    import smtplib
+    import ssl
+
+    host = os.getenv('SMTP_HOST', '')
+    port_str = os.getenv('SMTP_PORT', '587')
+    user = os.getenv('SMTP_USER', '')
+    password = os.getenv('SMTP_PASSWORD', '')
+    use_tls = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
+
+    if not host or not user or not password:
+        return jsonify({'success': False, 'message': 'SMTP is not configured — set host, user, and password first'}), 200
+
+    try:
+        port = int(port_str)
+    except ValueError:
+        return jsonify({'success': False, 'message': f'Invalid SMTP port: {port_str}'}), 200
+
+    try:
+        if use_tls:
+            context = ssl.create_default_context()
+            with smtplib.SMTP(host, port, timeout=10) as server:
+                server.ehlo()
+                server.starttls(context=context)
+                server.login(user, password)
+        else:
+            with smtplib.SMTP(host, port, timeout=10) as server:
+                server.ehlo()
+                server.login(user, password)
+
+        return jsonify({'success': True, 'message': f'Successfully connected to {host}:{port} and authenticated as {user}'}), 200
+
+    except smtplib.SMTPAuthenticationError:
+        return jsonify({'success': False, 'message': 'Authentication failed — check username and password'}), 200
+    except smtplib.SMTPConnectError as e:
+        return jsonify({'success': False, 'message': f'Could not connect to {host}:{port} — {e}'}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'SMTP test failed: {e}'}), 200
+
+
+def _send_smtp_email(to_addresses: list, subject: str, body: str) -> dict:
+    """Send an email via the configured SMTP server. Returns dict with success/message."""
+    import smtplib
+    import ssl
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    host = os.getenv('SMTP_HOST', '')
+    port_str = os.getenv('SMTP_PORT', '587')
+    user = os.getenv('SMTP_USER', '')
+    password = os.getenv('SMTP_PASSWORD', '')
+    from_email = os.getenv('SMTP_FROM_EMAIL', user)
+    from_name = os.getenv('SMTP_FROM_NAME', '')
+    use_tls = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
+
+    if not host or not user or not password:
+        return {'success': False, 'message': 'SMTP not configured'}
+
+    try:
+        port = int(port_str)
+    except ValueError:
+        return {'success': False, 'message': f'Invalid SMTP port: {port_str}'}
+
+    sender = f"{from_name} <{from_email}>" if from_name else from_email
+
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = sender
+    msg['To'] = ', '.join(to_addresses)
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        if use_tls:
+            context = ssl.create_default_context()
+            with smtplib.SMTP(host, port, timeout=30) as server:
+                server.ehlo()
+                server.starttls(context=context)
+                server.login(user, password)
+                server.sendmail(from_email, to_addresses, msg.as_string())
+        else:
+            with smtplib.SMTP(host, port, timeout=30) as server:
+                server.ehlo()
+                server.login(user, password)
+                server.sendmail(from_email, to_addresses, msg.as_string())
+        return {'success': True, 'message': f'Email sent to {len(to_addresses)} recipient(s)'}
+    except Exception as e:
+        logger.error(f"SMTP send error: {e}", exc_info=True)
+        return {'success': False, 'message': str(e)}
+
+
 @admin_bp.route('/email/send', methods=['POST'])
 @auth_required
 @admin_only
 def send_email():
-    """Send email to user(s)"""
+    """Send email to user(s) via SMTP if configured, otherwise log intent"""
     try:
         data = request.get_json()
-        
-        recipient_type = data.get('recipient_type', 'single')  # single, filtered, all
+
+        recipient_type = data.get('recipient_type', 'single')  # single, all
         user_ids = data.get('user_ids', [])
+        to_emails = data.get('to_emails', [])  # explicit addresses
         template_id = data.get('template_id')
         subject = data.get('subject', '')
         body = data.get('body', '')
-        variables = data.get('variables', {})
-        
+
         if not subject or not body:
             return jsonify({'error': 'Subject and body are required'}), 400
-        
-        # In production, this would integrate with an email service (SendGrid, SES, etc.)
-        # For now, we'll log the intent and return success
-        
-        logger.info(f"Email send requested by admin {g.current_user['id']}")
-        logger.info(f"Recipient type: {recipient_type}, Users: {user_ids}")
-        logger.info(f"Subject: {subject}")
-        
-        # Log the action
+
+        smtp_configured = bool(
+            os.getenv('SMTP_HOST') and os.getenv('SMTP_USER') and os.getenv('SMTP_PASSWORD')
+        )
+
+        recipients_count = 0
+        sent_via_smtp = False
+
+        if smtp_configured:
+            if recipient_type == 'all' and DB_ENABLED:
+                from database import db_session_scope
+                with db_session_scope() as db_session:
+                    users = db_session.query(User).filter(User.is_active).all()
+                    addresses = [u.email for u in users if u.email]
+            elif to_emails:
+                addresses = to_emails
+            elif user_ids and DB_ENABLED:
+                from database import db_session_scope
+                with db_session_scope() as db_session:
+                    users = db_session.query(User).filter(User.id.in_(user_ids)).all()
+                    addresses = [u.email for u in users if u.email]
+            else:
+                addresses = []
+
+            if addresses:
+                result = _send_smtp_email(addresses, subject, body)
+                sent_via_smtp = result['success']
+                recipients_count = len(addresses)
+                if not result['success']:
+                    return jsonify({'error': f"SMTP delivery failed: {result['message']}"}), 500
+            else:
+                return jsonify({'error': 'No recipients found'}), 400
+        else:
+            recipients_count = len(user_ids) if user_ids else 1
+            logger.info(f"Email send requested by admin {g.current_user['id']} (SMTP not configured)")
+            logger.info(f"Recipient type: {recipient_type}, Subject: {subject}")
+
         SecurityLogger.log_event(
             'email_sent',
             user_id=g.current_user['id'],
             details={
                 'recipient_type': recipient_type,
-                'recipient_count': len(user_ids) if user_ids else 0,
+                'recipient_count': recipients_count,
                 'template_id': template_id,
-                'subject': subject
+                'subject': subject,
+                'sent_via_smtp': sent_via_smtp,
             }
         )
-        
+
         return jsonify({
             'success': True,
-            'message': 'Email queued for delivery',
-            'note': 'Email service integration required for actual delivery',
-            'recipients_count': len(user_ids) if user_ids else 1
+            'message': f'Email sent to {recipients_count} recipient(s)' if sent_via_smtp else 'Email logged (configure SMTP to enable delivery)',
+            'sent_via_smtp': sent_via_smtp,
+            'recipients_count': recipients_count,
         }), 200
-        
+
     except Exception as e:
         logger.error(f"Error sending email: {e}", exc_info=True)
         return jsonify({'error': 'Failed to send email'}), 500

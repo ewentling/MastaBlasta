@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Mail, Send, Eye, Loader } from 'lucide-react';
+import { Mail, Send, Eye, Loader, CheckCircle } from 'lucide-react';
 
 interface EmailTemplate {
   id: string;
@@ -18,6 +18,19 @@ export function EmailComposer() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+
+  // Check SMTP configuration status (uses cached result from SmtpConfigPanel if already fetched)
+  const { data: smtpConfig } = useQuery({
+    queryKey: ['admin-smtp-config'],
+    queryFn: async () => {
+      const response = await fetch('/api/admin/email/smtp-config', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` },
+      });
+      if (!response.ok) throw new Error('Failed to fetch SMTP config');
+      return response.json();
+    },
+  });
+  const smtpConfigured = smtpConfig?.configured ?? false;
 
   // Fetch email templates
   const { data: templatesData } = useQuery({
@@ -105,8 +118,7 @@ export function EmailComposer() {
     };
 
     if (recipientType === 'single' && userEmail) {
-      // In production, you'd fetch user IDs from email
-      emailData.user_ids = []; // Would be populated from search
+      emailData.to_emails = [userEmail];
     }
 
     sendEmailMutation.mutate(emailData);
@@ -268,13 +280,22 @@ export function EmailComposer() {
           </button>
         </div>
 
-        {/* Note */}
-        <div className="p-3 rounded-lg" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
-          <p className="text-sm text-amber-300">
-            <strong>Note:</strong> Email service integration required for actual delivery.
-            Currently logs email intent for testing.
-          </p>
-        </div>
+        {/* Status Note */}
+        {smtpConfigured ? (
+          <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.2)' }}>
+            <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <p className="text-sm text-emerald-300">
+              <strong>SMTP configured</strong> — emails will be delivered via your SMTP server.
+            </p>
+          </div>
+        ) : (
+          <div className="p-3 rounded-lg" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
+            <p className="text-sm text-amber-300">
+              <strong>Note:</strong> Configure your SMTP server above to enable email delivery.
+              Currently logs email intent for testing.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
