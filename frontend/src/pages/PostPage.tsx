@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { accountsApi, postsApi, mediaApi } from '../api';
-import { Send, Check, X, Sparkles, Hash, Clock, Upload, Trash2, Image as ImageIcon, Calendar } from 'lucide-react';
+import { Send, Check, X, Sparkles, Hash, Clock, Upload, Trash2, Image as ImageIcon, Calendar, RotateCcw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAI } from '../contexts/AIContext';
 import { PlatformPreviews } from '../components/PlatformPreviews';
@@ -28,6 +28,35 @@ export default function PostPage() {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isGettingHashtags, setIsGettingHashtags] = useState(false);
   const [isGettingTime, setIsGettingTime] = useState(false);
+  const [savedDraft, setSavedDraft] = useState<{ content: string; timestamp: number } | null>(null);
+
+  // Check for saved auto-draft on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('post_draft');
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft?.content?.trim()) {
+          setSavedDraft({ content: draft.content, timestamp: draft.timestamp });
+        }
+      }
+    } catch {
+      // ignore malformed draft
+    }
+  }, []);
+
+  const restoreDraft = () => {
+    if (savedDraft) {
+      setContent(savedDraft.content);
+      setSavedDraft(null);
+      localStorage.removeItem('post_draft');
+    }
+  };
+
+  const dismissDraft = () => {
+    setSavedDraft(null);
+    localStorage.removeItem('post_draft');
+  };
 
   const { data: accountsData, isLoading } = useQuery({
     queryKey: ['accounts'],
@@ -192,7 +221,37 @@ export default function PostPage() {
   };
 
   const charCount = content.length;
-  const maxChars = 280; // Twitter limit as reference
+
+  // Platform-specific character limits
+  const PLATFORM_CHAR_LIMITS: Record<string, number> = {
+    twitter: 280,
+    x: 280,
+    bluesky: 300,
+    threads: 500,
+    reddit: 40000,
+    facebook: 63206,
+    instagram: 2200,
+    linkedin: 3000,
+    tiktok: 2200,
+    youtube: 5000,
+    pinterest: 500,
+  };
+
+  // Find the tightest limit among selected platforms
+  const selectedPlatforms = accounts
+    .filter(a => selectedAccounts.includes(a.id))
+    .map(a => a.platform.toLowerCase());
+
+  const activeLimits = selectedPlatforms
+    .filter(p => p in PLATFORM_CHAR_LIMITS)
+    .map(p => ({ platform: p, limit: PLATFORM_CHAR_LIMITS[p] }));
+
+  const tightestLimit = activeLimits.length > 0
+    ? activeLimits.reduce((min, cur) => cur.limit < min.limit ? cur : min)
+    : null;
+
+  const maxChars = tightestLimit?.limit ?? 280;
+  const isOverLimit = charCount > maxChars;
   const isAIEnabled = llmConfig?.enabled && llmConfig?.apiKey;
 
   const handleOptimizeContent = async () => {
@@ -284,6 +343,35 @@ export default function PostPage() {
         <p>Publish content to multiple platforms instantly</p>
       </div>
 
+      {/* Draft restore banner */}
+      {savedDraft && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.75rem',
+          padding: '0.75rem 1rem', marginBottom: '1rem',
+          background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.35)',
+          borderRadius: '10px', fontSize: '0.875rem',
+        }}>
+          <RotateCcw size={16} style={{ color: '#f59e0b', flexShrink: 0 }} />
+          <span style={{ flex: 1, color: 'var(--color-textPrimary)' }}>
+            You have an unsaved draft.
+          </span>
+          <button
+            type="button"
+            onClick={restoreDraft}
+            style={{ padding: '0.375rem 0.875rem', background: 'rgba(251,191,36,0.2)', border: '1px solid rgba(251,191,36,0.4)', borderRadius: '6px', color: '#f59e0b', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '600' }}
+          >
+            Restore
+          </button>
+          <button
+            type="button"
+            onClick={dismissDraft}
+            style={{ background: 'none', border: 'none', color: 'var(--color-textSecondary)', cursor: 'pointer', padding: '0.25rem', display: 'flex' }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {result && (
         <div className={`alert ${result.success ? 'alert-success' : 'alert-error'}`}>
           {result.success ? <Check size={20} /> : <X size={20} />}
@@ -310,12 +398,43 @@ export default function PostPage() {
             <div style={{ 
               marginTop: '0.5rem', 
               fontSize: '0.875rem', 
-              color: charCount > maxChars ? '#f56565' : '#718096',
-              textAlign: 'right'
+              color: isOverLimit ? '#f56565' : charCount > maxChars * 0.9 ? '#f59e0b' : '#718096',
+              textAlign: 'right',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              alignItems: 'center',
+              gap: '0.5rem',
             }}>
-              {charCount} characters
-              {charCount > maxChars && ' (exceeds Twitter limit)'}
+              {tightestLimit && (
+                <span style={{ fontSize: '0.75rem', color: isOverLimit ? '#f56565' : 'var(--color-textSecondary)' }}>
+                  {tightestLimit.platform} limit:
+                </span>
+              )}
+              <span style={{ fontWeight: isOverLimit ? '700' : '400' }}>
+                {charCount} / {maxChars}
+                {isOverLimit && ` (${charCount - maxChars} over)`}
+              </span>
             </div>
+            {/* Per-platform limit breakdown (shown when multiple platforms selected) */}
+            {activeLimits.length > 1 && (
+              <div style={{ marginTop: '0.375rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {activeLimits.map(({ platform, limit }) => (
+                  <span
+                    key={platform}
+                    style={{
+                      fontSize: '0.7rem',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                      background: charCount > limit ? 'rgba(245,101,101,0.15)' : 'rgba(255,255,255,0.05)',
+                      color: charCount > limit ? '#f56565' : 'var(--color-textSecondary)',
+                      border: `1px solid ${charCount > limit ? 'rgba(245,101,101,0.3)' : 'rgba(255,255,255,0.1)'}`,
+                    }}
+                  >
+                    {platform}: {limit}
+                  </span>
+                ))}
+              </div>
+            )}
             
             {/* AI Suggestions Buttons */}
             {isAIEnabled && (

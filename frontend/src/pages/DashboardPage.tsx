@@ -1,12 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { postsApi, accountsApi } from '../api';
-import { BarChart3, Users, Send, Calendar, Plus, Sparkles, TrendingUp, Zap, Activity } from 'lucide-react';
+import { BarChart3, Users, Send, Calendar, Plus, Sparkles, TrendingUp, Zap, Activity, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatDateTime } from '../utils/timezone';
+import { useAuth } from '../contexts/AuthContext';
+
+function getGreeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+}
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const firstName = user?.name?.split(' ')[0] ?? '';
   
   const { data: postsData } = useQuery({
     queryKey: ['posts'],
@@ -105,8 +115,10 @@ export default function DashboardPage() {
   return (
     <div role="main">
       <header className="page-header">
-        <h2>Dashboard</h2>
-        <p>Overview of your social media posting activity</p>
+        <div>
+          <h2>{getGreeting()}{firstName ? `, ${firstName}` : ''}! 👋</h2>
+          <p>Overview of your social media posting activity</p>
+        </div>
       </header>
 
       {/* Bento Grid Layout */}
@@ -195,6 +207,14 @@ export default function DashboardPage() {
               <Activity size={22} style={{ color: 'var(--color-accentPrimary)' }} />
               <h3 id="recent-activity-heading">Recent Activity</h3>
             </div>
+            {posts.length > 5 && (
+              <button
+                onClick={() => navigate('/scheduled')}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'none', border: 'none', color: 'var(--color-accentPrimary)', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '500', padding: '0.25rem 0.5rem', borderRadius: '6px' }}
+              >
+                View all <ChevronRight size={14} />
+              </button>
+            )}
           </div>
           {recentPosts.length === 0 ? (
             <div className="empty-state">
