@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../api';
 import {
   Shield, Users, BarChart3, CreditCard, CheckCircle, XCircle, Clock,
   AlertTriangle, Crown, Zap, TrendingUp, Settings, DollarSign, Mail,
@@ -70,88 +71,67 @@ interface SystemMetrics {
   timestamp: string;
 }
 
-const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem('accessToken')}` });
+// Helper to extract a meaningful error message from an axios error
+function apiError(e: any, fallback: string): Error {
+  return new Error(e?.response?.data?.error || e?.message || fallback);
+}
 
 const adminApi = {
   getUsers: async (): Promise<{ users: User[]; total: number }> => {
-    const r = await fetch('/api/admin/users', { headers: authHeader() });
-    if (!r.ok) throw new Error('Failed to fetch users');
-    return r.json();
+    const r = await api.get('/admin/users');
+    return r.data;
   },
   getUserDetails: async (userId: string): Promise<UserDetails> => {
-    const r = await fetch(`/api/admin/users/${userId}`, { headers: authHeader() });
-    if (!r.ok) throw new Error('Failed to fetch user details');
-    return r.json();
+    const r = await api.get(`/admin/users/${userId}`);
+    return r.data;
   },
   createUser: async (data: { email: string; full_name: string; role: string; password: string }) => {
-    const r = await fetch('/api/admin/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify(data),
-    });
-    if (!r.ok) {
-      const err = await r.json();
-      throw new Error(err.error || 'Failed to create user');
+    try {
+      const r = await api.post('/admin/users', data);
+      return r.data;
+    } catch (e: any) {
+      throw apiError(e, 'Failed to create user');
     }
-    return r.json();
   },
   deleteUser: async (userId: string) => {
-    const r = await fetch(`/api/admin/users/${userId}`, { method: 'DELETE', headers: authHeader() });
-    if (!r.ok) {
-      const err = await r.json();
-      throw new Error(err.error || 'Failed to delete user');
+    try {
+      const r = await api.delete(`/admin/users/${userId}`);
+      return r.data;
+    } catch (e: any) {
+      throw apiError(e, 'Failed to delete user');
     }
-    return r.json();
   },
   updateSubscription: async (userId: string, data: any) => {
-    const r = await fetch(`/api/admin/users/${userId}/subscription`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify(data),
-    });
-    if (!r.ok) throw new Error('Failed to update subscription');
-    return r.json();
+    const r = await api.patch(`/admin/users/${userId}/subscription`, data);
+    return r.data;
   },
   suspendUser: async (userId: string, reason: string) => {
-    const r = await fetch(`/api/admin/users/${userId}/suspend`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ reason }),
-    });
-    if (!r.ok) throw new Error('Failed to suspend user');
-    return r.json();
+    const r = await api.post(`/admin/users/${userId}/suspend`, { reason });
+    return r.data;
   },
   activateUser: async (userId: string) => {
-    const r = await fetch(`/api/admin/users/${userId}/activate`, { method: 'POST', headers: authHeader() });
-    if (!r.ok) throw new Error('Failed to activate user');
-    return r.json();
+    const r = await api.post(`/admin/users/${userId}/activate`);
+    return r.data;
   },
   getMetrics: async (): Promise<SystemMetrics> => {
-    const r = await fetch('/api/admin/metrics', { headers: authHeader() });
-    if (!r.ok) throw new Error('Failed to fetch metrics');
-    return r.json();
+    const r = await api.get('/admin/metrics');
+    return r.data;
   },
   getSquareConfig: async () => {
-    const r = await fetch('/api/admin/square-config', { headers: authHeader() });
-    if (!r.ok) throw new Error('Failed to fetch Square config');
-    return r.json();
+    const r = await api.get('/admin/square-config');
+    return r.data;
   },
   updateSquareConfig: async (data: Record<string, string>) => {
-    const r = await fetch('/api/admin/square-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify(data),
-    });
-    if (!r.ok) {
-      const err = await r.json();
-      throw new Error(err.error || 'Failed to save configuration');
+    try {
+      const r = await api.post('/admin/square-config', data);
+      return r.data;
+    } catch (e: any) {
+      throw apiError(e, 'Failed to save configuration');
     }
-    return r.json();
   },
   testSquareConnection: async () => {
-    const r = await fetch('/api/admin/square-test-connection', { method: 'POST', headers: authHeader() });
-    if (!r.ok) throw new Error('Failed to test Square connection');
-    return r.json();
+    const r = await api.post('/admin/square-test-connection');
+    return r.data;
   },
 };
 
@@ -234,8 +214,9 @@ export default function AdminPage() {
   const [showAccessToken, setShowAccessToken] = useState(false);
   const [showWebhookKey, setShowWebhookKey] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showSmtpModal, setShowSmtpModal] = useState(false);
 
-  const { data: usersData, isLoading: usersLoading } = useQuery({
+  const { data: usersData, isLoading: usersLoading, isError: usersError } = useQuery({
     queryKey: ['admin-users'],
     queryFn: adminApi.getUsers,
   });
@@ -473,6 +454,17 @@ export default function AdminPage() {
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />
                 Loading users…
               </div>
+            ) : usersError ? (
+              <div className="py-16 text-center text-red-400">
+                <XCircle className="w-8 h-8 mx-auto mb-3 opacity-70" />
+                <p className="text-sm">Failed to load users. Please refresh or check your connection.</p>
+                <button
+                  onClick={() => queryClient.invalidateQueries({ queryKey: ['admin-users'] })}
+                  className="mt-3 text-xs text-cyan-400 hover:text-cyan-300 underline"
+                >
+                  Try again
+                </button>
+              </div>
             ) : filteredUsers.length === 0 ? (
               <div className="py-16 text-center text-slate-400">
                 <Users className="w-8 h-8 mx-auto mb-3 opacity-40" />
@@ -662,7 +654,17 @@ export default function AdminPage() {
         {/* Email Tab */}
         {activeTab === 'email' && (
           <div className="space-y-6">
-            <SmtpConfigPanel />
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-white">Email</h2>
+              <button
+                onClick={() => setShowSmtpModal(true)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-200 rounded-lg hover:text-white transition-colors"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)' }}
+              >
+                <Settings className="w-4 h-4" />
+                Configure SMTP
+              </button>
+            </div>
             <EmailComposer />
           </div>
         )}
@@ -1273,6 +1275,23 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SMTP Configuration Modal */}
+      {showSmtpModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}>
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl" style={{ background: 'rgba(5,7,30,0.98)', border: '1px solid rgba(0,229,255,0.2)' }}>
+            <div className="sticky top-0 flex items-center justify-between px-6 py-4 rounded-t-2xl" style={{ background: 'rgba(5,7,30,0.98)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <h2 className="text-lg font-semibold text-white">SMTP Configuration</h2>
+              <button onClick={() => setShowSmtpModal(false)} className="text-slate-500 hover:text-slate-300 transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <SmtpConfigPanel />
             </div>
           </div>
         </div>

@@ -144,6 +144,8 @@ def list_users():
                         'payment_method': subscription.payment_method,
                         'last_payment_date': subscription.last_payment_date.isoformat() if subscription.last_payment_date else None,
                         'last_payment_amount': subscription.last_payment_amount,
+                        'cancelled_at': subscription.cancelled_at.isoformat() if subscription.cancelled_at else None,
+                        'cancellation_reason': subscription.cancellation_reason,
                         'admin_notes': subscription.admin_notes
                     }
                 

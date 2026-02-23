@@ -1,10 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Mail, Save, CheckCircle, XCircle, RefreshCw, Eye, EyeOff, AlertTriangle } from 'lucide-react';
-
-function authHeader() {
-  return { Authorization: `Bearer ${localStorage.getItem('accessToken')}` };
-}
+import { api } from '../../api';
 
 interface SmtpConfig {
   host: string;
@@ -38,9 +35,8 @@ export function SmtpConfigPanel() {
   const { data: config, isLoading, isError } = useQuery<SmtpConfig>({
     queryKey: ['admin-smtp-config'],
     queryFn: async () => {
-      const r = await fetch('/api/admin/email/smtp-config', { headers: authHeader() });
-      if (!r.ok) throw new Error('Failed to fetch SMTP config');
-      return r.json();
+      const r = await api.get('/admin/email/smtp-config');
+      return r.data;
     },
   });
 
@@ -61,16 +57,12 @@ export function SmtpConfigPanel() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof form) => {
-      const r = await fetch('/api/admin/email/smtp-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHeader() },
-        body: JSON.stringify(data),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.error || 'Failed to save SMTP configuration');
+      try {
+        const r = await api.post('/admin/email/smtp-config', data);
+        return r.data;
+      } catch (e: any) {
+        throw new Error(e?.response?.data?.error || 'Failed to save SMTP configuration');
       }
-      return r.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-smtp-config'] });
@@ -91,14 +83,10 @@ export function SmtpConfigPanel() {
     setTesting(true);
     setTestResult(null);
     try {
-      const r = await fetch('/api/admin/email/smtp-test', {
-        method: 'POST',
-        headers: authHeader(),
-      });
-      const data = await r.json();
-      setTestResult({ success: data.success, message: data.message });
+      const r = await api.post('/admin/email/smtp-test');
+      setTestResult({ success: r.data.success, message: r.data.message });
     } catch (e: any) {
-      setTestResult({ success: false, message: e.message || 'Test failed' });
+      setTestResult({ success: false, message: e?.response?.data?.message || e.message || 'Test failed' });
     } finally {
       setTesting(false);
     }
