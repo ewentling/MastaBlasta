@@ -8,6 +8,8 @@ import { PlatformPreviews } from '../components/PlatformPreviews';
 import type { CreatePostRequest, SchedulePostRequest } from '../types';
 import { getMinDateTime, toISOString, formatDateTime, isInPast } from '../utils/timezone';
 
+const DRAFT_STORAGE_KEY = 'post_draft';
+
 export default function PostPage() {
   const navigate = useNavigate();
   const { llmConfig, optimizeContent, suggestHashtags, suggestPostingTime } = useAI();
@@ -33,7 +35,7 @@ export default function PostPage() {
   // Check for saved auto-draft on mount
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('post_draft');
+      const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
       if (raw) {
         const draft = JSON.parse(raw);
         if (draft?.content?.trim()) {
@@ -49,13 +51,13 @@ export default function PostPage() {
     if (savedDraft) {
       setContent(savedDraft.content);
       setSavedDraft(null);
-      localStorage.removeItem('post_draft');
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
     }
   };
 
   const dismissDraft = () => {
     setSavedDraft(null);
-    localStorage.removeItem('post_draft');
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
   };
 
   const { data: accountsData, isLoading } = useQuery({
@@ -74,7 +76,7 @@ export default function PostPage() {
           is_draft: true,
           timestamp: Date.now()
         };
-        localStorage.setItem('post_draft', JSON.stringify(draft));
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
       }
     }, 30000); // Auto-save every 30 seconds
     

@@ -16,6 +16,8 @@ function getGreeting(): string {
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  // Take the first space-delimited token as the display name; works for most Western
+  // name formats and gracefully degrades to an empty string for single-word names.
   const firstName = user?.name?.split(' ')[0] ?? '';
   
   const { data: postsData } = useQuery({

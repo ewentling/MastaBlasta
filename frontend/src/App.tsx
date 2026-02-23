@@ -29,6 +29,7 @@ import type { ThemeName } from './ThemeContext';
 import { AIProvider } from './contexts/AIContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { accountsApi } from './api';
+import type { Account } from './types';
 import './App.css';
 
 // ==================== Error Boundary ====================
@@ -111,7 +112,7 @@ function Navigation() {
     queryFn: () => accountsApi.getAll(),
     staleTime: 60_000,
   });
-  const connectedCount = (accountsData?.accounts ?? []).filter((a: any) => a.enabled).length;
+  const connectedCount = (accountsData?.accounts ?? []).filter((a: Account) => a.enabled).length;
 
   const isActive = (path: string) => (location.pathname === path ? 'nav-link active' : 'nav-link');
 

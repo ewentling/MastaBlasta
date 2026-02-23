@@ -384,7 +384,7 @@ export default function ScheduledPostsPage() {
       ? rawPosts.filter(
           (p: any) =>
             p.content.toLowerCase().includes(q) ||
-            (p.platforms || []).some((pl: string) => pl.toLowerCase().includes(q))
+            (p.platforms || []).some((platformName: string) => platformName.toLowerCase().includes(q))
         )
       : [...rawPosts];
     switch (sortKey) {
