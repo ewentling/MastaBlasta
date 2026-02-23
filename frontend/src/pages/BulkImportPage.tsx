@@ -121,9 +121,19 @@ export default function BulkImportPage() {
   };
 
   const downloadTemplate = () => {
+    const now = new Date();
+    // Use UTC getters to avoid local-timezone offset issues around midnight
+    const tomorrow = new Date(Date.UTC(
+      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 10, 0, 0
+    ));
+    const dayAfter = new Date(Date.UTC(
+      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2, 14, 30, 0
+    ));
+
+    const fmt = (d: Date) => d.toISOString().replace('.000Z', 'Z');
     const template = `content,platforms,account_ids,scheduled_time,media
-"Your post content here","twitter,facebook","","2026-01-15T10:00:00Z",""
-"Another post with scheduled time","linkedin","","2026-01-16T14:30:00Z",""
+"Your post content here","twitter,facebook","","${fmt(tomorrow)}",""
+"Another post with a scheduled time","linkedin","","${fmt(dayAfter)}",""
 "Post with media URL","instagram","","","https://example.com/image.jpg"`;
     
     const blob = new Blob([template], { type: 'text/csv' });

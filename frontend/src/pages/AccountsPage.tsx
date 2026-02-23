@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountsApi, platformsApi, oauthApi, oauthAppsApi } from '../api';
-import { Plus, Trash2, Edit2, Check, X, TestTube, Zap, Settings } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, TestTube, Zap, Settings, Copy } from 'lucide-react';
 import type { Account, CreateAccountRequest, Platform } from '../types';
 import OAuthAppModal from '../components/OAuthAppModal';
 
@@ -12,6 +12,17 @@ export default function AccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [testingAccount, setTestingAccount] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
+
+  const copyUsername = async (accountId: string, username: string) => {
+    try {
+      await navigator.clipboard.writeText(`@${username}`);
+      setCopiedAccountId(accountId);
+      setTimeout(() => setCopiedAccountId(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy username to clipboard:', error);
+    }
+  };
 
   const { data: accountsData, isLoading } = useQuery({
     queryKey: ['accounts'],
@@ -127,8 +138,15 @@ export default function AccountsPage() {
                     )}
                   </div>
                   {account.username && (
-                    <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
+                    <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                       @{account.username}
+                      <button
+                        title="Copy handle"
+                        onClick={(e) => { e.stopPropagation(); copyUsername(account.id, account.username!); }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.1rem 0.25rem', color: copiedAccountId === account.id ? '#10b981' : 'var(--color-textTertiary)', display: 'flex', alignItems: 'center', borderRadius: '4px', transition: 'color 0.2s' }}
+                      >
+                        {copiedAccountId === account.id ? <Check size={13} /> : <Copy size={13} />}
+                      </button>
                     </div>
                   )}
                 </div>

@@ -7,7 +7,7 @@ import { useAI } from '../contexts/AIContext';
 import { PlatformPreviews } from '../components/PlatformPreviews';
 import {
   Calendar, Trash2, Check, X, Edit2, Plus, Clock, ChevronDown,
-  Sparkles, Hash, Upload, Image as ImageIcon, ExternalLink, AlertTriangle,
+  Sparkles, Hash, Upload, Image as ImageIcon, ExternalLink, AlertTriangle, Search, Copy,
 } from 'lucide-react';
 import {
   formatDateTime, toDateTimeLocalValue, getMinDateTime, toISOString, isInPast,
@@ -330,9 +330,11 @@ export default function ScheduledPostsPage() {
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editPost, setEditPost] = useState<any | null>(null);
+  const [clonePost, setClonePost] = useState<any | null>(null);
   const [deletePost, setDeletePost] = useState<any | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('soonest');
   const [showSortDropdown, setShowSortDropdown] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const { data: postsData, isLoading } = useQuery({
@@ -345,6 +347,7 @@ export default function ScheduledPostsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       setShowCreateModal(false);
+      setClonePost(null);
       flash(true, 'Post scheduled successfully!');
     },
     onError: (e: any) => flash(false, e.response?.data?.error || 'Failed to schedule post'),
@@ -376,15 +379,22 @@ export default function ScheduledPostsPage() {
 
   const rawPosts = postsData?.posts || [];
   const posts = useMemo(() => {
-    const copy = [...rawPosts];
+    const q = searchQuery.trim().toLowerCase();
+    let copy = q
+      ? rawPosts.filter(
+          (p: any) =>
+            p.content.toLowerCase().includes(q) ||
+            (p.platforms || []).some((platformName: string) => platformName.toLowerCase().includes(q))
+        )
+      : [...rawPosts];
     switch (sortKey) {
-      case 'soonest': return copy.sort((a, b) => new Date(a.scheduled_for!).getTime() - new Date(b.scheduled_for!).getTime());
-      case 'latest':  return copy.sort((a, b) => new Date(b.scheduled_for!).getTime() - new Date(a.scheduled_for!).getTime());
-      case 'newest':  return copy.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      case 'oldest':  return copy.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      case 'soonest': return copy.sort((a: any, b: any) => new Date(a.scheduled_for!).getTime() - new Date(b.scheduled_for!).getTime());
+      case 'latest':  return copy.sort((a: any, b: any) => new Date(b.scheduled_for!).getTime() - new Date(a.scheduled_for!).getTime());
+      case 'newest':  return copy.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      case 'oldest':  return copy.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       default: return copy;
     }
-  }, [rawPosts, sortKey]);
+  }, [rawPosts, sortKey, searchQuery]);
 
   const SORT_LABELS: Record<SortKey, string> = {
     soonest: '⏰ Soonest first',
@@ -426,47 +436,71 @@ export default function ScheduledPostsPage() {
 
       <div className="card">
         {/* Toolbar */}
-        <div className="card-header" style={{ marginBottom: '1rem' }}>
+        <div className="card-header" style={{ marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <h3 style={{ margin: 0 }}>
-            Upcoming Posts <span style={{ color: 'var(--color-textSecondary)', fontWeight: 400, fontSize: '0.875rem' }}>({posts.length})</span>
+            Upcoming Posts <span style={{ color: 'var(--color-textSecondary)', fontWeight: 400, fontSize: '0.875rem' }}>({posts.length}{searchQuery ? ` of ${rawPosts.length}` : ''})</span>
           </h3>
-          {/* Sort dropdown */}
-          <div style={{ position: 'relative' }}>
-            <button
-              className="btn btn-secondary"
-              onClick={() => setShowSortDropdown(d => !d)}
-              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.875rem' }}
-            >
-              {SORT_LABELS[sortKey]}
-              <ChevronDown size={14} />
-            </button>
-            {showSortDropdown && (
-              <div style={{
-                position: 'absolute', right: 0, top: '110%', zIndex: 100,
-                background: 'var(--color-bgSecondary)', border: '1px solid var(--color-borderLight)',
-                borderRadius: '8px', overflow: 'hidden', minWidth: '180px', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-              }}>
-                {(Object.entries(SORT_LABELS) as [SortKey, string][]).map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => { setSortKey(key); setShowSortDropdown(false); }}
-                    style={{
-                      display: 'block', width: '100%', padding: '0.6rem 1rem', textAlign: 'left',
-                      background: sortKey === key ? 'rgba(99,102,241,0.1)' : 'transparent',
-                      border: 'none', color: 'var(--color-textPrimary)', cursor: 'pointer', fontSize: '0.875rem',
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginLeft: 'auto' }}>
+            {/* Search input */}
+            <div style={{ position: 'relative' }}>
+              <Search size={14} style={{ position: 'absolute', left: '0.6rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-textSecondary)', pointerEvents: 'none' }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search posts…"
+                style={{
+                  paddingLeft: '2rem', paddingRight: searchQuery ? '2rem' : '0.75rem',
+                  paddingTop: '0.4rem', paddingBottom: '0.4rem',
+                  background: 'var(--color-bgSecondary)', border: '1px solid var(--color-borderLight)',
+                  borderRadius: '8px', color: 'var(--color-textPrimary)', fontSize: '0.875rem', width: '180px',
+                  outline: 'none',
+                }}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--color-textSecondary)', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+            {/* Sort dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowSortDropdown(d => !d)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.875rem' }}
+              >
+                {SORT_LABELS[sortKey]}
+                <ChevronDown size={14} />
+              </button>
+              {showSortDropdown && (
+                <div style={{
+                  position: 'absolute', right: 0, top: '110%', zIndex: 100,
+                  background: 'var(--color-bgSecondary)', border: '1px solid var(--color-borderLight)',
+                  borderRadius: '8px', overflow: 'hidden', minWidth: '180px', boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                }}>
+                  {(Object.entries(SORT_LABELS) as [SortKey, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => { setSortKey(key); setShowSortDropdown(false); }}
+                      style={{
+                        display: 'block', width: '100%', padding: '0.6rem 1rem', textAlign: 'left',
+                        background: sortKey === key ? 'rgba(99,102,241,0.1)' : 'transparent',
+                        border: 'none', color: 'var(--color-textPrimary)', cursor: 'pointer', fontSize: '0.875rem',
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {isLoading ? (
           <div className="loading">Loading scheduled posts…</div>
-        ) : posts.length === 0 ? (
+        ) : rawPosts.length === 0 ? (
           <div className="empty-state">
             <Calendar size={48} />
             <h3>No scheduled posts</h3>
@@ -475,9 +509,15 @@ export default function ScheduledPostsPage() {
               <Plus size={16} /> Schedule First Post
             </button>
           </div>
+        ) : posts.length === 0 && searchQuery ? (
+          <div className="empty-state">
+            <Search size={40} />
+            <h3>No posts match "{searchQuery}"</h3>
+            <p>Try a different keyword or <button onClick={() => setSearchQuery('')} style={{ background: 'none', border: 'none', color: 'var(--color-accentPrimary)', cursor: 'pointer', fontSize: 'inherit', textDecoration: 'underline', padding: 0 }}>clear the search</button></p>
+          </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {posts.map(post => {
+            {posts.map((post: any) => {
               const scheduledDate = new Date(post.scheduled_for!);
               const now = new Date();
               const isToday = isSameDay(scheduledDate, now);
@@ -524,6 +564,14 @@ export default function ScheduledPostsPage() {
                     <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
                       <button
                         className="btn btn-secondary btn-small"
+                        onClick={() => setClonePost(post)}
+                        title="Duplicate post"
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}
+                      >
+                        <Copy size={14} /> Duplicate
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-small"
                         onClick={() => setEditPost(post)}
                         title="Edit post"
                         style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.8rem' }}
@@ -562,6 +610,32 @@ export default function ScheduledPostsPage() {
               isPending={scheduleMutation.isPending}
               submitLabel="Schedule Post"
               onCancel={() => setShowCreateModal(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Clone Modal */}
+      {clonePost && (
+        <div className="modal-overlay" onClick={() => setClonePost(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '680px', width: '95vw' }}>
+            <div className="modal-header">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Copy size={18} /> Duplicate Post
+              </h3>
+              <button className="close-button" onClick={() => setClonePost(null)}>×</button>
+            </div>
+            <PostForm
+              initial={{
+                content: clonePost.content,
+                account_ids: clonePost.account_ids || [],
+                scheduled_time: '',
+                media: clonePost.media || [],
+              }}
+              onSubmit={data => scheduleMutation.mutate(data as any)}
+              isPending={scheduleMutation.isPending}
+              submitLabel="Schedule Duplicate"
+              onCancel={() => setClonePost(null)}
             />
           </div>
         </div>

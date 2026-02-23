@@ -1,8 +1,9 @@
 import { useState, Component } from 'react';
+import type { CSSProperties } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw, Palette } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -21,9 +22,14 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import SubscriptionInfoPage from './pages/SubscriptionInfoPage';
 import SettingsModal from './components/SettingsModal';
-import { ThemeProvider } from './ThemeContext';
+import NotificationCenter from './components/NotificationCenter';
+import { useKeyboardShortcuts, KeyboardShortcutsHelp } from './components/KeyboardShortcuts';
+import { ThemeProvider, useTheme, themes } from './ThemeContext';
+import type { ThemeName } from './ThemeContext';
 import { AIProvider } from './contexts/AIContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { accountsApi } from './api';
+import type { Account } from './types';
 import './App.css';
 
 // ==================== Error Boundary ====================
@@ -95,7 +101,18 @@ export const appRoutes: AppRouteConfig[] = [
 function Navigation() {
   const location = useLocation();
   const [showSettings, setShowSettings] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
   const { logout, user } = useAuth();
+  const { themeName, setTheme } = useTheme();
+  const { showHelp, setShowHelp, shortcuts } = useKeyboardShortcuts();
+
+  // Fetch connected account count for badge
+  const { data: accountsData } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: () => accountsApi.getAll(),
+    staleTime: 60_000,
+  });
+  const connectedCount = (accountsData?.accounts ?? []).filter((a: Account) => a.enabled).length;
 
   const isActive = (path: string) => (location.pathname === path ? 'nav-link active' : 'nav-link');
 
@@ -106,6 +123,32 @@ function Navigation() {
   // Check if user is admin
   const isAdmin = user?.role === 'admin';
 
+  // Theme dot colors for quick switcher
+  const themeAccents: Record<ThemeName, string> = {
+    dark: '#667eea',
+    synthwave: '#ff006e',
+    pixel: '#f4845f',
+    crt: '#00ff41',
+    neon: '#00d9ff',
+  };
+
+  const badgeStyle: CSSProperties = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '18px',
+    height: '18px',
+    padding: '0 4px',
+    borderRadius: '9px',
+    background: 'var(--color-accentPrimary)',
+    color: '#000',
+    fontSize: '11px',
+    fontWeight: '700',
+    lineHeight: 1,
+    marginLeft: 'auto',
+    flexShrink: 0,
+  };
+
   return (
     <>
       <nav className="sidebar">
@@ -115,9 +158,12 @@ function Navigation() {
         <ul className="nav-menu">
           {appRoutes.filter(route => !route.adminOnly || isAdmin).map(({ path, label, icon: Icon }) => (
             <li key={path}>
-              <Link to={path} className={isActive(path)}>
-                <Icon size={20} />
-                <span>{label}</span>
+              <Link to={path} className={isActive(path)} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                <Icon size={20} style={{ flexShrink: 0 }} />
+                <span style={{ flex: 1 }}>{label}</span>
+                {path === '/accounts' && connectedCount > 0 && (
+                  <span style={badgeStyle}>{connectedCount}</span>
+                )}
               </Link>
             </li>
           ))}
@@ -129,6 +175,46 @@ function Navigation() {
               <div style={{ fontSize: '12px' }}>{user.email}</div>
             </div>
           )}
+
+          {/* Theme quick-switcher */}
+          <div style={{ padding: '8px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <button
+              onClick={() => setShowThemePicker(v => !v)}
+              className="settings-button"
+              style={{ width: '100%', justifyContent: 'space-between' }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Palette size={18} />
+                <span style={{ fontSize: '0.875rem' }}>Theme</span>
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-textSecondary)' }}>{themes[themeName].displayName}</span>
+            </button>
+            {showThemePicker && (
+              <div style={{ display: 'flex', gap: '8px', padding: '8px 4px 4px', flexWrap: 'wrap' }}>
+                {(Object.entries(themeAccents) as [ThemeName, string][]).map(([name, color]) => (
+                  <button
+                    key={name}
+                    title={themes[name].displayName}
+                    onClick={() => { setTheme(name); setShowThemePicker(false); }}
+                    style={{
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '50%',
+                      background: color,
+                      border: themeName === name ? `3px solid white` : '3px solid transparent',
+                      cursor: 'pointer',
+                      padding: 0,
+                      flexShrink: 0,
+                      boxShadow: themeName === name ? `0 0 8px ${color}` : 'none',
+                      transition: 'all 0.2s ease',
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <NotificationCenter />
           <button className="settings-button" onClick={() => setShowSettings(true)}>
             <Settings size={20} />
             <span>Settings</span>
@@ -140,6 +226,7 @@ function Navigation() {
         </div>
       </nav>
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      <KeyboardShortcutsHelp show={showHelp} onClose={() => setShowHelp(false)} shortcuts={shortcuts} />
     </>
   );
 }

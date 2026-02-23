@@ -15,6 +15,7 @@ import { SystemHealthPanel } from '../components/admin/SystemHealthPanel';
 import { RevenueSummaryCards } from '../components/admin/RevenueSummaryCards';
 import { FailedPaymentsTable } from '../components/admin/FailedPaymentsTable';
 import { EmailComposer } from '../components/admin/EmailComposer';
+import { SmtpConfigPanel } from '../components/admin/SmtpConfigPanel';
 import { PostModerationTable } from '../components/admin/PostModerationTable';
 import { PlatformConfigTab } from '../components/admin/PlatformConfigTab';
 
@@ -251,7 +252,7 @@ export default function AdminPage() {
     enabled: !!selectedUser,
   });
 
-  const { data: squareConfig, isLoading: squareConfigLoading } = useQuery({
+  const { data: squareConfig, isLoading: squareConfigLoading, isError: squareConfigError } = useQuery({
     queryKey: ['admin-square-config'],
     queryFn: adminApi.getSquareConfig,
     enabled: activeTab === 'square',
@@ -659,7 +660,12 @@ export default function AdminPage() {
         )}
 
         {/* Email Tab */}
-        {activeTab === 'email' && <EmailComposer />}
+        {activeTab === 'email' && (
+          <div className="space-y-6">
+            <SmtpConfigPanel />
+            <EmailComposer />
+          </div>
+        )}
 
         {/* Moderation Tab */}
         {activeTab === 'moderation' && <PostModerationTable />}
@@ -676,7 +682,12 @@ export default function AdminPage() {
               <div className="rounded-xl p-8 text-center text-slate-400" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
                 <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-3" />Loading…
               </div>
-            ) : squareConfig && (
+            ) : squareConfigError ? (
+              <div className="rounded-xl p-8 text-center text-red-400" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                <XCircle className="w-6 h-6 mx-auto mb-2" />
+                <p className="text-sm">Failed to load Square configuration. Please refresh or check your connection.</p>
+              </div>
+            ) : (
               <>
                 {/* Config status summary */}
                 <div className="rounded-xl p-6 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>

@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Sparkles, Copy, RefreshCw, Wand2, Languages, Hash, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Sparkles, Copy, RefreshCw, Wand2, Languages, Hash, AlertCircle, Trash2, Send } from 'lucide-react';
 import { useAI } from '../contexts/AIContext';
+import { DRAFT_STORAGE_KEY } from '../utils/constants';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
 
@@ -12,6 +14,7 @@ interface GeneratedContent {
 }
 
 export default function ChatbotPage() {
+  const navigate = useNavigate();
   const { llmConfig } = useAI();
   const [activeTab, setActiveTab] = useState<'generate' | 'improve' | 'hashtags' | 'translate'>('generate');
   const [inputText, setInputText] = useState('');
@@ -180,6 +183,20 @@ export default function ChatbotPage() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  const useInPost = (text: string) => {
+    try {
+      const draft = { content: text, timestamp: Date.now() };
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
+    } catch {
+      // localStorage unavailable — navigate anyway; user can paste content manually
+    }
+    navigate('/post');
+  };
+
+  const clearHistory = () => {
+    setGeneratedContent([]);
   };
 
   return (
@@ -373,7 +390,22 @@ export default function ChatbotPage() {
       {/* Generated Content */}
       {generatedContent.length > 0 && (
         <div style={{ marginTop: '2rem' }}>
-          <h3 style={{ color: 'var(--color-textPrimary)', marginBottom: '1rem' }}>Generated Content</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h3 style={{ color: 'var(--color-textPrimary)', margin: 0 }}>
+              Generated Content
+              <span style={{ marginLeft: '0.5rem', fontSize: '0.875rem', color: 'var(--color-textSecondary)', fontWeight: 400 }}>
+                ({generatedContent.length})
+              </span>
+            </h3>
+            <button
+              className="btn btn-secondary btn-small"
+              onClick={clearHistory}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: '#ef4444', borderColor: 'rgba(239,68,68,0.3)' }}
+            >
+              <Trash2 size={14} />
+              Clear History
+            </button>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {generatedContent.map((item) => (
               <div
@@ -391,14 +423,24 @@ export default function ChatbotPage() {
                       {item.type} • {item.timestamp.toLocaleString()}
                     </div>
                   </div>
-                  <button
-                    className="btn btn-secondary btn-small"
-                    onClick={() => copyToClipboard(item.content)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                  >
-                    <Copy size={16} />
-                    Copy
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      className="btn btn-secondary btn-small"
+                      onClick={() => copyToClipboard(item.content)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}
+                    >
+                      <Copy size={14} />
+                      Copy
+                    </button>
+                    <button
+                      className="btn btn-primary btn-small"
+                      onClick={() => useInPost(item.content)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}
+                    >
+                      <Send size={14} />
+                      Use in Post
+                    </button>
+                  </div>
                 </div>
                 <div style={{ 
                   color: 'var(--color-textPrimary)', 

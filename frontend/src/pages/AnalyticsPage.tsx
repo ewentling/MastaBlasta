@@ -8,6 +8,7 @@ export default function AnalyticsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState(30);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [platformFilter, setPlatformFilter] = useState<string>('all');
 
   // Fetch dashboard analytics
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
@@ -86,21 +87,28 @@ export default function AnalyticsPage() {
 
       {/* Period Selector */}
       <div style={{ marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {[7, 30, 90].map(days => (
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          {[7, 30, 90, 180, 365].map(days => (
             <button
               key={days}
               className={`btn ${selectedPeriod === days ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setSelectedPeriod(days)}
             >
-              Last {days} days
+              {days === 365 ? 'Last year' : `Last ${days} days`}
             </button>
           ))}
         </div>
       </div>
 
       {dashboardLoading ? (
-        <div className="loading">Loading analytics...</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="card">
+              <div className="skeleton skeleton-text" style={{ width: '35%', marginBottom: '0.75rem' }} />
+              <div className="skeleton" style={{ height: '2.5rem', width: '55%', borderRadius: '6px' }} />
+            </div>
+          ))}
+        </div>
       ) : dashboardData ? (
         <>
           {/* Summary Cards */}
@@ -235,10 +243,32 @@ export default function AnalyticsPage() {
           <div className="card" style={{ marginBottom: '2rem' }}>
             <div className="card-header">
               <h3>Platform Performance</h3>
+              {/* Platform filter tabs */}
+              <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
+                <button
+                  className={`btn btn-small ${platformFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setPlatformFilter('all')}
+                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}
+                >
+                  All
+                </button>
+                {Object.keys(dashboardData.platform_breakdown).map((platform) => (
+                  <button
+                    key={platform}
+                    className={`btn btn-small ${platformFilter === platform ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setPlatformFilter(platform)}
+                    style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', textTransform: 'capitalize' }}
+                  >
+                    {platform}
+                  </button>
+                ))}
+              </div>
             </div>
             <div style={{ padding: '1.5rem' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-                {Object.entries(dashboardData.platform_breakdown).map(([platform, data]: [string, any]) => (
+                {Object.entries(dashboardData.platform_breakdown)
+                  .filter(([platform]) => platformFilter === 'all' || platform === platformFilter)
+                  .map(([platform, data]: [string, any]) => (
                   <div 
                     key={platform}
                     style={{
