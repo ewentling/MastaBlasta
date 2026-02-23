@@ -122,12 +122,12 @@ export default function BulkImportPage() {
 
   const downloadTemplate = () => {
     const now = new Date();
-    // Build tomorrow and day-after-tomorrow using UTC to avoid DST edge cases
+    // Use UTC getters to avoid local-timezone offset issues around midnight
     const tomorrow = new Date(Date.UTC(
-      now.getFullYear(), now.getMonth(), now.getDate() + 1, 10, 0, 0
+      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 10, 0, 0
     ));
     const dayAfter = new Date(Date.UTC(
-      now.getFullYear(), now.getMonth(), now.getDate() + 2, 14, 30, 0
+      now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 2, 14, 30, 0
     ));
 
     const fmt = (d: Date) => d.toISOString().replace('.000Z', 'Z');

@@ -7,8 +7,7 @@ import { useAI } from '../contexts/AIContext';
 import { PlatformPreviews } from '../components/PlatformPreviews';
 import type { CreatePostRequest, SchedulePostRequest } from '../types';
 import { getMinDateTime, toISOString, formatDateTime, isInPast } from '../utils/timezone';
-
-const DRAFT_STORAGE_KEY = 'post_draft';
+import { DRAFT_STORAGE_KEY } from '../utils/constants';
 
 export default function PostPage() {
   const navigate = useNavigate();
@@ -246,10 +245,14 @@ export default function PostPage() {
     pinterest: 500,
   };
 
-  // Find the tightest limit among selected platforms
-  const selectedPlatforms = accounts
-    .filter(a => selectedAccounts.includes(a.id))
-    .map(a => a.platform.toLowerCase());
+  // Find the tightest limit among selected platforms (de-duplicated by platform name)
+  const selectedPlatforms = Array.from(
+    new Set(
+      accounts
+        .filter(a => selectedAccounts.includes(a.id))
+        .map(a => a.platform.toLowerCase())
+    )
+  );
 
   const activeLimits = selectedPlatforms
     .filter(p => p in PLATFORM_CHAR_LIMITS)

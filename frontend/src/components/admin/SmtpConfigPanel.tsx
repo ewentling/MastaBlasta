@@ -289,7 +289,7 @@ export function SmtpConfigPanel() {
           </label>
         </div>
         <p className="text-xs text-slate-500 -mt-2">
-          Use port 465 with TLS disabled for implicit SSL, or port 587 with STARTTLS enabled.
+          Use port 587 with STARTTLS enabled (recommended). Port 465 with implicit SSL is also supported when STARTTLS is disabled.
         </p>
 
         {/* Save button */}
@@ -311,12 +311,12 @@ export function SmtpConfigPanel() {
           <p className="text-slate-400 mb-2 font-sans font-semibold text-xs uppercase tracking-wide">Environment Variables</p>
           {[
             ['SMTP_HOST', 'SMTP server hostname'],
-            ['SMTP_PORT', '587 (STARTTLS) or 465 (SSL)'],
+            ['SMTP_PORT', '587 for STARTTLS (recommended), 465 for implicit SSL'],
             ['SMTP_USER', 'Login username (usually your email)'],
             ['SMTP_PASSWORD', 'App password or account password'],
             ['SMTP_FROM_EMAIL', 'Sender address shown to recipients'],
             ['SMTP_FROM_NAME', 'Sender display name (optional)'],
-            ['SMTP_USE_TLS', '"true" to use STARTTLS, "false" for plain/SSL'],
+            ['SMTP_USE_TLS', '"true" for STARTTLS on port 587, "false" for implicit SSL on port 465'],
           ].map(([key, desc]) => (
             <div key={key} className="flex gap-2">
               <span className="text-emerald-400">{key}</span>

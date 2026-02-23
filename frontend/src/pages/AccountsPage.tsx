@@ -14,10 +14,14 @@ export default function AccountsPage() {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
 
-  const copyUsername = (accountId: string, username: string) => {
-    navigator.clipboard.writeText(`@${username}`);
-    setCopiedAccountId(accountId);
-    setTimeout(() => setCopiedAccountId(null), 2000);
+  const copyUsername = async (accountId: string, username: string) => {
+    try {
+      await navigator.clipboard.writeText(`@${username}`);
+      setCopiedAccountId(accountId);
+      setTimeout(() => setCopiedAccountId(null), 2000);
+    } catch (error) {
+      console.error('Failed to copy username to clipboard:', error);
+    }
   };
 
   const { data: accountsData, isLoading } = useQuery({

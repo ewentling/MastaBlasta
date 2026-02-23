@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, Copy, RefreshCw, Wand2, Languages, Hash, AlertCircle, Trash2, Send } from 'lucide-react';
 import { useAI } from '../contexts/AIContext';
+import { DRAFT_STORAGE_KEY } from '../utils/constants';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
 
@@ -187,12 +188,11 @@ export default function ChatbotPage() {
   const useInPost = (text: string) => {
     try {
       const draft = { content: text, timestamp: Date.now() };
-      localStorage.setItem('post_draft', JSON.stringify(draft));
-      navigate('/post');
+      localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
     } catch {
-      // If localStorage is unavailable, navigate anyway — user can paste content manually
-      navigate('/post');
+      // localStorage unavailable — navigate anyway; user can paste content manually
     }
+    navigate('/post');
   };
 
   const clearHistory = () => {

@@ -1755,24 +1755,43 @@ def update_smtp_config():
         if missing:
             return jsonify({'error': 'Missing required fields', 'missing': missing}), 400
 
+        # Validate port is an integer in the allowable TCP range
+        try:
+            port_int = int(str(data.get('port', '587')).strip())
+            if not (1 <= port_int <= 65535):
+                raise ValueError("out of range")
+        except ValueError:
+            return jsonify({'error': 'port must be an integer between 1 and 65535'}), 400
+
         env_map = {
             'SMTP_HOST': _sanitize_env_value(str(data.get('host', ''))),
-            'SMTP_PORT': _sanitize_env_value(str(data.get('port', '587'))),
+            'SMTP_PORT': str(port_int),
             'SMTP_USER': _sanitize_env_value(str(data.get('user', ''))),
             'SMTP_FROM_EMAIL': _sanitize_env_value(str(data.get('from_email', ''))),
             'SMTP_FROM_NAME': _sanitize_env_value(str(data.get('from_name', ''))),
-            'SMTP_USE_TLS': _sanitize_env_value('true' if data.get('use_tls', True) else 'false'),
+            'SMTP_USE_TLS': 'true' if data.get('use_tls', True) else 'false',
         }
         # Only update password if a new value is provided
         new_password = str(data.get('password', '')).strip()
         if new_password:
             env_map['SMTP_PASSWORD'] = _sanitize_env_value(new_password)
 
-        # Apply to running process immediately
-        for key, value in env_map.items():
+        # Build raw (unquoted) values for os.environ — quoting is only for .env
+        # file syntax; if written into os.environ the shell-quotes would be
+        # included literally and break SMTP auth.
+        raw_env = {}
+        for key, sanitized in env_map.items():
+            raw = sanitized
+            # Strip surrounding double-quotes added by _sanitize_env_value
+            if len(raw) >= 2 and raw.startswith('"') and raw.endswith('"'):
+                raw = raw[1:-1].replace('\\"', '"').replace('\\\\', '\\')
+            raw_env[key] = raw
+
+        # Apply raw values to the running process immediately
+        for key, value in raw_env.items():
             os.environ[key] = value
 
-        # Persist to .env
+        # Persist sanitized (file-safe) values to .env
         env_file_path = os.path.join(os.path.dirname(__file__), '.env')
         try:
             if os.path.exists(env_file_path):
@@ -1851,6 +1870,12 @@ def test_smtp_connection():
                 server.ehlo()
                 server.starttls(context=context)
                 server.login(user, password)
+        elif port == 465:
+            # Implicit SSL — use SMTP_SSL instead of plain SMTP
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(host, port, timeout=10, context=context) as server:
+                server.ehlo()
+                server.login(user, password)
         else:
             with smtplib.SMTP(host, port, timeout=10) as server:
                 server.ehlo()
@@ -1891,11 +1916,14 @@ def _send_smtp_email(to_addresses: list, subject: str, body: str) -> dict:
 
     sender = f"{from_name} <{from_email}>" if from_name else from_email
 
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = subject
-    msg['From'] = sender
-    msg['To'] = ', '.join(to_addresses)
-    msg.attach(MIMEText(body, 'plain'))
+    def _build_msg(recipient: str) -> MIMEMultipart:
+        """Build a per-recipient message so no address leaks to other recipients."""
+        m = MIMEMultipart('alternative')
+        m['Subject'] = subject
+        m['From'] = sender
+        m['To'] = recipient
+        m.attach(MIMEText(body, 'plain'))
+        return m
 
     try:
         if use_tls:
@@ -1904,12 +1932,22 @@ def _send_smtp_email(to_addresses: list, subject: str, body: str) -> dict:
                 server.ehlo()
                 server.starttls(context=context)
                 server.login(user, password)
-                server.sendmail(from_email, to_addresses, msg.as_string())
+                for addr in to_addresses:
+                    server.sendmail(from_email, [addr], _build_msg(addr).as_string())
+        elif port == 465:
+            # Implicit SSL
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(host, port, timeout=30, context=context) as server:
+                server.ehlo()
+                server.login(user, password)
+                for addr in to_addresses:
+                    server.sendmail(from_email, [addr], _build_msg(addr).as_string())
         else:
             with smtplib.SMTP(host, port, timeout=30) as server:
                 server.ehlo()
                 server.login(user, password)
-                server.sendmail(from_email, to_addresses, msg.as_string())
+                for addr in to_addresses:
+                    server.sendmail(from_email, [addr], _build_msg(addr).as_string())
         return {'success': True, 'message': f'Email sent to {len(to_addresses)} recipient(s)'}
     except Exception as e:
         logger.error(f"SMTP send error: {e}", exc_info=True)
@@ -1957,14 +1995,24 @@ def send_email():
             else:
                 addresses = []
 
-            if addresses:
-                result = _send_smtp_email(addresses, subject, body)
-                sent_via_smtp = result['success']
-                recipients_count = len(addresses)
-                if not result['success']:
-                    return jsonify({'error': f"SMTP delivery failed: {result['message']}"}), 500
-            else:
+            if not addresses:
                 return jsonify({'error': 'No recipients found'}), 400
+
+            # Send in chunks of 50 to avoid SMTP header limits and rate-limiting.
+            # _send_smtp_email already sends per-recipient so no addresses leak.
+            CHUNK_SIZE = 50
+            recipients_count = len(addresses)
+            last_error = None
+            for i in range(0, len(addresses), CHUNK_SIZE):
+                chunk = addresses[i:i + CHUNK_SIZE]
+                result = _send_smtp_email(chunk, subject, body)
+                if not result.get('success'):
+                    last_error = result
+                    break
+                sent_via_smtp = True
+
+            if last_error is not None:
+                return jsonify({'error': f"SMTP delivery failed: {last_error.get('message', 'Unknown error')}"}), 500
         else:
             recipients_count = len(user_ids) if user_ids else 1
             logger.info(f"Email send requested by admin {g.current_user['id']} (SMTP not configured)")

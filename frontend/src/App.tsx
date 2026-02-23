@@ -1,4 +1,4 @@
-import { useState, Component, useEffect } from 'react';
+import { useState, Component } from 'react';
 import type { CSSProperties } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
