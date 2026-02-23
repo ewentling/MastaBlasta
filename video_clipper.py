@@ -1,11 +1,11 @@
 """
-Video Clipping Service – "Gemini Clipper" Pipeline
-====================================================
+Video Clipping Service – AI Clipper Pipeline
+=============================================
 Four-step pipeline:
   1. Ingestion   – yt-dlp downloads the full video (anti-bot options).
   2. Transcription – Faster-Whisper runs locally to produce a timestamped
                     transcript (.json with start/end/text per segment).
-  3. Analysis    – Gemini 2.0 Flash reads the transcript and returns
+  3. Analysis    – OpenAI GPT-4o-mini reads the transcript and returns
                     the N most viral moments with precise timestamps.
   4. Extraction  – ffmpeg clips each moment (stream-copy by default for
                     lossless speed; re-encode optional for frame accuracy).
@@ -32,11 +32,11 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────
 
 try:
-    import google.generativeai as genai
-    GEMINI_ENABLED = True
+    import openai
+    OPENAI_ENABLED = True
 except ImportError:
-    GEMINI_ENABLED = False
-    logger.warning("google-generativeai not installed. AI clip analysis disabled.")
+    OPENAI_ENABLED = False
+    logger.warning("openai not installed. AI clip analysis disabled.")
 
 try:
     import yt_dlp
@@ -58,35 +58,35 @@ except ImportError:
 
 class VideoClipperService:
     """
-    Gemini Clipper – full pipeline for identifying and extracting viral clips.
+    AI Clipper – full pipeline for identifying and extracting viral clips.
     """
 
     # Minimum video length before clip analysis makes sense
     MIN_VIDEO_DURATION = 60  # seconds
 
-    # Gemini model – 2.0-flash has a 1M-token context window, ideal for long transcripts
-    GEMINI_MODEL = "gemini-2.0-flash"
+    # OpenAI model – gpt-4o-mini gives strong JSON reasoning at low cost
+    OPENAI_MODEL = "gpt-4o-mini"
 
     # Whisper model size: "base" is fast / low-RAM; switch to "medium" for higher accuracy
     WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "base")
 
     def __init__(self):
-        self.gemini_enabled = GEMINI_ENABLED
+        self.openai_enabled = OPENAI_ENABLED
         self.whisper_enabled = WHISPER_ENABLED
         self.ytdlp_enabled = YT_DLP_ENABLED
 
-        # Initialise Gemini
-        if GEMINI_ENABLED:
-            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        # Initialise OpenAI
+        if OPENAI_ENABLED:
+            api_key = os.getenv("OPENAI_API_KEY")
             if api_key:
-                genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel(self.GEMINI_MODEL)
-                logger.info("✓ Gemini %s video clipper initialised", self.GEMINI_MODEL)
+                self._openai_client = openai.OpenAI(api_key=api_key)
+                logger.info("✓ OpenAI %s video clipper initialised", self.OPENAI_MODEL)
             else:
-                self.gemini_enabled = False
-                logger.warning("GEMINI_API_KEY / GOOGLE_API_KEY not set. AI analysis disabled.")
+                self.openai_enabled = False
+                self._openai_client = None
+                logger.warning("OPENAI_API_KEY not set. AI analysis disabled.")
         else:
-            self.model = None
+            self._openai_client = None
 
         # Initialise Whisper (lazy – only loads the model on first transcription call)
         self._whisper_model = None
@@ -329,16 +329,16 @@ class VideoClipperService:
             return {"success": False, "error": f"Transcription failed: {exc}"}
 
     # ──────────────────────────────────────────────────────────────
-    # Step 3 – Analysis via Gemini
+    # Step 3 – Analysis via OpenAI
     # ──────────────────────────────────────────────────────────────
 
     def _build_transcript_prompt(
         self, segments: List[Dict], video_info: Dict, num_clips: int
     ) -> str:
         """
-        Build the Gemini prompt from the Whisper transcript.
+        Build the OpenAI prompt from the Whisper transcript.
 
-        The prompt embeds the full timestamped transcript so Gemini can reason
+        The prompt embeds the full timestamped transcript so the model can reason
         over exact spoken content rather than metadata guesses.
         """
         transcript_json = json.dumps(segments, ensure_ascii=False)
@@ -388,14 +388,28 @@ class VideoClipperService:
             f"  start, end, reason_for_virality, title, hook, platforms, engagement_score"
         )
 
-    def _call_gemini(self, prompt: str) -> Dict[str, Any]:
-        """Send prompt to Gemini and return parsed JSON clip list."""
-        if not self.gemini_enabled or self.model is None:
-            return {"success": False, "error": "Gemini AI not enabled."}
+    def _call_openai(self, prompt: str) -> Dict[str, Any]:
+        """Send prompt to OpenAI and return parsed JSON clip list."""
+        if not self.openai_enabled or self._openai_client is None:
+            return {"success": False, "error": "OpenAI not enabled."}
         try:
-            response = self.model.generate_content(prompt)
-            raw = response.text
-            logger.debug("Gemini raw response (first 500 chars): %s", raw[:500])
+            response = self._openai_client.chat.completions.create(
+                model=self.OPENAI_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a viral video expert. "
+                            "Return ONLY valid JSON arrays – no markdown, no explanation."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.3,
+                max_tokens=2048,
+            )
+            raw = response.choices[0].message.content or ""
+            logger.debug("OpenAI raw response (first 500 chars): %s", raw[:500])
 
             # Try to extract a JSON array from the response
             json_match = re.search(r"\[.*\]", raw, re.DOTALL)
@@ -408,9 +422,9 @@ class VideoClipperService:
             if isinstance(clips, list):
                 return {"success": True, "clips": clips}
 
-            return {"success": False, "error": "Gemini response did not contain a valid JSON array."}
+            return {"success": False, "error": "OpenAI response did not contain a valid JSON array."}
         except Exception as exc:
-            logger.error("Gemini API error: %s", exc)
+            logger.error("OpenAI API error: %s", exc)
             return {"success": False, "error": f"AI analysis failed: {exc}"}
 
     def _enrich_clips(self, clips: List[Dict], video_info: Dict) -> List[Dict]:
@@ -430,23 +444,23 @@ class VideoClipperService:
 
     def analyze_video(self, video_url: str, num_clips: int = 3) -> Dict[str, Any]:
         """
-        Full Gemini Clipper analysis pipeline:
+        Full AI Clipper analysis pipeline:
           1. Fetch video metadata.
           2. Download the video.
           3. Extract audio + transcribe with Whisper (if available).
-          4. Send transcript (or metadata fallback) to Gemini 1.5 Flash.
+          4. Send transcript (or metadata fallback) to OpenAI GPT-4o-mini.
           5. Return clip suggestions with timestamps.
 
         The source video is deleted after transcription to save storage.
         """
         if not self.ytdlp_enabled:
             return {"success": False, "error": "yt-dlp not installed."}
-        if not self.gemini_enabled:
+        if not self.openai_enabled:
             return {
                 "success": False,
                 "error": (
-                    "Gemini AI not enabled. "
-                    "Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable."
+                    "OpenAI not enabled. "
+                    "Set OPENAI_API_KEY environment variable."
                 ),
             }
 
@@ -471,7 +485,7 @@ class VideoClipperService:
                 }
 
             # ── 2. Download (for transcription) ────────────────────────
-            temp_dir = tempfile.mkdtemp(prefix="gemini_clipper_")
+            temp_dir = tempfile.mkdtemp(prefix="ai_clipper_")
             transcript_segments: Optional[List[Dict]] = None
 
             if WHISPER_ENABLED:
@@ -509,19 +523,19 @@ class VideoClipperService:
             else:
                 logger.info("Whisper not available; using metadata-only analysis.")
 
-            # ── 4. Gemini analysis ─────────────────────────────────────
+            # ── 4. OpenAI analysis ─────────────────────────────────────
             if transcript_segments:
                 prompt = self._build_transcript_prompt(transcript_segments, video_info, num_clips)
-                logger.info("Sending transcript (%d segments) to Gemini…", len(transcript_segments))
+                logger.info("Sending transcript (%d segments) to OpenAI…", len(transcript_segments))
             else:
                 prompt = self._build_metadata_fallback_prompt(video_info, num_clips)
-                logger.info("Sending metadata fallback prompt to Gemini…")
+                logger.info("Sending metadata fallback prompt to OpenAI…")
 
-            gemini_result = self._call_gemini(prompt)
-            if not gemini_result.get("success"):
-                return gemini_result
+            openai_result = self._call_openai(prompt)
+            if not openai_result.get("success"):
+                return openai_result
 
-            clips = self._enrich_clips(gemini_result["clips"], video_info)
+            clips = self._enrich_clips(openai_result["clips"], video_info)
             if not clips:
                 return {
                     "success": False,
@@ -640,7 +654,7 @@ class VideoClipperService:
 
         temp_dir = None
         try:
-            temp_dir = tempfile.mkdtemp(prefix="gemini_clipper_")
+            temp_dir = tempfile.mkdtemp(prefix="ai_clipper_")
 
             # ── Download ──────────────────────────────────────────────
             dl_result = self._download_video(video_url, temp_dir)
@@ -725,7 +739,7 @@ class VideoClipperService:
         reencode: bool = False,
     ) -> Dict[str, Any]:
         """
-        Full end-to-end pipeline: download → transcribe → Gemini analysis → clip extraction.
+        Full end-to-end pipeline: download → transcribe → OpenAI analysis → clip extraction.
 
         Source video is deleted immediately after all clips are extracted.
         Clips are saved to *output_dir* (a new temp dir if not provided).
@@ -741,13 +755,13 @@ class VideoClipperService:
         """
         if not YT_DLP_ENABLED:
             return {"success": False, "error": "yt-dlp not installed."}
-        if not self.gemini_enabled:
-            return {"success": False, "error": "Gemini AI not enabled (check API key)."}
+        if not self.openai_enabled:
+            return {"success": False, "error": "OpenAI not enabled (check OPENAI_API_KEY)."}
 
         work_dir = None
         source_path = None
         try:
-            work_dir = tempfile.mkdtemp(prefix="gemini_full_pipeline_")
+            work_dir = tempfile.mkdtemp(prefix="ai_full_pipeline_")
             if output_dir:
                 os.makedirs(output_dir, exist_ok=True)
             else:
@@ -789,18 +803,18 @@ class VideoClipperService:
             else:
                 logger.info("[Pipeline] Whisper not available; skipping transcription.")
 
-            # ── Step 3: Gemini analysis ───────────────────────────────
-            logger.info("[Pipeline] Step 3: Gemini analysis…")
+            # ── Step 3: OpenAI analysis ───────────────────────────────
+            logger.info("[Pipeline] Step 3: OpenAI analysis…")
             if transcript_segments:
                 prompt = self._build_transcript_prompt(transcript_segments, video_info, num_clips)
             else:
                 prompt = self._build_metadata_fallback_prompt(video_info, num_clips)
 
-            gemini_result = self._call_gemini(prompt)
-            if not gemini_result.get("success"):
-                return gemini_result
+            openai_result = self._call_openai(prompt)
+            if not openai_result.get("success"):
+                return openai_result
 
-            clips = self._enrich_clips(gemini_result["clips"], video_info)
+            clips = self._enrich_clips(openai_result["clips"], video_info)
             if not clips:
                 return {"success": False, "error": "No viral moments identified."}
 
@@ -891,9 +905,9 @@ class VideoClipperService:
     # ──────────────────────────────────────────────────────────────
 
     def generate_clip_metadata(self, clip: Dict[str, Any], platform: str = "instagram") -> Dict[str, Any]:
-        """Generate optimized social media metadata for a clip via Gemini."""
-        if not self.gemini_enabled:
-            return {"success": False, "error": "Gemini AI not enabled."}
+        """Generate optimized social media metadata for a clip via OpenAI."""
+        if not self.openai_enabled or self._openai_client is None:
+            return {"success": False, "error": "OpenAI not enabled."}
         try:
             prompt = (
                 f"Generate optimized social media metadata for this video clip.\n\n"
@@ -905,8 +919,20 @@ class VideoClipperService:
                 f"Return ONLY a JSON object with: caption, hashtags (array), "
                 f"thumbnail_text, best_time, cta, tips (array)."
             )
-            response = self.model.generate_content(prompt)
-            json_match = re.search(r"\{.*\}", response.text, re.DOTALL)
+            response = self._openai_client.chat.completions.create(
+                model=self.OPENAI_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a social media expert. Return ONLY valid JSON – no markdown.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.5,
+                max_tokens=512,
+            )
+            raw = response.choices[0].message.content or ""
+            json_match = re.search(r"\{.*\}", raw, re.DOTALL)
             if json_match:
                 metadata = json.loads(json_match.group())
                 metadata["success"] = True
