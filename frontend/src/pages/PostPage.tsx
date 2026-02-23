@@ -222,7 +222,14 @@ export default function PostPage() {
     );
   };
 
+  const allAccountsSelected = accounts.length > 0 && selectedAccounts.length === accounts.length;
+  const toggleAllAccounts = () => {
+    setSelectedAccounts(allAccountsSelected ? [] : accounts.map(a => a.id));
+  };
+
   const charCount = content.length;
+  const trimmedContent = content.trim();
+  const wordCount = trimmedContent ? trimmedContent.split(/\s+/).length : 0;
 
   // Platform-specific character limits
   const PLATFORM_CHAR_LIMITS: Record<string, number> = {
@@ -401,21 +408,27 @@ export default function PostPage() {
               marginTop: '0.5rem', 
               fontSize: '0.875rem', 
               color: isOverLimit ? '#f56565' : charCount > maxChars * 0.9 ? '#f59e0b' : '#718096',
-              textAlign: 'right',
               display: 'flex',
-              justifyContent: 'flex-end',
+              justifyContent: 'space-between',
               alignItems: 'center',
               gap: '0.5rem',
             }}>
-              {tightestLimit && (
-                <span style={{ fontSize: '0.75rem', color: isOverLimit ? '#f56565' : 'var(--color-textSecondary)' }}>
-                  {tightestLimit.platform} limit:
-                </span>
-              )}
-              <span style={{ fontWeight: isOverLimit ? '700' : '400' }}>
-                {charCount} / {maxChars}
-                {isOverLimit && ` (${charCount - maxChars} over)`}
+              {/* Word count on the left */}
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-textSecondary)' }}>
+                {wordCount} {wordCount === 1 ? 'word' : 'words'}
               </span>
+              {/* Char count on the right */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {tightestLimit && (
+                  <span style={{ fontSize: '0.75rem', color: isOverLimit ? '#f56565' : 'var(--color-textSecondary)' }}>
+                    {tightestLimit.platform} limit:
+                  </span>
+                )}
+                <span style={{ fontWeight: isOverLimit ? '700' : '400' }}>
+                  {charCount} / {maxChars}
+                  {isOverLimit && ` (${charCount - maxChars} over)`}
+                </span>
+              </div>
             </div>
             {/* Per-platform limit breakdown (shown when multiple platforms selected) */}
             {activeLimits.length > 1 && (
@@ -787,8 +800,20 @@ export default function PostPage() {
         <div className="card">
           <div className="card-header">
             <h3>Select Accounts</h3>
-            <div style={{ fontSize: '0.875rem', color: '#718096' }}>
-              {selectedAccounts.length} selected
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '0.875rem', color: '#718096' }}>
+                {selectedAccounts.length} / {accounts.length} selected
+              </span>
+              {accounts.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-small"
+                  onClick={toggleAllAccounts}
+                  style={{ fontSize: '0.8rem', padding: '0.25rem 0.75rem' }}
+                >
+                  {allAccountsSelected ? 'Deselect All' : 'Select All'}
+                </button>
+              )}
             </div>
           </div>
 

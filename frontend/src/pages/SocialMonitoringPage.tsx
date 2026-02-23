@@ -4,6 +4,20 @@ import { socialMonitorsApi } from '../api';
 import { Plus, Trash2, Eye, RefreshCw, TrendingUp, MessageCircle, ThumbsUp, Share2, MessageSquare, BarChart3, Power, PowerOff } from 'lucide-react';
 import axios from 'axios';
 
+function MonitorSkeleton() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', padding: '1rem' }}>
+      {[1, 2, 3].map(i => (
+        <div key={i} style={{ padding: '1.25rem', border: '1px solid var(--color-borderLight)', borderRadius: '10px', background: 'var(--color-bgSecondary)' }}>
+          <div className="skeleton skeleton-text" style={{ width: '40%', marginBottom: '0.75rem' }} />
+          <div className="skeleton skeleton-text" style={{ width: '70%', marginBottom: '0.5rem' }} />
+          <div className="skeleton skeleton-text" style={{ width: '30%' }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function SocialMonitoringPage() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
@@ -151,11 +165,26 @@ export default function SocialMonitoringPage() {
     }
   };
 
+  // Sum unread result counts across all active monitors
+  const totalUnreadResults = monitors.reduce((sum: number, m: any) => sum + (m.unread_count ?? 0), 0);
+
   return (
     <div>
       <div className="page-header">
-        <h2>Social Listening & Monitoring</h2>
-        <p>Track brand mentions, keywords, automated responses, and interactions</p>
+        <div>
+          <h2>Social Listening & Monitoring</h2>
+          <p>Track brand mentions, keywords, automated responses, and interactions</p>
+        </div>
+        {totalUnreadResults > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            padding: '0.5rem 1rem', borderRadius: '999px',
+            background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)',
+            fontSize: '0.875rem', color: '#ef4444', fontWeight: '600',
+          }}>
+            🔔 {totalUnreadResults} new {totalUnreadResults === 1 ? 'result' : 'results'}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -271,7 +300,7 @@ export default function SocialMonitoringPage() {
           </div>
 
         {isLoading ? (
-          <div className="loading">Loading monitors...</div>
+          <MonitorSkeleton />
         ) : monitors.length === 0 ? (
           <div className="empty-state">
             <TrendingUp size={48} />

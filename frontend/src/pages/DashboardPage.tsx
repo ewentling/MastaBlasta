@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { postsApi, accountsApi } from '../api';
+import { postsApi, accountsApi, api } from '../api';
 import { BarChart3, Users, Send, Calendar, Plus, Sparkles, TrendingUp, Zap, Activity, ChevronRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { formatDateTime } from '../utils/timezone';
@@ -28,6 +28,12 @@ export default function DashboardPage() {
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => accountsApi.getAll(),
+  });
+
+  const { data: analyticsData } = useQuery({
+    queryKey: ['analytics-dashboard', 30],
+    queryFn: () => api.get('/analytics/dashboard?days=30').then(r => r.data),
+    staleTime: 5 * 60_000,
   });
 
   const posts = postsData?.posts || [];
@@ -201,6 +207,32 @@ export default function DashboardPage() {
           label="Total Posts"
           gradient="linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
         />
+
+        {/* Engagement Rate card from analytics */}
+        {analyticsData?.summary && (
+          <article className="card" role="region" aria-label="Engagement Rate">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{
+                background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+                padding: '1rem',
+                borderRadius: '1rem',
+                color: 'white',
+                boxShadow: '0 4px 12px rgba(236,72,153,0.4)',
+                transition: 'all 0.3s var(--ease-smooth)',
+              }}>
+                <TrendingUp size={28} />
+              </div>
+              <div>
+                <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'var(--color-textPrimary)', letterSpacing: '-0.03em', lineHeight: '1' }}>
+                  {analyticsData.summary.avg_engagement_rate}%
+                </div>
+                <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.9375rem', fontWeight: '500', marginTop: '0.25rem' }}>
+                  Avg Engagement (30d)
+                </div>
+              </div>
+            </div>
+          </article>
+        )}
 
         {/* Recent Activity - Takes 2 columns */}
         <section className="card bento-item-2x" aria-labelledby="recent-activity-heading">
