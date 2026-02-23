@@ -7541,7 +7541,7 @@ def refresh_monitor(monitor_id):
     })
 
 
-# ==================== VIDEO CLIPPING WITH GEMINI AI ====================
+# ==================== VIDEO CLIPPING WITH OPENAI ====================
 
 from video_clipper import video_clipper  # noqa: E402
 
@@ -7552,11 +7552,11 @@ def clips_status():
     return jsonify({
         'success': True,
         'enabled': video_clipper.is_enabled(),
-        'service': 'Video Clipping with Gemini AI',
+        'service': 'Video Clipping with OpenAI',
         'features': [
             'Video URL analysis',
             'Automatic viral clip detection',
-            'Gemini AI-powered insights',
+            'OpenAI-powered insights',
             'Multi-platform optimization',
             'Metadata generation'
         ]
@@ -7742,10 +7742,10 @@ def clips_create_clip():
 @auth_required
 def clips_analyze_and_create():
     """
-    Full Gemini Clipper end-to-end pipeline:
+    Full AI Clipper end-to-end pipeline:
       1. Download the video (yt-dlp with anti-bot options)
       2. Transcribe with Faster-Whisper (local, if installed)
-      3. Gemini 1.5 Flash identifies the N most viral moments
+      3. OpenAI GPT-4o-mini identifies the N most viral moments
       4. ffmpeg extracts each moment (stream-copy by default)
       5. Source video deleted immediately after clips are created
 
