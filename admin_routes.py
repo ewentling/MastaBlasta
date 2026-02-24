@@ -5,16 +5,18 @@ from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone, timedelta
 import logging
 import re
+import shutil
 import stat
 import os
 from uuid import uuid4
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 
 from app_extensions import auth_required, DB_ENABLED
 from subscription_control import admin_only, get_user_subscription
 from subscription_config import TierLimits, SubscriptionHelper
 from models import User, Subscription, SubscriptionTier, SubscriptionStatus, UsageMetrics, UserRole
 from security_enhancements import SecurityLogger
+from media_utils import MEDIA_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -1444,7 +1446,7 @@ def check_database_health():
         
         with db_session_scope() as db_session:
             # Simple query to test connection
-            result = db_session.execute('SELECT 1').scalar()
+            result = db_session.execute(text('SELECT 1')).scalar()
             
         response_time = (time.time() - start_time) * 1000  # Convert to ms
         
@@ -1469,11 +1471,8 @@ def check_database_health():
 def check_storage_health():
     """Check storage usage"""
     try:
-        import shutil
-        import os
-        
         # Check media directory
-        media_dir = os.getenv('MEDIA_DIR', '/home/runner/work/MastaBlasta/MastaBlasta/media')
+        media_dir = str(MEDIA_DIR)
         
         if os.path.exists(media_dir):
             total, used, free = shutil.disk_usage(media_dir)
@@ -1520,7 +1519,7 @@ def get_system_health():
             if DB_ENABLED:
                 from database import db_session_scope
                 with db_session_scope() as db_session:
-                    db_session.execute('SELECT 1')
+                    db_session.execute(text('SELECT 1'))
                 health_status['database'] = {'status': 'healthy'}
             else:
                 health_status['database'] = {'status': 'disabled'}
@@ -1529,9 +1528,7 @@ def get_system_health():
         
         # Check storage
         try:
-            import shutil
-            import os
-            media_dir = os.getenv('MEDIA_DIR', '/home/runner/work/MastaBlasta/MastaBlasta/media')
+            media_dir = str(MEDIA_DIR)
             if os.path.exists(media_dir):
                 total, used, free = shutil.disk_usage(media_dir)
                 usage_percent = round(used / total * 100, 1)
