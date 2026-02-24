@@ -158,7 +158,7 @@ See [IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md) for complete details.
 - **Auto-Reconnection Service**: Automatic token refresh before expiration (2-hour proactive buffer)
 - **Platform Config Discovery**: Smart platform detection with feature lists, requirements, and setup guides
 
-#### 11. ✂️ Video Clipping with Gemini AI (NEW)
+#### 11. ✂️ Video Clipping with OpenAI (NEW)
 - **Intelligent Video Analysis**: Automatically analyze YouTube, Vimeo, and other video URLs
 - **Viral Clip Detection**: AI-powered identification of the most engaging moments (1-10 clips)
 - **Engagement Scoring**: Each clip rated 0-100 for viral potential
@@ -469,7 +469,7 @@ For real social media monitoring:
 - **REDDIT_CLIENT_ID** + **REDDIT_CLIENT_SECRET** - Reddit API
 
 #### Advanced Features (Optional)
-- **GOOGLE_API_KEY** - Google Gemini as OpenAI alternative
+- **OPENAI_API_KEY** - OpenAI API key for AI features and video clipping
 - **REDIS_URL** - Redis for production rate limiting (recommended)
 
 ### Analytics in Production
@@ -506,22 +506,16 @@ Social listening requires external API access:
 
 ### Video Clipper in Production
 
-The Video Clipper feature uses Google Gemini AI and yt-dlp:
+The Video Clipper feature uses OpenAI GPT-4o-mini and yt-dlp:
 
 **Requirements:**
-1. **Google Gemini API Key**: Set `GEMINI_API_KEY` or `GOOGLE_API_KEY` in environment
-2. **Python Package**: `google-generativeai` (already in requirements.txt)
-3. **yt-dlp**: For video information extraction (already in requirements.txt)
+1. **OpenAI API Key**: Set `OPENAI_API_KEY` in environment
+2. **yt-dlp**: For video information extraction (already in requirements.txt)
 
 **Setup:**
 ```bash
-# Get API key from Google AI Studio
-# Visit: https://makersuite.google.com/app/apikey
-
 # Add to .env
-GEMINI_API_KEY=your-gemini-api-key
-# OR
-GOOGLE_API_KEY=your-gemini-api-key
+OPENAI_API_KEY=your-openai-api-key
 ```
 
 **Features:**
@@ -626,7 +620,7 @@ Extract viral clips from videos using AI:
 ![Video Clipper with URL](https://github.com/user-attachments/assets/20e18c4b-3118-4272-9fd8-bab65460552d)
 
 Features:
-- Gemini AI-powered video analysis
+- OpenAI-powered video analysis
 - Engagement scoring (0-100) for each clip
 - Automatic metadata generation (captions, hashtags, posting tips)
 - Download instructions with FFmpeg commands
@@ -1165,7 +1159,7 @@ Each social media platform has its own adapter class that:
 Set environment variables:
 - `PORT`: API port (default: 33766)
 - `OPENAI_API_KEY`: OpenAI API key for AI features (optional, required for AI functionality)
-- `GEMINI_API_KEY` or `GOOGLE_API_KEY`: Google Gemini API key for video clipping (optional, required for video clipping feature)
+- `OPENAI_API_KEY`: OpenAI API key for AI features and video clipping (optional, required for AI functionality and video clipping)
 - `GOOGLE_CLIENT_ID`: Google OAuth Client ID for One Tap authentication (required for user login)
 
 ### Google One Tap Authentication Setup
@@ -1231,20 +1225,16 @@ GET /api/ai/status
 
 ### Video Clipping Setup
 
-To enable video clipping with Gemini AI:
+To enable video clipping with OpenAI:
 
 1. Install video clipping dependencies:
 ```bash
-pip install google-generativeai yt-dlp
+pip install yt-dlp
 ```
 
-2. Get a Google Gemini API key from [Google AI Studio](https://makersuite.google.com/app/apikey)
-
-3. Set your Gemini API key:
+2. Set your OpenAI API key (reuses `OPENAI_API_KEY` already needed for other AI features):
 ```bash
-export GEMINI_API_KEY=your-gemini-api-key-here
-# or
-export GOOGLE_API_KEY=your-gemini-api-key-here
+export OPENAI_API_KEY=your-openai-api-key-here
 ```
 
 4. Verify video clipping is enabled:
@@ -2323,7 +2313,7 @@ Response:
 - **Pinterest**: Video Pins (2:3, 4-900s)
 - **Twitter**: Videos (16:9, 0.5-140s)
 
-### Video Clipping with Gemini AI
+### Video Clipping with OpenAI
 
 **Check Service Status**
 ```bash
@@ -2335,11 +2325,11 @@ Response:
 {
   "success": true,
   "enabled": true,
-  "service": "Video Clipping with Gemini AI",
+  "service": "Video Clipping with OpenAI",
   "features": [
     "Video URL analysis",
     "Automatic viral clip detection",
-    "Gemini AI-powered insights",
+    "OpenAI-powered insights",
     "Multi-platform optimization",
     "Metadata generation"
   ]

@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { Mail, Send, Eye, Loader, CheckCircle } from 'lucide-react';
+import { api } from '../../api';
 
 interface EmailTemplate {
   id: string;
@@ -11,7 +12,6 @@ interface EmailTemplate {
 }
 
 export function EmailComposer() {
-  const queryClient = useQueryClient();
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [recipientType, setRecipientType] = useState<'single' | 'all'>('single');
   const [userEmail, setUserEmail] = useState('');
@@ -19,15 +19,12 @@ export function EmailComposer() {
   const [body, setBody] = useState('');
   const [showPreview, setShowPreview] = useState(false);
 
-  // Check SMTP configuration status (uses cached result from SmtpConfigPanel if already fetched)
+  // Check SMTP configuration status (shares cache with SmtpConfigPanel)
   const { data: smtpConfig } = useQuery({
     queryKey: ['admin-smtp-config'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/email/smtp-config', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` },
-      });
-      if (!response.ok) throw new Error('Failed to fetch SMTP config');
-      return response.json();
+      const r = await api.get('/admin/email/smtp-config');
+      return r.data;
     },
   });
   const smtpConfigured = smtpConfig?.configured ?? false;
@@ -36,29 +33,16 @@ export function EmailComposer() {
   const { data: templatesData } = useQuery({
     queryKey: ['email-templates'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/email/templates', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-      });
-      if (!response.ok) throw new Error('Failed to fetch templates');
-      return response.json();
+      const r = await api.get('/admin/email/templates');
+      return r.data;
     },
   });
 
   // Send email mutation
   const sendEmailMutation = useMutation({
     mutationFn: async (emailData: any) => {
-      const response = await fetch('/api/admin/email/send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-        },
-        body: JSON.stringify(emailData),
-      });
-      if (!response.ok) throw new Error('Failed to send email');
-      return response.json();
+      const r = await api.post('/admin/email/send', emailData);
+      return r.data;
     },
     onSuccess: () => {
       alert('Email queued for delivery!');
@@ -73,23 +57,15 @@ export function EmailComposer() {
   // Preview email mutation
   const previewMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/admin/email/preview', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+      const r = await api.post('/admin/email/preview', {
+        template_id: selectedTemplate,
+        subject,
+        body,
+        variables: {
+          user_name: 'Preview User',
         },
-        body: JSON.stringify({
-          template_id: selectedTemplate,
-          subject,
-          body,
-          variables: {
-            user_name: 'Preview User',
-          },
-        }),
       });
-      if (!response.ok) throw new Error('Failed to preview email');
-      return response.json();
+      return r.data;
     },
   });
 
@@ -291,7 +267,7 @@ export function EmailComposer() {
         ) : (
           <div className="p-3 rounded-lg" style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
             <p className="text-sm text-amber-300">
-              <strong>Note:</strong> Configure your SMTP server above to enable email delivery.
+              <strong>Note:</strong> SMTP is not configured. Use the <em>Configure SMTP</em> button at the top of this page to set up email delivery.
               Currently logs email intent for testing.
             </p>
           </div>
