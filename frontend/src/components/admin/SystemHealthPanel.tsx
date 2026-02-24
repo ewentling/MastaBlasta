@@ -72,6 +72,16 @@ export function SystemHealthPanel() {
           <p className="text-sm text-slate-400 capitalize">
             {data?.database?.status || 'Unknown'}
           </p>
+          {data?.database?.response_time_ms && (
+            <p className="text-xs text-slate-500 mt-1">
+              Response: {data.database.response_time_ms} ms
+            </p>
+          )}
+          {data?.database?.error && (
+            <p className="text-xs text-red-400 mt-1 break-words" title={data.database.error}>
+              Error: {data.database.error}
+            </p>
+          )}
         </div>
 
         {/* Storage Health */}
@@ -84,10 +94,20 @@ export function SystemHealthPanel() {
             {getStatusIcon(data?.storage?.status)}
           </div>
           <p className="text-sm text-slate-400">
-            {data?.storage?.usage_percent
+            {data?.storage?.usage_percent != null
               ? `${data.storage.usage_percent}% Used`
-              : 'Unknown'}
+              : data?.storage?.message || data?.storage?.status || 'Unknown'}
           </p>
+          {data?.storage?.used_gb != null && data?.storage?.total_gb != null && data?.storage?.free_gb != null && (
+            <p className="text-xs text-slate-500 mt-1">
+              {data.storage.used_gb} GB used of {data.storage.total_gb} GB ({data.storage.free_gb} GB free)
+            </p>
+          )}
+          {data?.storage?.error && (
+            <p className="text-xs text-red-400 mt-1 break-words" title={data.storage.error}>
+              Error: {data.storage.error}
+            </p>
+          )}
         </div>
 
         {/* API Health */}
