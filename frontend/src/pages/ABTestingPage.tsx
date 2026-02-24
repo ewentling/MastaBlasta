@@ -206,12 +206,12 @@ export default function ABTestingPage() {
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
           {selectedForCompare.length >= 2 && (
-            <button onClick={compareVersions} className="btn-primary">
+            <button onClick={compareVersions} className="btn btn-primary">
               <TrendingUp size={16} />
               Compare ({selectedForCompare.length})
             </button>
           )}
-          <button onClick={() => setShowCreateModal(true)} className="btn-primary">
+          <button onClick={() => setShowCreateModal(true)} className="btn btn-primary">
             <Plus size={16} />
             Create Version
           </button>
@@ -349,7 +349,7 @@ export default function ABTestingPage() {
               <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '24px' }}>
                 Example: Version A uses an emotional hook; Version B uses a data-driven headline.
               </p>
-              <button onClick={() => setShowCreateModal(true)} className="btn-primary">
+              <button onClick={() => setShowCreateModal(true)} className="btn btn-primary">
                 Create First Version
               </button>
             </div>
@@ -420,18 +420,18 @@ export default function ABTestingPage() {
 
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       {version.status === 'draft' && (
-                        <button onClick={() => publishVersion(version.id)} className="btn-secondary" style={{ fontSize: '12px' }}>
+                        <button onClick={() => publishVersion(version.id)} className="btn btn-secondary" style={{ fontSize: '12px' }}>
                           Publish for Testing
                         </button>
                       )}
                       {version.status === 'testing' && !version.results?.winner && (
-                        <button onClick={() => markAsWinner(version.id)} className="btn-primary" style={{ fontSize: '12px' }}>
+                        <button onClick={() => markAsWinner(version.id)} className="btn btn-primary" style={{ fontSize: '12px' }}>
                           <Award size={13} /> Mark Winner
                         </button>
                       )}
                       <button
                         onClick={() => toggleCompareSelection(version.id)}
-                        className={selectedForCompare.includes(version.id) ? 'btn-primary' : 'btn-secondary'}
+                        className={selectedForCompare.includes(version.id) ? 'btn btn-primary' : 'btn btn-secondary'}
                         style={{ fontSize: '12px' }}
                       >
                         {selectedForCompare.includes(version.id) ? '✓ Selected' : 'Select'}
@@ -532,8 +532,8 @@ export default function ABTestingPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button onClick={() => setShowCreateModal(false)} className="btn-secondary">Cancel</button>
-              <button onClick={createVersion} className="btn-primary" disabled={!newVersion.version_name || !newVersion.content}>
+              <button onClick={() => setShowCreateModal(false)} className="btn btn-secondary">Cancel</button>
+              <button onClick={createVersion} className="btn btn-primary" disabled={!newVersion.version_name || !newVersion.content}>
                 Create Version
               </button>
             </div>

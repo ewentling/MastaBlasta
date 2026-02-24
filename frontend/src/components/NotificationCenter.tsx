@@ -91,22 +91,23 @@ export default function NotificationCenter() {
   return (
     <div style={{ position: 'relative' }}>
       <button
-        className="btn btn-secondary"
+        className="settings-button"
         onClick={() => setIsOpen(!isOpen)}
-        style={{ position: 'relative', padding: '0.5rem' }}
+        style={{ position: 'relative' }}
       >
         <Bell size={20} />
+        <span>Notifications</span>
         {unreadCount > 0 && (
           <span style={{
             position: 'absolute',
-            top: -2,
-            right: -2,
+            top: 4,
+            left: 22,
             background: '#f56565',
             color: 'white',
             borderRadius: '50%',
-            width: '18px',
-            height: '18px',
-            fontSize: '0.75rem',
+            width: '16px',
+            height: '16px',
+            fontSize: '0.7rem',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -132,9 +133,9 @@ export default function NotificationCenter() {
           />
           <div style={{
             position: 'absolute',
-            top: '100%',
-            right: 0,
-            marginTop: '0.5rem',
+            bottom: '100%',
+            left: 0,
+            marginBottom: '0.5rem',
             width: '360px',
             maxHeight: '480px',
             overflowY: 'auto',

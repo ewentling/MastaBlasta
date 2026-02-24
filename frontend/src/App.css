@@ -69,6 +69,14 @@
   --color-grid-line: rgba(255, 255, 255, 0.04);
   --color-grid-glow: rgba(0, 229, 255, 0.2);
   --color-divider: rgba(255, 255, 255, 0.08);
+
+  /* Semantic aliases used across pages */
+  --color-borderLight: rgba(0, 229, 255, 0.2);
+
+  /* Legacy variable aliases for older page code */
+  --text-color: var(--color-textPrimary);
+  --border-color: var(--color-borderLight);
+  --card-bg: var(--glass-bg);
 }
 
 /* Smooth entrance animations */
@@ -556,6 +564,126 @@
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   border-radius: 0.625rem;
+}
+
+/* Class aliases for pages using legacy naming conventions */
+.primary-button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-btnPrimaryBg);
+  color: white;
+  box-shadow: var(--color-btnPrimaryShadow);
+}
+
+.primary-button:hover {
+  background: var(--color-btnPrimaryHover);
+  transform: translateY(-2px);
+  box-shadow: var(--color-btnPrimaryShadowHover);
+}
+
+.primary-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.2), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.primary-button:hover::before {
+  opacity: 1;
+}
+
+.primary-button:active {
+  transform: translateY(0);
+}
+
+.secondary-button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-btnSecondaryBg);
+  color: var(--color-textPrimary);
+  border: 1px solid var(--color-btnSecondaryBorder);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.secondary-button:hover {
+  background: var(--color-btnSecondaryHover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.secondary-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.2), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.secondary-button:hover::before {
+  opacity: 1;
+}
+
+.secondary-button:active {
+  transform: translateY(0);
+}
+
+/* Alias for modal close button patterns */
+.close-btn,
+.modal-close {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  font-size: 1.25rem;
+  cursor: pointer;
+  color: var(--color-textSecondary);
+  padding: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover,
+.modal-close:hover {
+  background: var(--glass-bg-hover);
+  color: var(--color-textPrimary);
+  transform: rotate(90deg);
 }
 
 /* Form Elements with glassmorphism */

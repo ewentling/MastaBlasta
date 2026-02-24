@@ -167,20 +167,20 @@ export default function ContentCalendarPage() {
           <p>Plan and schedule your social media posts</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn-secondary" onClick={() => navigate('/scheduled')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button className="btn btn-secondary" onClick={() => navigate('/scheduled')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <List size={18} />
             List View
           </button>
-          <button className="btn-primary" onClick={() => navigate('/scheduled')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button className="btn btn-primary" onClick={() => navigate('/scheduled')} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Plus size={18} />
             Schedule Post
           </button>
-          <button className="btn-primary" onClick={() => setShowGoogleSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <button className="btn btn-primary" onClick={() => setShowGoogleSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <Settings size={18} />
             Google Calendar
           </button>
           {googleSettings.enabled && (
-            <button className="btn-secondary" onClick={syncWithGoogleCalendar} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <button className="btn btn-secondary" onClick={syncWithGoogleCalendar} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <CheckCircle size={18} />
               Sync with Google
             </button>
@@ -266,7 +266,7 @@ export default function ContentCalendarPage() {
               </div>
 
               <button 
-                className="btn-primary" 
+                className="btn btn-primary" 
                 onClick={handleGoogleCalendarAuth}
                 style={{ width: '100%' }}
               >
