@@ -209,7 +209,7 @@ export default function ContentLibraryPage() {
           </h1>
           <p>Manage reusable media and post templates</p>
         </div>
-        <button className="btn-primary" onClick={() => setShowGoogleSettings(true)}>
+        <button className="btn btn-primary" onClick={() => setShowGoogleSettings(true)}>
           <Settings size={20} />
           Google Drive Settings
         </button>
@@ -325,10 +325,10 @@ export default function ContentLibraryPage() {
             <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <FolderOpen size={20} />
               <span>Current Folder: <strong>{googleSettings.selectedFolderName}</strong></span>
-              <button className="btn-secondary" onClick={() => setShowFolderPicker(true)} style={{ marginLeft: 'auto' }}>
+              <button className="btn btn-secondary" onClick={() => setShowFolderPicker(true)} style={{ marginLeft: 'auto' }}>
                 Change Folder
               </button>
-              <button className="btn-secondary" onClick={loadDriveFiles}>
+              <button className="btn btn-secondary" onClick={loadDriveFiles}>
                 Refresh
               </button>
             </div>
@@ -347,7 +347,7 @@ export default function ContentLibraryPage() {
               <p style={{ color: 'var(--text-secondary)', marginBottom: '20px' }}>
                 Store and access your media files directly from Google Drive
               </p>
-              <button className="btn-primary" onClick={() => setShowGoogleSettings(true)}>
+              <button className="btn btn-primary" onClick={() => setShowGoogleSettings(true)}>
                 <Settings size={20} />
                 Setup Google Drive
               </button>
@@ -362,7 +362,7 @@ export default function ContentLibraryPage() {
               borderRadius: '12px'
             }}>
               <p>No files found in the selected folder</p>
-              <button className="btn-secondary" onClick={() => setShowFolderPicker(true)} style={{ marginTop: '20px' }}>
+              <button className="btn btn-secondary" onClick={() => setShowFolderPicker(true)} style={{ marginTop: '20px' }}>
                 Select Different Folder
               </button>
             </div>
@@ -433,7 +433,7 @@ export default function ContentLibraryPage() {
       {activeTab === 'templates' && (
         <div>
           <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-            <button className="btn-primary" onClick={() => setShowTemplateModal(true)}>
+            <button className="btn btn-primary" onClick={() => setShowTemplateModal(true)}>
               <Plus size={20} />
               New Template
             </button>
@@ -452,7 +452,7 @@ export default function ContentLibraryPage() {
               <p style={{ color: 'var(--text-secondary)', marginBottom: '20px' }}>
                 Create reusable post templates with placeholders
               </p>
-              <button className="btn-primary" onClick={() => setShowTemplateModal(true)}>
+              <button className="btn btn-primary" onClick={() => setShowTemplateModal(true)}>
                 <Plus size={20} />
                 Create Your First Template
               </button>
@@ -572,7 +572,7 @@ export default function ContentLibraryPage() {
               </div>
 
               <button 
-                className="btn-primary" 
+                className="btn btn-primary" 
                 onClick={handleGoogleDriveAuth}
                 style={{ width: '100%', marginBottom: '10px' }}
               >
@@ -581,7 +581,7 @@ export default function ContentLibraryPage() {
 
               {googleSettings.enabled && !googleSettings.selectedFolderId && (
                 <button 
-                  className="btn-secondary" 
+                  className="btn btn-secondary" 
                   onClick={() => {
                     setShowGoogleSettings(false);
                     setShowFolderPicker(true);
@@ -635,7 +635,7 @@ export default function ContentLibraryPage() {
                 />
               </div>
               <button
-                className="btn-primary"
+                className="btn btn-primary"
                 onClick={(e) => {
                   const input = e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement;
                   handleSelectFolder(input?.value || 'root', input?.value || 'Root');
@@ -732,7 +732,7 @@ export default function ContentLibraryPage() {
               </div>
 
               <button
-                className="btn-primary"
+                className="btn btn-primary"
                 onClick={handleCreateTemplate}
                 disabled={!newTemplate.name || !newTemplate.content || newTemplate.platforms.length === 0}
                 style={{ width: '100%' }}
