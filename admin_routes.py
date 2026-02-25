@@ -5,10 +5,12 @@ from flask import Blueprint, request, jsonify, g
 from datetime import datetime, timezone, timedelta
 import logging
 import re
+import shutil
 import stat
 import os
+from pathlib import Path
 from uuid import uuid4
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 
 from app_extensions import auth_required, DB_ENABLED
 from subscription_control import admin_only, get_user_subscription
@@ -17,6 +19,36 @@ from models import User, Subscription, SubscriptionTier, SubscriptionStatus, Usa
 from security_enhancements import SecurityLogger
 
 logger = logging.getLogger(__name__)
+
+# Lazy media directory resolver to avoid importing media_utils (and its side
+# effects / optional dependencies) at module import time.
+_MEDIA_DIR = None
+
+
+def _get_media_dir():
+    """
+    Resolve the media directory lazily.
+
+    Tries to import MEDIA_DIR from media_utils when first needed. If
+    media_utils is not available (e.g., in a partially-installed setup),
+    falls back to a local "media" directory under the current working
+    directory or a path specified via the MEDIA_DIR environment variable.
+    """
+    global _MEDIA_DIR
+    if _MEDIA_DIR is not None:
+        return _MEDIA_DIR
+
+    try:
+        # Import here to avoid pulling in media_utils (and its side effects)
+        # at module import time.
+        from media_utils import MEDIA_DIR as _real_media_dir  # type: ignore[import]
+    except ImportError:
+        base_path = os.getenv("MEDIA_DIR", os.path.join(os.getcwd(), "media"))
+        _real_media_dir = Path(base_path)
+        _real_media_dir.mkdir(parents=True, exist_ok=True)
+
+    _MEDIA_DIR = _real_media_dir
+    return _MEDIA_DIR
 
 # Create blueprint
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
@@ -1444,7 +1476,7 @@ def check_database_health():
         
         with db_session_scope() as db_session:
             # Simple query to test connection
-            result = db_session.execute('SELECT 1').scalar()
+            result = db_session.execute(text('SELECT 1')).scalar()
             
         response_time = (time.time() - start_time) * 1000  # Convert to ms
         
@@ -1469,11 +1501,8 @@ def check_database_health():
 def check_storage_health():
     """Check storage usage"""
     try:
-        import shutil
-        import os
-        
         # Check media directory
-        media_dir = os.getenv('MEDIA_DIR', '/home/runner/work/MastaBlasta/MastaBlasta/media')
+        media_dir = str(_get_media_dir())
         
         if os.path.exists(media_dir):
             total, used, free = shutil.disk_usage(media_dir)
@@ -1520,7 +1549,7 @@ def get_system_health():
             if DB_ENABLED:
                 from database import db_session_scope
                 with db_session_scope() as db_session:
-                    db_session.execute('SELECT 1')
+                    db_session.execute(text('SELECT 1'))
                 health_status['database'] = {'status': 'healthy'}
             else:
                 health_status['database'] = {'status': 'disabled'}
@@ -1529,9 +1558,7 @@ def get_system_health():
         
         # Check storage
         try:
-            import shutil
-            import os
-            media_dir = os.getenv('MEDIA_DIR', '/home/runner/work/MastaBlasta/MastaBlasta/media')
+            media_dir = str(_get_media_dir())
             if os.path.exists(media_dir):
                 total, used, free = shutil.disk_usage(media_dir)
                 usage_percent = round(used / total * 100, 1)
