@@ -8,6 +8,7 @@ import re
 import shutil
 import stat
 import os
+from pathlib import Path
 from uuid import uuid4
 from sqlalchemy import or_, text
 
@@ -16,9 +17,38 @@ from subscription_control import admin_only, get_user_subscription
 from subscription_config import TierLimits, SubscriptionHelper
 from models import User, Subscription, SubscriptionTier, SubscriptionStatus, UsageMetrics, UserRole
 from security_enhancements import SecurityLogger
-from media_utils import MEDIA_DIR
 
 logger = logging.getLogger(__name__)
+
+# Lazy media directory resolver to avoid importing media_utils (and its side
+# effects / optional dependencies) at module import time.
+_MEDIA_DIR = None
+
+
+def _get_media_dir():
+    """
+    Resolve the media directory lazily.
+
+    Tries to import MEDIA_DIR from media_utils when first needed. If
+    media_utils is not available (e.g., in a partially-installed setup),
+    falls back to a local "media" directory under the current working
+    directory or a path specified via the MEDIA_DIR environment variable.
+    """
+    global _MEDIA_DIR
+    if _MEDIA_DIR is not None:
+        return _MEDIA_DIR
+
+    try:
+        # Import here to avoid pulling in media_utils (and its side effects)
+        # at module import time.
+        from media_utils import MEDIA_DIR as _real_media_dir  # type: ignore[import]
+    except ImportError:
+        base_path = os.getenv("MEDIA_DIR", os.path.join(os.getcwd(), "media"))
+        _real_media_dir = Path(base_path)
+        _real_media_dir.mkdir(parents=True, exist_ok=True)
+
+    _MEDIA_DIR = _real_media_dir
+    return _MEDIA_DIR
 
 # Create blueprint
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
@@ -1472,7 +1502,7 @@ def check_storage_health():
     """Check storage usage"""
     try:
         # Check media directory
-        media_dir = str(MEDIA_DIR)
+        media_dir = str(_get_media_dir())
         
         if os.path.exists(media_dir):
             total, used, free = shutil.disk_usage(media_dir)
@@ -1528,7 +1558,7 @@ def get_system_health():
         
         # Check storage
         try:
-            media_dir = str(MEDIA_DIR)
+            media_dir = str(_get_media_dir())
             if os.path.exists(media_dir):
                 total, used, free = shutil.disk_usage(media_dir)
                 usage_percent = round(used / total * 100, 1)
