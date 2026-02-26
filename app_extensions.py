@@ -428,9 +428,15 @@ def get_current_user() -> Optional[Dict]:
         return None
 
     # Check JWT token
+    token = None
     auth_header = request.headers.get('Authorization', '')
     if auth_header.startswith('Bearer '):
         token = auth_header.split(' ')[1]
+    
+    if not token:
+        token = request.cookies.get('accessToken')
+
+    if token:
         payload = verify_token(token)
         if payload:
             user_id = payload.get('user_id')

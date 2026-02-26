@@ -745,7 +745,7 @@ export default function VideoGeneratorPage() {
                     <div className="card p-6">
                         <h3 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-700">FFmpeg Settings</h3>
 
-                        <div className="space-y-4">
+                        <div className="space-y-6">
                             <div>
                                 <label className="block text-sm font-medium mb-1">Resolution</label>
                                 <select
@@ -785,7 +785,7 @@ export default function VideoGeneratorPage() {
                                 </select>
                             </div>
 
-                            <div>
+                            <div className="pt-4 border-t dark:border-gray-700">
                                 <label className="block text-sm font-medium mb-1">Intro Title Card (Optional)</label>
                                 <input
                                     type="text"
@@ -796,7 +796,7 @@ export default function VideoGeneratorPage() {
                                 />
                             </div>
 
-                            <div>
+                            <div className="pt-4 border-t dark:border-gray-700">
                                 <label className="block text-sm font-medium mb-1">Transition Effect</label>
                                 <select
                                     className="input-select bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
@@ -811,7 +811,7 @@ export default function VideoGeneratorPage() {
                                 </select>
                             </div>
 
-                            <div>
+                            <div className="pt-4 border-t dark:border-gray-700">
                                 <label className="block text-sm font-medium mb-1">Default Slide Duration ({settings.default_slide_duration}s)</label>
                                 <input
                                     type="range"
@@ -852,11 +852,63 @@ export default function VideoGeneratorPage() {
                                 </label>
 
                                 {settings.burn_subtitles && (
-                                    <div className="pl-6 space-y-3 p-3 bg-gray-50 dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700">
-                                        <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Subtitle Style</h4>
-                                        <div className="flex gap-4">
+                                    <div className="pl-6 space-y-4 p-4 bg-gray-50 dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700">
+                                        <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">Subtitle Style</h4>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs mb-1 font-medium">Text Color</label>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="color"
+                                                        className="h-8 w-12 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+                                                        value={settings.captions.color.startsWith('&H') ? `#${settings.captions.color.slice(8, 10)}${settings.captions.color.slice(6, 8)}${settings.captions.color.slice(4, 6)}` : settings.captions.color}
+                                                        onChange={e => {
+                                                            const hex = e.target.value.toUpperCase();
+                                                            // Convert #RRGGBB to &H00BBGGRR
+                                                            const r = hex.slice(1, 3);
+                                                            const g = hex.slice(3, 5);
+                                                            const b = hex.slice(5, 7);
+                                                            setSettings({ ...settings, captions: { ...settings.captions, color: `&H00${b}${g}${r}` } });
+                                                        }}
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        className="input-field py-1 px-2 text-xs font-mono flex-grow"
+                                                        value={settings.captions.color}
+                                                        onChange={e => setSettings({ ...settings, captions: { ...settings.captions, color: e.target.value } })}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-xs mb-1 font-medium">Outline Color</label>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="color"
+                                                        className="h-8 w-12 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+                                                        value={settings.captions.outline_color.startsWith('&H') ? `#${settings.captions.outline_color.slice(8, 10)}${settings.captions.outline_color.slice(6, 8)}${settings.captions.outline_color.slice(4, 6)}` : settings.captions.outline_color}
+                                                        onChange={e => {
+                                                            const hex = e.target.value.toUpperCase();
+                                                            const r = hex.slice(1, 3);
+                                                            const g = hex.slice(3, 5);
+                                                            const b = hex.slice(5, 7);
+                                                            setSettings({ ...settings, captions: { ...settings.captions, outline_color: `&H00${b}${g}${r}` } });
+                                                        }}
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        className="input-field py-1 px-2 text-xs font-mono flex-grow"
+                                                        value={settings.captions.outline_color}
+                                                        onChange={e => setSettings({ ...settings, captions: { ...settings.captions, outline_color: e.target.value } })}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-4 border-t dark:border-gray-700 pt-3">
                                             <div className="flex-1">
-                                                <label className="block text-xs mb-1">Background Alpha ({settings.captions.bg_opacity}%)</label>
+                                                <label className="block text-xs mb-1 font-medium">Background Alpha ({settings.captions.bg_opacity}%)</label>
                                                 <input
                                                     type="range" min="0" max="100" step="5"
                                                     className="w-full h-1"
@@ -865,15 +917,23 @@ export default function VideoGeneratorPage() {
                                                 />
                                             </div>
                                             <div className="w-1/3">
-                                                <label className="block text-xs mb-1">Color (Hex)</label>
-                                                <input
-                                                    type="text"
-                                                    className="input-field py-1 px-2 text-xs font-mono"
-                                                    placeholder="000000"
-                                                    maxLength={6}
-                                                    value={settings.captions.bg_color}
-                                                    onChange={e => setSettings({ ...settings, captions: { ...settings.captions, bg_color: e.target.value } })}
-                                                />
+                                                <label className="block text-xs mb-1 font-medium">BG Color</label>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="color"
+                                                        className="h-8 w-12 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+                                                        value={`#${settings.captions.bg_color}`}
+                                                        onChange={e => setSettings({ ...settings, captions: { ...settings.captions, bg_color: e.target.value.replace('#', '') } })}
+                                                    />
+                                                    <input
+                                                        type="text"
+                                                        className="input-field py-1 px-2 text-xs font-mono flex-grow"
+                                                        placeholder="000000"
+                                                        maxLength={6}
+                                                        value={settings.captions.bg_color}
+                                                        onChange={e => setSettings({ ...settings, captions: { ...settings.captions, bg_color: e.target.value } })}
+                                                    />
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
