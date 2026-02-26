@@ -3,16 +3,27 @@ import { render, screen } from '@testing-library/react';
 import App, { appRoutes } from './App';
 
 describe('App navigation', () => {
-	it('renders navigation links for each configured route', () => {
+	it('shows login page when user is not authenticated', () => {
 		render(<App />);
-
-		appRoutes.forEach(route => {
-			expect(screen.getByRole('link', { name: route.label })).toBeInTheDocument();
-		});
+		// When not logged in, ProtectedRoute redirects to /login
+		expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument();
 	});
 
-	it('routes array and rendered links remain in sync', () => {
+	it('routes array has unique paths', () => {
 		const uniquePaths = new Set(appRoutes.map(route => route.path));
 		expect(uniquePaths.size).toBe(appRoutes.length);
+	});
+
+	it('admin route is marked as adminOnly', () => {
+		const adminRoute = appRoutes.find(route => route.path === '/admin');
+		expect(adminRoute).toBeDefined();
+		expect(adminRoute?.adminOnly).toBe(true);
+	});
+
+	it('non-admin routes do not have adminOnly flag', () => {
+		const nonAdminRoutes = appRoutes.filter(route => route.path !== '/admin');
+		nonAdminRoutes.forEach(route => {
+			expect(route.adminOnly).toBeFalsy();
+		});
 	});
 });

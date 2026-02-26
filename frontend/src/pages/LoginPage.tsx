@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../api';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 import './LoginPage.css';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
 
 declare global {
   interface Window {
@@ -134,23 +133,12 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v2/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include', // Ensure cookies are sent and received
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
+      const response = await api.post('/v2/auth/login', {
+        email: formData.email,
+        password: formData.password,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
-      }
+      const data = response.data;
 
       // Store user info
       localStorage.setItem('user', JSON.stringify(data.user));
@@ -164,7 +152,7 @@ function LoginPage() {
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.message || 'Login failed. Please check your credentials.');
+      setError(err.response?.data?.error || err.message || 'Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }

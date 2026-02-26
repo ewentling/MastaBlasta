@@ -252,6 +252,35 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: '1rem' }}>
+        <RefreshCw size={36} className="animate-spin" style={{ color: 'var(--color-accentPrimary, #00e5ff)' }} />
+        <p style={{ color: 'var(--color-textSecondary, #94a3b8)', fontSize: '0.9375rem' }}>Loading…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role !== 'admin') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1rem', padding: '2rem', textAlign: 'center' }}>
+        <AlertTriangle size={48} style={{ color: '#f59e0b' }} />
+        <h2 style={{ color: 'var(--color-textPrimary)', fontSize: '1.5rem', fontWeight: '700' }}>Access Denied</h2>
+        <p style={{ color: 'var(--color-textSecondary)', maxWidth: '400px' }}>You do not have permission to access the admin panel.</p>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -273,8 +302,12 @@ function App() {
                           <main className="main-content">
                             <ErrorBoundary>
                               <Routes>
-                                {appRoutes.map(({ path, element }) => (
-                                  <Route key={path} path={path} element={element} />
+                                {appRoutes.map(({ path, element, adminOnly }) => (
+                                  <Route
+                                    key={path}
+                                    path={path}
+                                    element={adminOnly ? <AdminRoute>{element}</AdminRoute> : element}
+                                  />
                                 ))}
                               </Routes>
                             </ErrorBoundary>
