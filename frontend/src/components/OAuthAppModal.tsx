@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { oauthAppsApi } from '../api';
 import { X, Save, Settings, ExternalLink, Key, Info } from 'lucide-react';
+import SetupWizard from './admin/SetupWizard';
 
 interface OAuthAppModalProps {
   isOpen: boolean;
@@ -186,25 +187,16 @@ export default function OAuthAppModal({ isOpen, onClose }: OAuthAppModalProps) {
 
               {/* Setup Instructions */}
               {platformRequirements?.setup_instructions && (
-                <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
-                  <div>
-                    <strong>Setup Instructions:</strong>
-                    <ol style={{ marginTop: '0.5rem', marginLeft: '1.5rem', fontSize: '0.875rem' }}>
-                      {platformRequirements.setup_instructions.map((step: string, index: number) => (
-                        <li key={index} style={{ marginBottom: '0.25rem' }}>{step}</li>
-                      ))}
-                    </ol>
-                    {platformRequirements.docs_url && (
-                      <a
-                        href={platformRequirements.docs_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.5rem' }}
-                      >
-                        Read Documentation <ExternalLink size={14} />
-                      </a>
-                    )}
-                  </div>
+                <div className="rounded-xl shadow-lg mb-6 overflow-hidden" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <SetupWizard
+                    platformName={platforms[selectedPlatform]?.display_name || selectedPlatform}
+                    steps={platformRequirements.setup_instructions.map((step: string, i: number) => ({
+                      title: `Step ${i + 1}`,
+                      desc: step,
+                      link: i === platformRequirements.setup_instructions.length - 1 ? (platformRequirements as any).docs_url : undefined,
+                      linkLabel: 'Read Documentation'
+                    }))}
+                  />
                 </div>
               )}
 

@@ -39,7 +39,7 @@ class TwitterOAuth:
     SCOPES = ['tweet.read', 'tweet.write', 'users.read', 'offline.access']
 
     @classmethod
-    def get_authorization_url(cls, state: str, client_id: str = None, redirect_uri: str = None) -> Dict[str, str]:
+    def get_authorization_url(cls, state: str, client_id: str = None, redirect_uri: str = None, requested_scopes: list = None) -> Dict[str, str]:
         """Generate authorization URL with PKCE"""
         code_verifier = secrets.token_urlsafe(32)
         
@@ -47,10 +47,12 @@ class TwitterOAuth:
         client_id = client_id or TWITTER_CLIENT_ID
         redirect_uri = redirect_uri or TWITTER_REDIRECT_URI
 
+        scopes = list(set(cls.SCOPES + (requested_scopes or [])))
+
         oauth = OAuth2Session(
             client_id,
             redirect_uri=redirect_uri,
-            scope=cls.SCOPES
+            scope=scopes
         )
 
         authorization_url, state = oauth.authorization_url(
@@ -95,6 +97,31 @@ class TwitterOAuth:
             return None
 
     @classmethod
+    def refresh_access_token(cls, refresh_token: str, client_id: str = None) -> Optional[Dict[str, Any]]:
+        """Refresh an expired access token using a refresh token"""
+        try:
+            client_id = client_id or TWITTER_CLIENT_ID
+            
+            data = {
+                'grant_type': 'refresh_token',
+                'refresh_token': refresh_token,
+                'client_id': client_id
+            }
+
+            response = requests.post(cls.TOKEN_URL, data=data)
+            response.raise_for_status()
+
+            token_data = response.json()
+            return {
+                'access_token': token_data['access_token'],
+                'refresh_token': token_data.get('refresh_token', refresh_token),
+                'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
+            }
+        except Exception as e:
+            logger.error(f"Twitter token refresh failed: {e}")
+            return None
+
+    @classmethod
     def post_tweet(cls, access_token: str, content: str, media_ids: list = None) -> Optional[Dict[str, Any]]:
         """Post a tweet using Twitter API v2"""
         try:
@@ -109,6 +136,26 @@ class TwitterOAuth:
         except Exception as e:
             logger.error(f"Twitter post failed: {e}")
             return None
+
+    @classmethod
+    def revoke_token(cls, token: str, client_id: str = None) -> bool:
+        """Revoke a Twitter OAuth token"""
+        try:
+            client_id = client_id or TWITTER_CLIENT_ID
+            
+            # Twitter v2 revoke endpoint
+            revoke_url = 'https://api.twitter.com/2/oauth2/revoke'
+            data = {
+                'target_token': token,
+                'client_id': client_id,
+                'target_token_type': 'access_token'
+            }
+            
+            response = requests.post(revoke_url, data=data)
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Twitter token revocation failed: {e}")
+            return False
 
     @classmethod
     def get_authorization_url(cls, user_id: str) -> Dict[str, Any]:
@@ -274,17 +321,19 @@ class MetaOAuth:
     SCOPES = ['pages_manage_posts', 'pages_read_engagement', 'pages_show_list', 'instagram_basic', 'instagram_content_publish']
 
     @classmethod
-    def get_authorization_url(cls, state: str, app_id: str = None, redirect_uri: str = None) -> str:
+    def get_authorization_url(cls, state: str, app_id: str = None, redirect_uri: str = None, requested_scopes: list = None) -> str:
         """Generate Meta OAuth authorization URL"""
         # Use provided credentials or fall back to environment
         app_id = app_id or META_APP_ID
         redirect_uri = redirect_uri or META_REDIRECT_URI
         
+        scopes = list(set(cls.SCOPES + (requested_scopes or [])))
+        
         params = {
             'client_id': app_id,
             'redirect_uri': redirect_uri,
             'state': state,
-            'scope': ','.join(cls.SCOPES),
+            'scope': ','.join(scopes),
             'response_type': 'code'
         }
 
@@ -333,6 +382,33 @@ class MetaOAuth:
             return None
 
     @classmethod
+    def refresh_access_token(cls, access_token: str, app_id: str = None, app_secret: str = None) -> Optional[Dict[str, Any]]:
+        """Refresh/Extend a long-lived Meta access token"""
+        try:
+            app_id = app_id or META_APP_ID
+            app_secret = app_secret or META_APP_SECRET
+            
+            params = {
+                'grant_type': 'fb_exchange_token',
+                'client_id': app_id,
+                'client_secret': app_secret,
+                'fb_exchange_token': access_token
+            }
+
+            response = requests.get(cls.TOKEN_URL, params=params)
+            response.raise_for_status()
+
+            token_data = response.json()
+            return {
+                'access_token': token_data['access_token'],
+                'refresh_token': None, # Meta does not use refresh tokens
+                'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data.get('expires_in', 5184000))
+            }
+        except Exception as e:
+            logger.error(f"Meta token refresh failed: {e}")
+            return None
+
+    @classmethod
     def post_to_facebook_page(cls, access_token: str, page_id: str, content: str, media_url: str = None) -> Optional[Dict[str, Any]]:
         """Post to Facebook Page"""
         try:
@@ -352,6 +428,27 @@ class MetaOAuth:
         except Exception as e:
             logger.error(f"Facebook post failed: {e}")
             return None
+
+    @classmethod
+    def revoke_token(cls, token: str) -> bool:
+        """Revoke a Meta OAuth token by deleting its permissions"""
+        try:
+            # For Meta, we delete the permission granted to the app
+            revoke_url = f"{cls.GRAPH_API_URL}/me/permissions"
+            params = {
+                'access_token': token
+            }
+            
+            response = requests.delete(revoke_url, params=params)
+            
+            if response.status_code == 200:
+                result = response.json()
+                return result.get('success', False)
+                
+            return False
+        except Exception as e:
+            logger.error(f"Meta token revocation failed: {e}")
+            return False
 
     @classmethod
     def post_instagram_media(cls, access_token: str, instagram_account_id: str,
@@ -610,18 +707,20 @@ class LinkedInOAuth:
     SCOPES = ['w_member_social', 'r_liteprofile', 'r_emailaddress']
 
     @classmethod
-    def get_authorization_url(cls, state: str, client_id: str = None, redirect_uri: str = None) -> str:
+    def get_authorization_url(cls, state: str, client_id: str = None, redirect_uri: str = None, requested_scopes: list = None) -> str:
         """Generate LinkedIn OAuth authorization URL"""
         # Use provided credentials or fall back to environment
         client_id = client_id or LINKEDIN_CLIENT_ID
         redirect_uri = redirect_uri or LINKEDIN_REDIRECT_URI
+        
+        scopes = list(set(cls.SCOPES + (requested_scopes or [])))
         
         params = {
             'response_type': 'code',
             'client_id': client_id,
             'redirect_uri': redirect_uri,
             'state': state,
-            'scope': ' '.join(cls.SCOPES)
+            'scope': ' '.join(scopes)
         }
 
         query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
@@ -650,10 +749,38 @@ class LinkedInOAuth:
             token_data = response.json()
             return {
                 'access_token': token_data['access_token'],
+                'refresh_token': token_data.get('refresh_token'),
                 'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
             }
         except Exception as e:
             logger.error(f"LinkedIn token exchange failed: {e}")
+            return None
+
+    @classmethod
+    def refresh_access_token(cls, refresh_token: str, client_id: str = None, client_secret: str = None) -> Optional[Dict[str, Any]]:
+        """Refresh an expired access token using a refresh token"""
+        try:
+            client_id = client_id or LINKEDIN_CLIENT_ID
+            client_secret = client_secret or LINKEDIN_CLIENT_SECRET
+            
+            data = {
+                'grant_type': 'refresh_token',
+                'refresh_token': refresh_token,
+                'client_id': client_id,
+                'client_secret': client_secret
+            }
+
+            response = requests.post(cls.TOKEN_URL, data=data)
+            response.raise_for_status()
+
+            token_data = response.json()
+            return {
+                'access_token': token_data['access_token'],
+                'refresh_token': token_data.get('refresh_token', refresh_token),
+                'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
+            }
+        except Exception as e:
+            logger.error(f"LinkedIn token refresh failed: {e}")
             return None
 
     @classmethod
@@ -699,17 +826,39 @@ class LinkedInOAuth:
             return None
 
     @classmethod
-    def get_authorization_url(cls, user_id: str) -> Dict[str, Any]:
+    def revoke_token(cls, token: str, client_id: str = None, client_secret: str = None) -> bool:
+        """Revoke a LinkedIn OAuth token"""
+        try:
+            client_id = client_id or LINKEDIN_CLIENT_ID
+            client_secret = client_secret or LINKEDIN_CLIENT_SECRET
+            
+            revoke_url = 'https://www.linkedin.com/oauth/v2/revoke'
+            data = {
+                'token': token,
+                'client_id': client_id,
+                'client_secret': client_secret
+            }
+            
+            response = requests.post(revoke_url, data=data)
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"LinkedIn token revocation failed: {e}")
+            return False
+
+    @classmethod
+    def get_authorization_url(cls, user_id: str, requested_scopes: list = None) -> Dict[str, Any]:
         """Generate LinkedIn OAuth authorization URL with user_id for state management"""
         import secrets
         state = f"{user_id}:linkedin:{secrets.token_urlsafe(16)}"
+        
+        scopes = list(set(cls.SCOPES + (requested_scopes or [])))
         
         params = {
             'response_type': 'code',
             'client_id': LINKEDIN_CLIENT_ID,
             'redirect_uri': LINKEDIN_REDIRECT_URI,
             'state': state,
-            'scope': ' '.join(cls.SCOPES)
+            'scope': ' '.join(scopes)
         }
 
         from urllib.parse import urlencode
@@ -807,17 +956,19 @@ class GoogleOAuth:
     SCOPES = ['https://www.googleapis.com/auth/youtube.upload', 'https://www.googleapis.com/auth/youtube']
 
     @classmethod
-    def get_authorization_url(cls, state: str, client_id: str = None, redirect_uri: str = None) -> str:
+    def get_authorization_url(cls, state: str, client_id: str = None, redirect_uri: str = None, requested_scopes: list = None) -> str:
         """Generate Google OAuth authorization URL"""
         # Use provided credentials or fall back to environment
         client_id = client_id or GOOGLE_CLIENT_ID
         redirect_uri = redirect_uri or GOOGLE_REDIRECT_URI
         
+        scopes = list(set(cls.SCOPES + (requested_scopes or [])))
+        
         params = {
             'client_id': client_id,
             'redirect_uri': redirect_uri,
             'response_type': 'code',
-            'scope': ' '.join(cls.SCOPES),
+            'scope': ' '.join(scopes),
             'access_type': 'offline',
             'prompt': 'consent',
             'state': state
@@ -857,16 +1008,56 @@ class GoogleOAuth:
             return None
 
     @classmethod
-    def get_authorization_url(cls, user_id: str) -> Dict[str, Any]:
+    def refresh_access_token(cls, refresh_token: str, client_id: str = None, client_secret: str = None) -> Optional[Dict[str, Any]]:
+        """Refresh an expired access token using a refresh token"""
+        try:
+            client_id = client_id or GOOGLE_CLIENT_ID
+            client_secret = client_secret or GOOGLE_CLIENT_SECRET
+            
+            data = {
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'refresh_token': refresh_token,
+                'grant_type': 'refresh_token'
+            }
+
+            response = requests.post(cls.TOKEN_URL, data=data)
+            response.raise_for_status()
+
+            token_data = response.json()
+            return {
+                'access_token': token_data['access_token'],
+                'refresh_token': token_data.get('refresh_token', refresh_token),
+                'expires_at': datetime.now(timezone.utc) + timedelta(seconds=token_data['expires_in'])
+            }
+        except Exception as e:
+            logger.error(f"Google token refresh failed: {e}")
+            return None
+
+    @classmethod
+    def revoke_token(cls, token: str) -> bool:
+        """Revoke a Google OAuth token"""
+        try:
+            revoke_url = 'https://oauth2.googleapis.com/revoke'
+            response = requests.post(revoke_url, params={'token': token}, headers={'content-type': 'application/x-www-form-urlencoded'})
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Google token revocation failed: {e}")
+            return False
+
+    @classmethod
+    def get_authorization_url(cls, user_id: str, requested_scopes: list = None) -> Dict[str, Any]:
         """Generate Google OAuth authorization URL with user_id for state management"""
         import secrets
         state = f"{user_id}:youtube:{secrets.token_urlsafe(16)}"
+        
+        scopes = list(set(cls.SCOPES + (requested_scopes or [])))
         
         params = {
             'client_id': GOOGLE_CLIENT_ID,
             'redirect_uri': GOOGLE_REDIRECT_URI,
             'response_type': 'code',
-            'scope': ' '.join(cls.SCOPES),
+            'scope': ' '.join(scopes),
             'access_type': 'offline',
             'prompt': 'consent',
             'state': state

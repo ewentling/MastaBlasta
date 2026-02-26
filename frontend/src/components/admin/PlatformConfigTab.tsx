@@ -5,30 +5,37 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 
+import { api } from '../../api';
+import SetupWizard from './SetupWizard';
+
 // ─── API helpers ─────────────────────────────────────────────────────────────
 
-function authHeader(): Record<string, string> {
-  const token = localStorage.getItem('accessToken');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+async function fetchPlatformConfig() {
+  const r = await api.get('/admin/platform-config');
+  return r.data;
 }
 
-async function fetchPlatformConfig() {
-  const r = await fetch('/api/admin/platform-config', { headers: authHeader() });
-  if (!r.ok) throw new Error('Failed to load platform configuration');
-  return r.json();
+async function fetchPlatformHealth() {
+  const r = await api.get('/admin/platform-health');
+  return r.data;
 }
 
 async function savePlatformConfig(payload: { platform: string; fields: Record<string, string> }) {
-  const r = await fetch('/api/admin/platform-config', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeader() },
-    body: JSON.stringify(payload),
-  });
-  if (!r.ok) {
-    const err = await r.json();
-    throw new Error(err.error || 'Failed to save configuration');
+  try {
+    const r = await api.post('/admin/platform-config', payload);
+    return r.data;
+  } catch (err: any) {
+    throw new Error(err.response?.data?.error || err.message || 'Failed to save configuration');
   }
-  return r.json();
+}
+
+async function testPlatformConfig(platform: string) {
+  try {
+    const r = await api.post(`/admin/platform-config/${platform}/test`);
+    return r.data;
+  } catch (err: any) {
+    throw new Error(err.response?.data?.message || err.response?.data?.error || 'Test failed');
+  }
 }
 
 // ─── Platform definitions ─────────────────────────────────────────────────────
@@ -48,7 +55,7 @@ interface PlatformDef {
   color: string;          // Tailwind bg class for the icon pill
   requiredKeys: string[]; // Keys that must be set for "configured" status
   fields: FieldDef[];
-  steps: { title: string; desc: string; link?: string; linkLabel?: string }[];
+  steps: { title: string; desc: string; link?: string | null; linkLabel?: string | null }[];
   devConsoleUrl: string;
   devConsoleLabel: string;
 }
@@ -258,6 +265,12 @@ export function PlatformConfigTab() {
     queryFn: fetchPlatformConfig,
   });
 
+  const { data: healthData, isLoading: isHealthLoading, refetch: refetchHealth } = useQuery({
+    queryKey: ['admin-platform-health'],
+    queryFn: fetchPlatformHealth,
+    staleTime: 60000, // cache for 1 minute
+  });
+
   const saveMutation = useMutation({
     mutationFn: savePlatformConfig,
     onSuccess: (data, variables) => {
@@ -278,6 +291,16 @@ export function PlatformConfigTab() {
     },
     onError: (err: Error, variables) => {
       setSaveResults((r) => ({ ...r, [variables.platform]: { success: false, message: err.message } }));
+    },
+  });
+
+  const testMutation = useMutation({
+    mutationFn: testPlatformConfig,
+    onSuccess: (data, platformId) => {
+      setSaveResults((r) => ({ ...r, [platformId]: { success: true, message: data.message || 'Connection test successful!' } }));
+    },
+    onError: (err: Error, platformId) => {
+      setSaveResults((r) => ({ ...r, [platformId]: { success: false, message: err.message } }));
     },
   });
 
@@ -323,249 +346,289 @@ export function PlatformConfigTab() {
   const configData = configs?.[selectedPlatform];
 
   return (
-    <div className="flex gap-6">
-      {/* ── Sidebar: platform list ──────────────────────────────────────────── */}
-      <div className="w-56 flex-shrink-0">
-        <div className="rounded-xl overflow-hidden shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Platforms</p>
-          </div>
-          <nav className="p-2">
-            {PLATFORMS.map((p) => {
-              const cfg = configs?.[p.id];
-              const isConfigured = cfg?.configured ?? false;
+    <div className="flex flex-col gap-6">
+      {/* ── Dashboard: Platform Health ──────────────────────────────────── */}
+      <div className="rounded-xl p-5 shadow-lg relative overflow-hidden" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            <CheckCircle className="w-4 h-4 text-emerald-400" />
+            OAuth Integration Health
+          </h3>
+          <button
+            onClick={() => refetchHealth()}
+            disabled={isHealthLoading}
+            className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
+          >
+            <RefreshCw className={`w-3 h-3 ${isHealthLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
+
+        {isHealthLoading && !healthData ? (
+          <div className="text-xs text-slate-400 animate-pulse">Running health checks...</div>
+        ) : healthData?.health?.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 gap-y-4">
+            {healthData.health.map((h: any) => {
+              const pDef = PLATFORMS.find(p => p.id === h.platform);
+              const isHealthy = h.status === 'healthy';
               return (
-                <button
-                  key={p.id}
-                  onClick={() => setSelectedPlatform(p.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${
-                    selectedPlatform === p.id
-                      ? 'text-white'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                  style={selectedPlatform === p.id ? { background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.2)' } : { border: '1px solid transparent' }}
-                >
-                  <span className="text-base">{p.emoji}</span>
-                  <span className="flex-1 text-left truncate">{formatPlatformSidebarLabel(p.name)}</span>
-                  {isLoading ? (
-                    <RefreshCw className="w-3 h-3 animate-spin text-slate-500" />
-                  ) : isConfigured ? (
-                    <CheckCircle className="w-3.5 h-3.5 flex-shrink-0 text-emerald-400" />
-                  ) : (
-                    <XCircle className="w-3.5 h-3.5 flex-shrink-0 text-slate-600" />
-                  )}
-                </button>
+                <div key={h.platform} className="flex flex-col gap-1 p-3 rounded-lg border" style={{ borderColor: 'rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl leading-none">{pDef?.emoji || '🔗'}</span>
+                    <span className="text-sm font-medium text-slate-200">{pDef?.name || h.platform}</span>
+                    <span className={`ml-auto px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${isHealthy ? 'bg-emerald-400/10 text-emerald-400 border border-emerald-400/20' : 'bg-rose-400/10 text-rose-400 border border-rose-400/20'}`}>
+                      {isHealthy ? 'Healthy' : 'Error'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 truncate mt-1" title={h.message}>{h.message}</p>
+                </div>
               );
             })}
-          </nav>
-        </div>
-        {/* Info: platforms that don't need admin OAuth setup */}
-        <div className="mt-3 rounded-xl p-3 text-xs text-slate-500 space-y-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">No admin setup needed</p>
-          <div className="flex items-start gap-1.5">
-            <span>🧵</span>
-            <span><strong className="text-slate-400">Threads</strong> — shares your Meta (Facebook) credentials above. Configure Meta to enable Threads.</span>
           </div>
-          <div className="flex items-start gap-1.5">
-            <span>🦋</span>
-            <span><strong className="text-slate-400">Bluesky</strong> — users authenticate directly with their Bluesky handle + app password. No OAuth app credentials required.</span>
-          </div>
-        </div>
+        ) : (
+          <div className="text-xs text-slate-500">No platforms fully configured yet.</div>
+        )}
       </div>
 
-      {/* ── Main content area ───────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 space-y-4">
-
-        {/* Header */}
-        <div className="rounded-xl p-5 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                {platformDef.emoji}
-              </div>
-              <div>
-                <h2 className="text-base font-semibold text-white">{platformDef.name}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {isLoading ? 'Loading…' : configData?.configured
-                    ? '✅ Configured'
-                    : '⚠️ Not configured — fill in the fields below'}
-                </p>
-              </div>
+      <div className="flex gap-6">
+        {/* ── Sidebar: platform list ──────────────────────────────────────────── */}
+        <div className="w-56 flex-shrink-0">
+          <div className="rounded-xl overflow-hidden shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Platforms</p>
             </div>
-            <a
-              href={platformDef.devConsoleUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg transition-colors"
-              style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              {platformDef.devConsoleLabel}
-            </a>
-          </div>
-
-          {/* Per-field status pills */}
-          {configData && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {platformDef.fields.map((fd) => {
-                const ok = configData.configured_fields?.[fd.key];
+            <nav className="p-2">
+              {PLATFORMS.map((p) => {
+                const cfg = configs?.[p.id];
+                const isConfigured = cfg?.configured ?? false;
                 return (
-                  <span
-                    key={fd.key}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                    style={ok ? { background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399' } : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#4e5678' }}
+                  <button
+                    key={p.id}
+                    onClick={() => setSelectedPlatform(p.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors mb-1 ${selectedPlatform === p.id
+                      ? 'text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    style={selectedPlatform === p.id ? { background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.2)' } : { border: '1px solid transparent' }}
                   >
-                    {ok ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                    {fd.label}
-                  </span>
+                    <span className="text-base">{p.emoji}</span>
+                    <span className="flex-1 text-left truncate">{formatPlatformSidebarLabel(p.name)}</span>
+                    {isLoading ? (
+                      <RefreshCw className="w-3 h-3 animate-spin text-slate-500" />
+                    ) : isConfigured ? (
+                      <CheckCircle className="w-3.5 h-3.5 flex-shrink-0 text-emerald-400" />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 flex-shrink-0 text-slate-600" />
+                    )}
+                  </button>
                 );
               })}
+            </nav>
+          </div>
+          {/* Info: platforms that don't need admin OAuth setup */}
+          <div className="mt-3 rounded-xl p-3 text-xs text-slate-500 space-y-2" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">No admin setup needed</p>
+            <div className="flex items-start gap-1.5">
+              <span>🧵</span>
+              <span><strong className="text-slate-400">Threads</strong> — shares your Meta (Facebook) credentials above. Configure Meta to enable Threads.</span>
+            </div>
+            <div className="flex items-start gap-1.5">
+              <span>🦋</span>
+              <span><strong className="text-slate-400">Bluesky</strong> — users authenticate directly with their Bluesky handle + app password. No OAuth app credentials required.</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Main content area ───────────────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 space-y-4">
+
+          {/* Header */}
+          <div className="rounded-xl p-5 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                  {platformDef.emoji}
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-white">{platformDef.name}</h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    {isLoading ? 'Loading…' : configData?.configured
+                      ? '✅ Configured'
+                      : '⚠️ Not configured — fill in the fields below'}
+                  </p>
+                </div>
+              </div>
+              <a
+                href={platformDef.devConsoleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 px-3 py-1.5 rounded-lg transition-colors"
+                style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                {platformDef.devConsoleLabel}
+              </a>
+            </div>
+
+            {/* Per-field status pills */}
+            {configData && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {platformDef.fields.map((fd) => {
+                  const ok = configData.configured_fields?.[fd.key];
+                  return (
+                    <span
+                      key={fd.key}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                      style={ok ? { background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399' } : { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: '#4e5678' }}
+                    >
+                      {ok ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                      {fd.label}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Save result banner */}
+          {saveResults[selectedPlatform] && (
+            <div className="p-4 rounded-lg flex items-center gap-3 text-sm border" style={saveResults[selectedPlatform]!.success ? { background: 'rgba(52,211,153,0.1)', borderColor: 'rgba(52,211,153,0.3)', color: '#34d399' } : { background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#fca5a5' }}>
+              {saveResults[selectedPlatform]!.success
+                ? <CheckCircle className="w-4 h-4 flex-shrink-0" />
+                : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
+              {saveResults[selectedPlatform]!.message}
             </div>
           )}
-        </div>
 
-        {/* Save result banner */}
-        {saveResults[selectedPlatform] && (
-          <div className="p-4 rounded-lg flex items-center gap-3 text-sm border" style={saveResults[selectedPlatform]!.success ? { background: 'rgba(52,211,153,0.1)', borderColor: 'rgba(52,211,153,0.3)', color: '#34d399' } : { background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#fca5a5' }}>
-            {saveResults[selectedPlatform]!.success
-               ? <CheckCircle className="w-4 h-4 flex-shrink-0" />
-               : <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
-            {saveResults[selectedPlatform]!.message}
-          </div>
-        )}
+          {/* Two-column: setup guide + form */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
 
-        {/* Two-column: setup guide + form */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-
-          {/* Setup Guide */}
-          <div className="lg:col-span-2 rounded-xl p-5 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">Setup Guide</p>
-            <ol className="space-y-4">
-              {platformDef.steps.map((step, i) => (
-                <li key={i} className="flex gap-3">
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center mt-0.5 text-white" style={{ background: 'rgba(0,229,255,0.2)', border: '1px solid rgba(0,229,255,0.3)' }}>{i + 1}</span>
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">{step.title}</p>
-                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{step.desc}</p>
-                    {step.link && (
-                      <a href={step.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300 mt-1">
-                        {step.linkLabel}<ExternalLink className="w-3 h-3" />
-                      </a>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          {/* Credentials Form */}
-          <div className="lg:col-span-3 rounded-xl shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Credentials</p>
-              {dirty[selectedPlatform] && (
-                <span className="text-xs text-amber-400 font-medium">Unsaved changes</span>
-              )}
+            {/* Setup Guide */}
+            <div className="lg:col-span-2 rounded-xl p-5 shadow-lg flex flex-col" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">Interactive Setup Guide</p>
+              <SetupWizard steps={platformDef.steps} platformName={platformDef.name} />
             </div>
-            <div className="p-5 space-y-5">
-              {isLoading ? (
-                <div className="py-8 text-center text-slate-500">
-                  <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />Loading…
-                </div>
-              ) : (
-                <>
-                  {platformDef.fields.map((fd) => {
-                    const savedVal = configData?.fields?.[fd.key] ?? '';
-                    const formVal = getFieldValue(selectedPlatform, fd.key);
-                    const isSaved = configData?.configured_fields?.[fd.key] ?? false;
-                    const showKey = `${selectedPlatform}_${fd.key}`;
-                    const isVisible = visibleFields[showKey] ?? false;
 
-                    return (
-                      <div key={fd.key}>
-                        <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
-                          {fd.label}
-                          {isSaved && !formVal && (
-                            <span className="ml-2 text-emerald-400 normal-case font-normal">✓ saved</span>
-                          )}
-                        </label>
-                        <div className={fd.sensitive ? 'relative' : undefined}>
-                          <input
-                            type={fd.sensitive && !isVisible ? 'password' : 'text'}
-                            value={formVal}
-                            onChange={(e) => handleFieldChange(selectedPlatform, fd.key, e.target.value)}
-                            placeholder={
-                              fd.sensitive
-                                ? isSaved ? '(saved — enter new value to replace)' : fd.placeholder
-                                : savedVal || fd.placeholder
-                            }
-                            className={`w-full px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-white placeholder-slate-600 ${fd.sensitive ? 'pr-10' : ''}`}
-                            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
-                          />
-                          {fd.sensitive && (
-                            <button
-                              type="button"
-                              onClick={() => toggleVisible(showKey)}
-                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
-                            >
-                              {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
+            {/* Credentials Form */}
+            <div className="lg:col-span-3 rounded-xl shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Credentials</p>
+                {dirty[selectedPlatform] && (
+                  <span className="text-xs text-amber-400 font-medium">Unsaved changes</span>
+                )}
+              </div>
+              <div className="p-5 space-y-5">
+                {isLoading ? (
+                  <div className="py-8 text-center text-slate-500">
+                    <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />Loading…
+                  </div>
+                ) : (
+                  <>
+                    {platformDef.fields.map((fd) => {
+                      const savedVal = configData?.fields?.[fd.key] ?? '';
+                      const formVal = getFieldValue(selectedPlatform, fd.key);
+                      const isSaved = configData?.configured_fields?.[fd.key] ?? false;
+                      const showKey = `${selectedPlatform}_${fd.key}`;
+                      const isVisible = visibleFields[showKey] ?? false;
+
+                      return (
+                        <div key={fd.key}>
+                          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
+                            {fd.label}
+                            {isSaved && !formVal && (
+                              <span className="ml-2 text-emerald-400 normal-case font-normal">✓ saved</span>
+                            )}
+                          </label>
+                          <div className={fd.sensitive ? 'relative' : undefined}>
+                            <input
+                              type={fd.sensitive && !isVisible ? 'password' : 'text'}
+                              value={formVal}
+                              onChange={(e) => handleFieldChange(selectedPlatform, fd.key, e.target.value)}
+                              placeholder={
+                                fd.sensitive
+                                  ? isSaved ? '(saved — enter new value to replace)' : fd.placeholder
+                                  : savedVal || fd.placeholder
+                              }
+                              className={`w-full px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-white placeholder-slate-600 ${fd.sensitive ? 'pr-10' : ''}`}
+                              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+                            />
+                            {fd.sensitive && (
+                              <button
+                                type="button"
+                                onClick={() => toggleVisible(showKey)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                              >
+                                {isVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                            )}
+                          </div>
+                          {fd.hint && (
+                            <p className="mt-1 text-xs text-slate-500">{fd.hint}</p>
                           )}
                         </div>
-                        {fd.hint && (
-                          <p className="mt-1 text-xs text-slate-500">{fd.hint}</p>
-                        )}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
 
-                  <div className="pt-2 flex items-center gap-3">
-                    <button
-                      onClick={() => handleSave(selectedPlatform)}
-                      disabled={saveMutation.isPending || !dirty[selectedPlatform]}
-                      className="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      style={{ background: 'linear-gradient(120deg, #00e5ff 0%, #7c4dff 100%)' }}
-                    >
-                      {saveMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                      {saveMutation.isPending ? 'Saving…' : 'Save Configuration'}
-                    </button>
-                    <p className="text-xs text-slate-500">Changes apply immediately — no restart needed</p>
-                  </div>
-                </>
-              )}
+                    <div className="pt-2 flex flex-col gap-3">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleSave(selectedPlatform)}
+                          disabled={saveMutation.isPending || !dirty[selectedPlatform]}
+                          className="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          style={{ background: 'linear-gradient(120deg, #00e5ff 0%, #7c4dff 100%)' }}
+                        >
+                          {saveMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                          {saveMutation.isPending ? 'Saving…' : 'Save Configuration'}
+                        </button>
+                        <button
+                          onClick={() => testMutation.mutate(selectedPlatform)}
+                          disabled={testMutation.isPending || !!dirty[selectedPlatform] || !configData?.configured}
+                          className="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed border border-slate-600 hover:border-slate-400 bg-transparent transition-colors"
+                          title={dirty[selectedPlatform] ? "Save changes before testing" : !configData?.configured ? "Configure missing fields before testing" : "Verify credentials with platform"}
+                        >
+                          {testMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin text-slate-400" /> : <CheckCircle className="w-4 h-4 text-emerald-400" />}
+                          {testMutation.isPending ? 'Testing…' : 'Test Connection'}
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-500">Changes apply immediately — no restart needed. Save configuration before testing!</p>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Env-var reference */}
-        <div className="bg-slate-900 rounded-xl p-5 text-slate-300">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-white">Environment Variables</p>
-            <button
-              onClick={() => {
-                const vars = platformDef.fields.map((fd) => `${fd.key}=`).join('\n');
-                copyToClipboard(vars, 'all');
-              }}
-              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 transition-colors"
-            >
-              <Copy className="w-3.5 h-3.5" />
-              {copiedKey === 'all' ? 'Copied!' : 'Copy all'}
-            </button>
-          </div>
-          <div className="font-mono text-xs space-y-1.5">
-            {platformDef.fields.map((fd) => (
-              <div key={fd.key} className="flex items-center gap-3 group">
-                <code className="text-emerald-400">{fd.key}</code>
-                <span className="text-slate-600">=</span>
-                <span className="text-slate-500 text-xs">{`# ${fd.hint || fd.label}`}</span>
-                <button
-                  onClick={() => copyToClipboard(fd.key, fd.key)}
-                  className="ml-auto opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-opacity"
-                >
-                  <Copy className="w-3.5 h-3.5" />
-                </button>
-                {copiedKey === fd.key && <span className="text-xs text-emerald-400">Copied!</span>}
-              </div>
-            ))}
+          {/* Env-var reference */}
+          <div className="bg-slate-900 rounded-xl p-5 text-slate-300">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-white">Environment Variables</p>
+              <button
+                onClick={() => {
+                  const vars = platformDef.fields.map((fd) => `${fd.key}=`).join('\n');
+                  copyToClipboard(vars, 'all');
+                }}
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1.5 rounded border border-slate-700 hover:border-slate-500 transition-colors"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                {copiedKey === 'all' ? 'Copied!' : 'Copy all'}
+              </button>
+            </div>
+            <div className="font-mono text-xs space-y-1.5">
+              {platformDef.fields.map((fd) => (
+                <div key={fd.key} className="flex items-center gap-3 group">
+                  <code className="text-emerald-400">{fd.key}</code>
+                  <span className="text-slate-600">=</span>
+                  <span className="text-slate-500 text-xs">{`# ${fd.hint || fd.label}`}</span>
+                  <button
+                    onClick={() => copyToClipboard(fd.key, fd.key)}
+                    className="ml-auto opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition-opacity"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  {copiedKey === fd.key && <span className="text-xs text-emerald-400">Copied!</span>}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

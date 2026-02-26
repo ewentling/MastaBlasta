@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import axios from 'axios';
 
 interface User {
@@ -25,18 +25,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing token in localStorage
-    const token = localStorage.getItem('accessToken');
+    // Check for existing user info
     const storedUser = localStorage.getItem('user');
-    
-    if (token && storedUser) {
-      setAccessToken(token);
+
+    if (storedUser) {
       setUser(JSON.parse(storedUser));
-      
-      // Set default axios auth header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
-    
+
     setIsLoading(false);
   }, []);
 
@@ -46,18 +41,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         credential
       });
 
-      const { user: userData, access_token, refresh_token } = response.data;
+      const { user: userData } = response.data;
 
       setUser(userData);
-      setAccessToken(access_token);
 
       // Store in localStorage
-      localStorage.setItem('accessToken', access_token);
-      localStorage.setItem('refreshToken', refresh_token);
       localStorage.setItem('user', JSON.stringify(userData));
-
-      // Set default axios auth header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
     } catch (error) {
       console.error('Login failed:', error);
       throw error;
@@ -67,8 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     setUser(null);
     setAccessToken(null);
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     delete axios.defaults.headers.common['Authorization'];
   };

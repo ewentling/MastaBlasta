@@ -1029,6 +1029,145 @@ def update_platform_config():
         return jsonify({'error': 'Failed to update platform configuration'}), 500
 
 
+def _test_platform(platform):
+    import os
+    import requests
+    platform = platform.lower()
+
+    if platform not in _PLATFORM_ENV_VARS:
+        return False, f'Unknown platform: {platform}'
+
+    meta = _PLATFORM_ENV_VARS[platform]
+    is_configured = all(
+        os.getenv(k, '')
+        for k in meta['keys']
+        if k not in meta.get('optional', set())
+    )
+
+    if not is_configured:
+        return False, f'Not configured'
+
+    try:
+        if platform == 'twitter':
+            client_id = os.getenv('TWITTER_CLIENT_ID')
+            client_secret = os.getenv('TWITTER_CLIENT_SECRET')
+            bearer = os.getenv('TWITTER_BEARER_TOKEN')
+
+            if bearer:
+                headers = {'Authorization': f'Bearer {bearer}'}
+                resp = requests.get('https://api.twitter.com/2/users/by/username/twitter', headers=headers)
+                if resp.status_code in (200, 403, 429):
+                    return True, 'Twitter Bearer Token is valid and working.'
+
+            auth = (client_id, client_secret)
+            data = {'grant_type': 'client_credentials'}
+            resp = requests.post('https://api.twitter.com/oauth2/token', auth=auth, data=data)
+            if resp.status_code == 200:
+                return True, 'Twitter Client ID & Secret obtained an app token successfully.'
+            else:
+                return False, f'Twitter API rejected credentials: {resp.text}'
+
+        elif platform == 'meta':
+            app_id = os.getenv('META_APP_ID')
+            app_secret = os.getenv('META_APP_SECRET')
+            resp = requests.get(f'https://graph.facebook.com/oauth/access_token?client_id={app_id}&client_secret={app_secret}&grant_type=client_credentials')
+            if resp.status_code == 200:
+                return True, 'Meta Application ID & Secret successfully acquired an app access token.'
+            else:
+                return False, f'Meta Graph API rejected credentials: {resp.text}'
+
+        elif platform == 'linkedin':
+            client_id = os.getenv('LINKEDIN_CLIENT_ID')
+            client_secret = os.getenv('LINKEDIN_CLIENT_SECRET')
+            data = {'grant_type': 'client_credentials', 'client_id': client_id, 'client_secret': client_secret}
+            resp = requests.post('https://www.linkedin.com/oauth/v2/accessToken', data=data)
+            if resp.status_code == 200:
+                return True, 'LinkedIn Client ID & Secret verified via client credentials grant.'
+            else:
+                return False, f'LinkedIn OAuth API rejected credentials: {resp.text}'
+
+        elif platform == 'openai':
+            api_key = os.getenv('OPENAI_API_KEY')
+            headers = {'Authorization': f'Bearer {api_key}'}
+            resp = requests.get('https://api.openai.com/v1/models', headers=headers)
+            if resp.status_code == 200:
+                return True, 'OpenAI API Key successfully authenticated.'
+            else:
+                return False, f'OpenAI models API rejected the key: {resp.text}'
+
+        elif platform == 'google':
+            api_key = os.getenv('GOOGLE_API_KEY')
+            if api_key:
+                resp = requests.get(f'https://www.googleapis.com/youtube/v3/channels?part=snippet&forUsername=Google&key={api_key}')
+                if resp.status_code in (200, 403):
+                     return True, 'Google API Key format validated by YouTube API.'
+            
+            return True, 'Google integration looks configured. (OAuth Clients require user consent flow to fully test)'
+
+        # General catch all
+        return True, f'{platform.title()} properties are configured. (Full validation requires user consent flow)'
+
+    except Exception as e:
+        logger.error(f"Error testing integration {platform}: {e}", exc_info=True)
+        return False, f'Connection test failed: {str(e)}'
+
+@admin_bp.route('/platform-config/<platform>/test', methods=['POST'])
+@auth_required
+@admin_only
+def test_platform_config(platform):
+    """Test OAuth credentials and integrations for a specific platform"""
+    success, message = _test_platform(platform)
+    status_code = 200 if success else 400
+    if not success and message == 'Not configured':
+        message = f'{platform.title()} configuration is missing required fields.'
+    return jsonify({'success': success, 'message': message}), status_code
+
+@admin_bp.route('/platform-health', methods=['GET'])
+@auth_required
+@admin_only
+def get_platform_health():
+    """Get health status of all configured platforms"""
+    import concurrent.futures
+    import os
+
+    results = []
+    
+    # We only check platforms that are at least configured
+    configured_platforms = []
+    for platform, meta in _PLATFORM_ENV_VARS.items():
+        is_configured = all(
+            os.getenv(k, '')
+            for k in meta['keys']
+            if k not in meta.get('optional', set())
+        )
+        if is_configured:
+            configured_platforms.append(platform)
+            
+    # Run tests in parallel as they make network requests
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_platform = {executor.submit(_test_platform, p): p for p in configured_platforms}
+        for future in concurrent.futures.as_completed(future_to_platform):
+            platform = future_to_platform[future]
+            try:
+                success, message = future.result()
+                results.append({
+                    'platform': platform,
+                    'status': 'healthy' if success else 'error',
+                    'message': message
+                })
+            except Exception as exc:
+                results.append({
+                    'platform': platform,
+                    'status': 'error',
+                    'message': f'Exception during check: {str(exc)}'
+                })
+                
+    # Sort for consistent ordering
+    results.sort(key=lambda x: x['platform'])
+    
+    return jsonify({'health': results}), 200
+
+
 # ==================== AUDIT LOG & ACTIVITY ====================
 
 @admin_bp.route('/audit-logs', methods=['GET'])

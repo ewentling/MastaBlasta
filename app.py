@@ -217,6 +217,83 @@ if PRODUCTION_MODE and DB_ENABLED:
     _expire_stale_subscriptions_fn = _expire_stale_subscriptions
 
 
+# ── Periodic token refresh job ───────────────────────────────────────────────
+_refresh_expiring_tokens_fn = None
+if PRODUCTION_MODE and DB_ENABLED:
+    def _refresh_expiring_tokens():
+        """Automatically refresh platform tokens that are nearing expiration.
+        
+        Runs every 12 hours. Finds tokens expiring within the next 3 days
+        and attempts to refresh them using the respective platform's OAuth implementation.
+        """
+        try:
+            from database import db_session_scope
+            from models import Account
+            from auth import decrypt_token, encrypt_token
+            from datetime import datetime, timedelta, timezone
+            
+            # Import OAuth handlers
+            from oauth import TwitterOAuth, MetaOAuth, LinkedInOAuth, GoogleOAuth
+            
+            now = datetime.now(timezone.utc)
+            refresh_threshold = now + timedelta(days=3)
+            
+            with db_session_scope() as session:
+                expiring_accounts = session.query(Account).filter(
+                    Account.is_active == True,
+                    Account.token_expires_at <= refresh_threshold,
+                    Account.token_expires_at > now  # Ensure it hasn't completely expired or use a grace period if supported
+                ).all()
+                
+                success_count = 0
+                failure_count = 0
+                
+                for account in expiring_accounts:
+                    try:
+                        decrypted_token = decrypt_token(account.oauth_token) if account.oauth_token else None
+                        decrypted_refresh = decrypt_token(account.refresh_token) if account.refresh_token else None
+                        
+                        new_token_data = None
+                        
+                        if account.platform == 'twitter' and decrypted_refresh:
+                            # We might need to look up the client_id from OAuthAppConfig if custom apps are supported.
+                            # For now, TwitterOAuth defaults to env vars if not provided.
+                            new_token_data = TwitterOAuth.refresh_access_token(decrypted_refresh)
+                        
+                        elif account.platform in ['facebook', 'instagram', 'threads'] and decrypted_token:
+                            # Meta uses the current valid token to exchange for a new long-lived token
+                            new_token_data = MetaOAuth.refresh_access_token(decrypted_token)
+                            
+                        elif account.platform == 'linkedin' and decrypted_refresh:
+                            new_token_data = LinkedInOAuth.refresh_access_token(decrypted_refresh)
+                            
+                        elif account.platform == 'youtube' and decrypted_refresh:
+                            new_token_data = GoogleOAuth.refresh_access_token(decrypted_refresh)
+                            
+                        if new_token_data:
+                            account.oauth_token = encrypt_token(new_token_data['access_token'])
+                            if new_token_data.get('refresh_token'):
+                                account.refresh_token = encrypt_token(new_token_data['refresh_token'])
+                            account.token_expires_at = new_token_data['expires_at']
+                            success_count += 1
+                            logger.info(f"Successfully refreshed token for {account.platform} account {account.id}")
+                        else:
+                            failure_count += 1
+                            logger.warning(f"Failed to refresh token for {account.platform} account {account.id}. Manual intervention may be required.")
+                            
+                    except Exception as e:
+                        failure_count += 1
+                        logger.error(f"Error refreshing token for {account.platform} account {account.id}: {e}")
+                
+                if success_count > 0 or failure_count > 0:
+                    logger.info(f"Token refresh job complete: {success_count} succeeded, {failure_count} failed")
+                    
+        except Exception as e:
+            logger.error(f"Token refresh job failed: {e}")
+
+    _refresh_expiring_tokens_fn = _refresh_expiring_tokens
+
+
 # Helper functions
 def use_database():
     """Check if database should be used"""
@@ -273,6 +350,15 @@ if _expire_stale_subscriptions_fn is not None:
         replace_existing=True,
     )
     logger.info("✓ Subscription expiry job scheduled (every hour)")
+if _refresh_expiring_tokens_fn is not None:
+    scheduler.add_job(
+        _refresh_expiring_tokens_fn,
+        'interval',
+        hours=12,
+        id='refresh_tokens',
+        replace_existing=True,
+    )
+    logger.info("✓ Token refresh job scheduled (every 12 hours)")
 
 # In-memory storage for posts and accounts (in production, use a database)
 posts_db = {}

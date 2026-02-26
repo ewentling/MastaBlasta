@@ -12,64 +12,48 @@ import type {
 
 const api = axios.create({
   baseURL: '/api',
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
+axios.defaults.withCredentials = true;
+
 export { api };
 
-// Attach auth token to every request automatically
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
-  if (token) {
-    // Axios 1.x always initialises config.headers as an AxiosHeaders instance,
-    // but guard defensively for any edge-case where it might be absent.
-    if (!config.headers) {
-      config.headers = { Authorization: `Bearer ${token}` } as any;
-    } else if (typeof (config.headers as any).set === 'function') {
-      (config.headers as any).set('Authorization', `Bearer ${token}`);
-    } else {
-      (config.headers as any)['Authorization'] = `Bearer ${token}`;
-    }
-  }
-  return config;
-});
+// Replace previously manual auth interceptors with a no-op or just leave comments since cookies are sent automatically.
+// The cookies are now HttpOnly and managed by the browser.
 
 // Track whether a refresh is already in-flight to prevent loops
 let _refreshing = false;
-let _refreshSubscribers: Array<(token: string | null) => void> = [];
+let _refreshSubscribers: Array<(success: boolean) => void> = [];
 
-function _subscribeToRefresh(cb: (token: string | null) => void) {
+function _subscribeToRefresh(cb: (success: boolean) => void) {
   _refreshSubscribers.push(cb);
 }
 
-function _notifyRefreshSubscribers(token: string | null) {
-  _refreshSubscribers.forEach((cb) => cb(token));
+function _notifyRefreshSubscribers(success: boolean) {
+  _refreshSubscribers.forEach((cb) => cb(success));
   _refreshSubscribers = [];
 }
 
-async function _tryRefreshToken(): Promise<string | null> {
-  const refreshToken = localStorage.getItem('refreshToken');
-  if (!refreshToken) return null;
+async function _tryRefreshToken(): Promise<boolean> {
   try {
-    const response = await axios.post('/api/v2/auth/refresh', { refresh_token: refreshToken });
-    const { access_token, refresh_token: newRefresh } = response.data;
-    if (access_token) {
-      localStorage.setItem('accessToken', access_token);
-      if (newRefresh) localStorage.setItem('refreshToken', newRefresh);
-      return access_token;
-    }
+    const response = await axios.post('/api/v2/auth/refresh');
+    // If successful, the backend will have established new HttpOnly cookies on the response, which the browser automatically stores and utilizes.
+    return response.status === 200;
   } catch {
     // Refresh failed – fall through to logout
   }
-  return null;
+  return false;
 }
 
-function _logout() {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
+async function _logout() {
   localStorage.removeItem('user');
+  try {
+    await axios.post('/api/v2/auth/logout');
+  } catch (e) { }
   if (window.location.pathname !== '/login') {
     window.location.href = '/login';
   }
@@ -106,9 +90,8 @@ api.interceptors.response.use(
       if (_refreshing) {
         // Another request already triggered a refresh – wait for it
         return new Promise((resolve, reject) => {
-          _subscribeToRefresh((token) => {
-            if (token) {
-              error.config.headers['Authorization'] = `Bearer ${token}`;
+          _subscribeToRefresh((success) => {
+            if (success) {
               error.config._retried = true;
               resolve(api.request(error.config));
             } else {
@@ -121,16 +104,15 @@ api.interceptors.response.use(
       _refreshing = true;
       error.config._retried = true;
 
-      const newToken = await _tryRefreshToken();
+      const success = await _tryRefreshToken();
       _refreshing = false;
-      _notifyRefreshSubscribers(newToken);
+      _notifyRefreshSubscribers(success);
 
-      if (newToken) {
-        error.config.headers['Authorization'] = `Bearer ${newToken}`;
+      if (success) {
         return api.request(error.config);
       }
 
-      _logout();
+      await _logout();
     }
 
     return Promise.reject(error);
@@ -167,6 +149,11 @@ export const accountsApi = {
     const response = await api.post(`/accounts/${id}/test`);
     return response.data;
   },
+
+  getLogs: async (id: string, limit: number = 50, offset: number = 0): Promise<{ logs: any[]; count: number; limit: number; offset: number }> => {
+    const response = await api.get(`/accounts/${id}/logs`, { params: { limit, offset } });
+    return response.data;
+  },
 };
 
 export const platformsApi = {
@@ -180,8 +167,8 @@ export const platformsApi = {
     return response.data;
   },
 
-  getPostTypeDetails: async (platform: string): Promise<{ 
-    platform: string; 
+  getPostTypeDetails: async (platform: string): Promise<{
+    platform: string;
     post_types: Array<{
       type: string;
       description: string;
@@ -236,9 +223,9 @@ export const postsApi = {
   checkScheduleConflicts: async (data: {
     scheduled_time: string;
     platforms: string[];
-  }): Promise<{ 
-    has_conflicts: boolean; 
-    conflicts: any[]; 
+  }): Promise<{
+    has_conflicts: boolean;
+    conflicts: any[];
     conflict_count: number;
     suggestions: any[];
   }> => {
@@ -251,7 +238,7 @@ export const postsApi = {
     media?: string[];
     account_ids?: string[];
     scheduled_time?: string;
-  }): Promise<{ success: boolean; post: Post }> => {
+  }): Promise<{ success: boolean; post: any }> => {
     const response = await api.patch(`/posts/${id}`, data);
     return response.data;
   },
@@ -260,6 +247,26 @@ export const postsApi = {
     const response = await api.delete(`/posts/${id}`);
     return response.data;
   },
+};
+
+export interface VideoJobStatus {
+  status: 'processing' | 'completed' | 'failed' | 'not_found';
+  progress?: number;
+  error?: string;
+  video_path?: string;
+  video_url?: string;
+  srt_url?: string;
+}
+
+export const videoApi = {
+  generate: async (data: { settings: any, slides: any[] }): Promise<{ job_id: string; message: string; status: string }> => {
+    const response = await api.post('/video/generate', data);
+    return response.data;
+  },
+  getStatus: async (id: string): Promise<VideoJobStatus> => {
+    const response = await api.get(`/video/status/${id}`);
+    return response.data;
+  }
 };
 
 export const aiApi = {
@@ -376,8 +383,13 @@ export const healthApi = {
 };
 
 export const oauthApi = {
-  initFlow: async (platform: string): Promise<{ oauth_url: string; state: string; platform: string }> => {
-    const response = await api.get(`/oauth/init/${platform}`);
+  initFlow: async (platform: string, scopes?: string[]): Promise<{ oauth_url: string; state: string; platform: string }> => {
+    let url = `/oauth/init/${platform}`;
+    if (scopes && scopes.length > 0) {
+      const scopeParam = scopes.join(',');
+      url += `?scopes=${encodeURIComponent(scopeParam)}`;
+    }
+    const response = await api.get(url);
     return response.data;
   },
 
@@ -521,7 +533,7 @@ export const mediaApi = {
   upload: async (file: File): Promise<{ success: boolean; media_id: string; url: string; filename: string }> => {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     const response = await api.post('/v2/media/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',

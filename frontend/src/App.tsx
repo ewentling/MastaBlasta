@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw, Palette } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw, Palette, Video } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -17,6 +17,7 @@ import ContentLibraryPage from './pages/ContentLibraryPage';
 import ABTestingPage from './pages/ABTestingPage';
 import ChatbotPage from './pages/ChatbotPage';
 import ClipsPage from './pages/ClipsPage';
+import VideoGeneratorPage from './pages/VideoGeneratorPage';
 import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -95,6 +96,7 @@ export const appRoutes: AppRouteConfig[] = [
   { path: '/ab-testing', label: 'A/B Testing', icon: Sparkles, element: <ABTestingPage /> },
   { path: '/chatbot', label: 'AI Assistant', icon: MessageSquare, element: <ChatbotPage /> },
   { path: '/clips', label: 'Video Clipper', icon: Scissors, element: <ClipsPage /> },
+  { path: '/video-generator', label: 'Video Generator', icon: Video, element: <VideoGeneratorPage /> },
   { path: '/admin', label: 'Admin', icon: Shield, element: <AdminPage />, adminOnly: true },
 ];
 

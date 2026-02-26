@@ -4,12 +4,14 @@ export interface Platform {
   available: boolean;
   supports_oauth?: boolean;
   supported_post_types?: string[];
+  icon?: string;
 }
 
 export interface Account {
   id: string;
   platform: string;
   name: string;
+  display_name?: string;
   username: string;
   enabled: boolean;
   created_at: string;

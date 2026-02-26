@@ -13,7 +13,7 @@ import os
 from app_extensions import (
     db_manager, oauth_manager, media_manager, analytics_collector,
     webhook_manager, search_manager, bulk_ops_manager, retry_manager,
-    auth_required, role_required, DB_ENABLED
+    audit_manager, video_manager, auth_required, role_required, DB_ENABLED
 )
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,23 @@ def set_no_store_on_auth(response):
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
         response.headers['Pragma'] = 'no-cache'
     return response
+
+def _build_auth_response(user_data, access_token, refresh_token, status_code=200):
+    from flask import make_response
+    response = make_response(jsonify(user_data))
+    
+    secure = True
+    samesite = 'None'
+    
+    response.set_cookie(
+        'accessToken', access_token,
+        httponly=True, secure=secure, samesite=samesite, max_age=15*60
+    )
+    response.set_cookie(
+        'refreshToken', refresh_token,
+        httponly=True, secure=secure, samesite=samesite, max_age=30*24*60*60
+    )
+    return response, status_code
 
 
 # ==================== AUTHENTICATION ROUTES ====================
@@ -90,17 +107,15 @@ def register():
             access_token = create_access_token(user.id, user.role.value)
             refresh_token = create_refresh_token(user.id)
 
-            return jsonify({
+            return _build_auth_response({
                 'user': {
                     'id': user.id,
                     'email': user.email,
                     'name': user.full_name,
                     'role': user.role.value
                 },
-                'access_token': access_token,
-                'refresh_token': refresh_token,
                 'api_key': user.api_key
-            }), 201
+            }, access_token, refresh_token, 201)
 
     except Exception as e:
         logger.error(f"Registration error: {e}")
@@ -163,17 +178,15 @@ def login():
             access_token = create_access_token(user.id, user.role.value)
             refresh_token = create_refresh_token(user.id)
 
-            return jsonify({
+            return _build_auth_response({
                 'user': {
                     'id': user.id,
                     'email': user.email,
                     'name': user.full_name,
                     'role': user.role.value
                 },
-                'access_token': access_token,
-                'refresh_token': refresh_token,
-                'password_must_change': user.password_must_change  # Include password change requirement
-            })
+                'password_must_change': user.password_must_change
+            }, access_token, refresh_token, 200)
 
     except Exception as e:
         logger.error(f"Login error: {e}")
@@ -234,6 +247,15 @@ def get_me():
     """Get current user profile"""
     return jsonify({'user': g.current_user})
 
+@integrated_bp.route('/auth/logout', methods=['POST'])
+def logout():
+    """Logout by clearing HttpOnly cookies"""
+    from flask import make_response
+    response = make_response(jsonify({'message': 'Logged out successfully'}))
+    response.set_cookie('accessToken', '', expires=0, httponly=True, secure=True, samesite='None')
+    response.set_cookie('refreshToken', '', expires=0, httponly=True, secure=True, samesite='None')
+    return response, 200
+
 
 @integrated_bp.route('/auth/refresh', methods=['POST'])
 def refresh_access_token():
@@ -249,6 +271,11 @@ def refresh_access_token():
 
         data = request.get_json() or {}
         refresh_token = data.get('refresh_token')
+        
+        if not refresh_token:
+            # Check HttpOnly cookie
+            refresh_token = request.cookies.get('refreshToken')
+            
         if not refresh_token:
             # Also accept from Authorization header (Bearer <refresh_token>)
             auth_header = request.headers.get('Authorization', '')
@@ -278,10 +305,9 @@ def refresh_access_token():
             new_access_token = create_access_token(user.id, user.role.value)
             new_refresh_token = create_refresh_token(user.id)
 
-            return jsonify({
-                'access_token': new_access_token,
-                'refresh_token': new_refresh_token,
-            })
+            return _build_auth_response({
+                'message': 'Token refreshed successfully'
+            }, new_access_token, new_refresh_token, 200)
 
     except Exception:
         logger.error("Token refresh error")
@@ -378,17 +404,15 @@ def google_auth():
                 access_token = create_access_token(user.id, user.role.value)
                 refresh_token = create_refresh_token(user.id)
 
-                return jsonify({
+                return _build_auth_response({
                     'user': {
                         'id': user.id,
                         'email': user.email,
                         'name': user.full_name,
                         'role': user.role.value
                     },
-                    'access_token': access_token,
-                    'refresh_token': refresh_token,
                     'api_key': user.api_key
-                }), 200
+                }, access_token, refresh_token, 200)
 
         except ValueError as e:
             logger.error(f"Google token verification failed: {e}")
@@ -405,7 +429,10 @@ def google_auth():
 @auth_required
 def oauth_authorize(platform):
     """Initiate OAuth flow for platform"""
-    result = oauth_manager.get_authorization_url(platform, g.current_user['id'])
+    scopes_str = request.args.get('scopes')
+    requested_scopes = scopes_str.split(',') if scopes_str else None
+    
+    result = oauth_manager.get_authorization_url(platform, g.current_user['id'], requested_scopes=requested_scopes)
 
     if 'error' in result:
         return jsonify(result), 400
@@ -451,7 +478,31 @@ def oauth_callback(platform):
     result = oauth_manager.handle_callback(platform, code, state, code_verifier=code_verifier)
 
     if 'error' in result:
+        # Record failed connection
+        parts = state.split(':')
+        user_id = parts[0] if len(parts) >= 1 else None
+        if user_id:
+            audit_manager.record_event(
+                user_id=user_id,
+                platform=platform,
+                action='connect',
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent'),
+                status='failed',
+                error_message=result['error']
+            )
         return jsonify(result), 400
+
+    # Record successful connection
+    audit_manager.record_event(
+        user_id=result.get('user_id', g.current_user['id'] if hasattr(g, 'current_user') else None),
+        platform=platform,
+        action='connect',
+        account_id=result.get('account_id'),
+        ip_address=request.remote_addr,
+        user_agent=request.headers.get('User-Agent'),
+        status='success'
+    )
 
     return jsonify(result)
 
@@ -1193,6 +1244,179 @@ def update_account_display_name(account_id):
     except Exception as e:
         logger.error(f"Error updating account: {e}")
         return jsonify({'error': 'Failed to update account'}), 500
+
+
+@integrated_bp.route('/accounts/<account_id>', methods=['DELETE'])
+@auth_required
+def delete_account(account_id):
+    """Delete an account and revoke its tokens
+    
+    Security: Only allows deleting accounts owned by authenticated user
+    """
+    from database import db_session_scope
+    from models import Account
+    from auth import decrypt_token
+    
+    try:
+        with db_session_scope() as session:
+            account = session.query(Account).filter_by(
+                id=account_id,
+                user_id=g.current_user['id']
+            ).first()
+            
+            if not account:
+                return jsonify({'error': 'Account not found or unauthorized'}), 404
+            
+            platform = account.platform
+            oauth_token_encrypted = account.oauth_token
+            
+            # Attempt to revoke token if we have one
+            if oauth_token_encrypted:
+                try:
+                    access_token = decrypt_token(oauth_token_encrypted)
+                    if access_token:
+                        # We'll implement this method in OAuthManager next
+                        if hasattr(oauth_manager, 'revoke_token'):
+                            oauth_manager.revoke_token(platform, access_token)
+                except Exception as e:
+                    logger.warning(f"Failed to revoke token during account deletion: {e}")
+            
+            # Record disconnect event
+            audit_manager.record_event(
+                user_id=g.current_user['id'],
+                platform=platform,
+                action='disconnect',
+                account_id=account.id,
+                ip_address=request.remote_addr,
+                user_agent=request.headers.get('User-Agent'),
+                status='success'
+            )
+            
+            # Delete from database
+            session.delete(account)
+            
+        return jsonify({
+            'success': True,
+            'message': 'Account deleted successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error deleting account: {e}")
+        return jsonify({'error': 'Failed to delete account'}), 500
+
+
+@integrated_bp.route('/accounts/<account_id>/logs', methods=['GET'])
+@auth_required
+def get_account_logs(account_id):
+    """Get connection audit logs for an account
+    
+    Security: Only allows viewing logs for accounts owned by authenticated user
+    """
+    from database import db_session_scope
+    from models import Account, ConnectionAuditLog
+    
+    try:
+        with db_session_scope() as session:
+            # First verify ownership
+            account = session.query(Account).filter_by(
+                id=account_id,
+                user_id=g.current_user['id']
+            ).first()
+            
+            if not account:
+                return jsonify({'error': 'Account not found or unauthorized'}), 404
+            
+            # Fetch logs
+            limit = int(request.args.get('limit', 50))
+            offset = int(request.args.get('offset', 0))
+            
+            logs = session.query(ConnectionAuditLog).filter_by(
+                account_id=account_id
+            ).order_by(ConnectionAuditLog.created_at.desc()).limit(limit).offset(offset).all()
+            
+            log_entries = [{
+                'id': log.id,
+                'action': log.action,
+                'platform': log.platform,
+                'scopes': log.scopes,
+                'ip_address': log.ip_address,
+                'status': log.status,
+                'error_message': log.error_message,
+                'created_at': log.created_at.isoformat() if log.created_at else None
+            } for log in logs]
+            
+            return jsonify({
+                'logs': log_entries,
+                'limit': limit,
+                'offset': offset,
+                'count': len(log_entries)
+            })
+    except Exception as e:
+        logger.error(f"Error fetching account logs: {e}")
+        return jsonify({'error': 'Failed to fetch account logs'}), 500
+
+
+# ==================== VIDEO GENERATOR ROUTES ====================
+
+@integrated_bp.route('/video/generate', methods=['POST'])
+@auth_required
+def generate_video():
+    """Start a new long-form video generation job"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Invalid or missing JSON payload'}), 400
+
+        job_id = video_manager.start_video_generation(data)
+        
+        return jsonify({
+            'message': 'Video generation started successfully',
+            'job_id': job_id,
+            'status': 'processing'
+        }), 202
+        
+    except Exception as e:
+        logger.error(f"Error starting video generation: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@integrated_bp.route('/video/status/<job_id>', methods=['GET'])
+@auth_required
+def get_video_status(job_id):
+    """Get the status of a video generation job"""
+    try:
+        status = video_manager.get_job_status(job_id)
+        if status.get('status') == 'not_found':
+            return jsonify({'error': 'Job not found'}), 404
+            
+        return jsonify(status)
+        
+    except Exception as e:
+        logger.error(f"Error checking video status: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@integrated_bp.route('/media/generated/<filename>', methods=['GET'])
+@auth_required
+def get_generated_video(filename):
+    """Serve generated video files securely"""
+    from media_utils import MEDIA_DIR
+    from pathlib import Path
+    import os
+    
+    try:
+        # Validate filename to prevent directory traversal
+        if not (filename.endswith('.mp4') or filename.endswith('.srt')) or '/' in filename or '\\' in filename:
+            return jsonify({'error': 'Invalid filename'}), 400
+            
+        file_path = MEDIA_DIR / filename
+        
+        if not file_path.exists():
+            return jsonify({'error': 'File not found'}), 404
+            
+        mimetype = 'video/mp4' if filename.endswith('.mp4') else 'text/plain'
+        return send_file(str(file_path), mimetype=mimetype)
+        
+    except Exception as e:
+        logger.error(f"Error serving generated video: {e}")
+        return jsonify({'error': 'Failed to serve video'}), 500
 
 
 # ==================== STATUS & HEALTH ROUTES ====================

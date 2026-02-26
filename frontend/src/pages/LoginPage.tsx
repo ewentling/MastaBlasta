@@ -65,10 +65,10 @@ function LoginPage() {
     const initializeGoogleOneTap = () => {
       if (window.google && googleButtonRef.current) {
         isInitialized.current = true;
-        
+
         // Get Google Client ID from environment or use default for development
         const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-        
+
         if (!clientId) {
           console.error('Google Client ID not configured');
           setError('Google authentication is not configured. Please contact the administrator.');
@@ -139,6 +139,7 @@ function LoginPage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // Ensure cookies are sent and received
         body: JSON.stringify({
           email: formData.email,
           password: formData.password,
@@ -151,9 +152,7 @@ function LoginPage() {
         throw new Error(data.error || 'Login failed');
       }
 
-      // Store tokens and user info
-      localStorage.setItem('accessToken', data.access_token);
-      localStorage.setItem('refreshToken', data.refresh_token);
+      // Store user info
       localStorage.setItem('user', JSON.stringify(data.user));
 
       // Check if password must be changed
@@ -225,9 +224,9 @@ function LoginPage() {
           )}
 
           {/* Login method toggle */}
-          <div style={{ 
-            display: 'flex', 
-            gap: '12px', 
+          <div style={{
+            display: 'flex',
+            gap: '12px',
             marginBottom: '24px',
             justifyContent: 'center'
           }}>
@@ -374,7 +373,7 @@ function LoginPage() {
 
           {/* Subscription Plans Link */}
           <div style={{ marginTop: '24px', textAlign: 'center' }}>
-            <Link 
+            <Link
               to="/subscription-info"
               style={{
                 display: 'inline-block',

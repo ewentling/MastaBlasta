@@ -139,12 +139,19 @@ def verify_token(token: str) -> Optional[Dict[str, Any]]:
 
 def get_current_user(db_session) -> Optional[Dict[str, Any]]:
     """Get the current authenticated user from request"""
+    token = None
     auth_header = request.headers.get('Authorization', '')
 
-    if not auth_header.startswith('Bearer '):
+    if auth_header.startswith('Bearer '):
+        token = auth_header.split(' ')[1]
+        
+    if not token:
+        # Fallback to HttpOnly cookie
+        token = request.cookies.get('accessToken')
+
+    if not token:
         return None
 
-    token = auth_header.split(' ')[1]
     payload = decode_token(token)
 
     if not payload or payload.get('type') != 'access':

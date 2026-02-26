@@ -63,3 +63,9 @@ htmlcov/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+# CodeBuddy
+.codebuddy/*
+!.codebuddy/skills/
+!.codebuddy/rules/
+!.codebuddy/prompts/
+!.codebuddy/config.json

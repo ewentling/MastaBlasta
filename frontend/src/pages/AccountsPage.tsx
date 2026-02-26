@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountsApi, platformsApi, oauthApi, oauthAppsApi } from '../api';
-import { Plus, Trash2, Edit2, Check, X, TestTube, Zap, Settings, Copy } from 'lucide-react';
-import type { Account, CreateAccountRequest, Platform } from '../types';
+import { Plus, Trash2, Edit2, Check, X, TestTube, Zap, Settings, Copy, RefreshCw } from 'lucide-react';
+import type { Account, Platform } from '../types';
 import OAuthAppModal from '../components/OAuthAppModal';
+import AuditLogModal from '../components/AuditLogModal';
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
-  const [showOAuthModal, setShowOAuthModal] = useState(false);
   const [showOAuthAppModal, setShowOAuthAppModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [testingAccount, setTestingAccount] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState<string | null>(null);
+  const [showScopeModal, setShowScopeModal] = useState<string | null>(null);
+  const [viewingLogsAccount, setViewingLogsAccount] = useState<Account | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
 
@@ -32,19 +35,6 @@ export default function AccountsPage() {
   const { data: platformsData } = useQuery({
     queryKey: ['platforms'],
     queryFn: () => platformsApi.getAll(),
-  });
-
-  const { data: oauthAppsData } = useQuery({
-    queryKey: ['oauth-apps'],
-    queryFn: () => oauthAppsApi.getAll(),
-  });
-
-  const createMutation = useMutation({
-    mutationFn: accountsApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
-      setShowModal(false);
-    },
   });
 
   const updateMutation = useMutation({
@@ -76,128 +66,233 @@ export default function AccountsPage() {
     setTestingAccount(null);
   };
 
+  const initConnect = (platformName: string) => {
+    // Show scope selection modal first
+    setShowScopeModal(platformName);
+  };
+
+  const handleConnect = async (platformName: string, scopes: string[] = []) => {
+    setIsConnecting(platformName);
+    setShowScopeModal(null);
+
+    try {
+      const response = await oauthApi.initFlow(platformName, scopes);
+
+      if (!response || !response.oauth_url) {
+        throw new Error(`Unable to connect to ${platformName}. OAuth not configured by admin.`);
+      }
+
+      const popup = window.open(
+        response.oauth_url,
+        'oauth_popup',
+        'width=600,height=700,scrollbars=yes'
+      );
+
+      if (!popup) {
+        throw new Error('Popup blocked. Please allow popups for this site.');
+      }
+
+      const handleMessage = async (event: MessageEvent) => {
+        const allowedOrigins = [window.location.origin];
+        if (!allowedOrigins.includes(event.origin)) return;
+
+        if (event.data.type === 'oauth_success') {
+          window.removeEventListener('message', handleMessage);
+          try {
+            await oauthApi.connect({
+              platform: platformName,
+              oauth_data: event.data.data,
+              account_name: '', // backend will generate a default name
+            });
+            queryClient.invalidateQueries({ queryKey: ['accounts'] });
+            setTestResult({ success: true, message: `Successfully connected ${platformName} account!` });
+            setTimeout(() => setTestResult(null), 5000);
+            setIsConnecting(null);
+          } catch (err: any) {
+            setTestResult({ success: false, message: err.response?.data?.error || err.message || 'Failed to connect account' });
+            setTimeout(() => setTestResult(null), 8000);
+            setIsConnecting(null);
+          }
+        } else if (event.data.type === 'oauth_error') {
+          window.removeEventListener('message', handleMessage);
+          setTestResult({ success: false, message: event.data.error || 'Authorization failed' });
+          setTimeout(() => setTestResult(null), 8000);
+          setIsConnecting(null);
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+
+      const checkClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(checkClosed);
+          window.removeEventListener('message', handleMessage);
+          setIsConnecting(null);
+        }
+      }, 1000);
+    } catch (err: any) {
+      setTestResult({ success: false, message: err.response?.data?.message || err.message || 'Failed to initialize OAuth' });
+      setTimeout(() => setTestResult(null), 8000);
+      setIsConnecting(null);
+    }
+  };
+
   const accounts = accountsData?.accounts || [];
-  const platforms = platformsData?.platforms || [];
+  const platforms: Platform[] = platformsData?.platforms || [];
 
   return (
     <div>
       <div className="page-header">
         <h2>Platform Accounts</h2>
-        <p>Manage your social media accounts and credentials</p>
+        <p>Manage your social media accounts and connected platforms</p>
       </div>
 
       {testResult && (
-        <div className={`alert ${testResult.success ? 'alert-success' : 'alert-error'}`}>
+        <div className={`alert ${testResult.success ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: '2rem' }}>
           {testResult.success ? <Check size={20} /> : <X size={20} />}
           <span>{testResult.message}</span>
         </div>
       )}
 
-      <div className="card">
-        <div className="card-header">
-          <h3>Connected Accounts</h3>
-          <button className="btn btn-primary" onClick={() => setShowOAuthModal(true)}>
-            <Zap size={18} />
-            Quick Connect
-          </button>
-        </div>
+      {isLoading ? (
+        <div className="loading">Loading accounts...</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '1.5rem' }}>
+          {platforms.map(platform => {
+            const platformAccounts = accounts.filter((a: Account) => a.platform === platform.name);
 
-        {isLoading ? (
-          <div className="loading">Loading accounts...</div>
-        ) : accounts.length === 0 ? (
-          <div className="empty-state">
-            <Plus size={48} />
-            <h3>No accounts connected</h3>
-            <p>Add your first social media account to start posting</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {accounts.map(account => (
-              <div
-                key={account.id}
-                style={{
-                  padding: '1.25rem',
-                  border: '1px solid var(--color-borderLight)',
-                  borderRadius: '8px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  backgroundColor: 'var(--color-bgSecondary)',
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                    <div style={{ fontWeight: '700', fontSize: '1.125rem', color: 'var(--color-textPrimary)' }}>
-                      {account.name}
+            return (
+              <div key={platform.name} style={{
+                padding: '1.5rem',
+                border: '1px solid var(--color-borderLight)',
+                borderRadius: '12px',
+                backgroundColor: 'var(--color-bgSecondary)',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--color-bgPrimary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', border: '1px solid var(--color-borderLight)' }}>
+                      {platform.icon || '🔗'}
                     </div>
-                    <span className="badge badge-info">{account.platform}</span>
-                    {account.enabled ? (
-                      <span className="badge badge-success">Active</span>
-                    ) : (
-                      <span className="badge badge-error">Disabled</span>
-                    )}
+                    <h3 style={{ margin: 0, fontSize: '1.125rem' }}>{platform.display_name}</h3>
                   </div>
-                  {account.username && (
-                    <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                      @{account.username}
-                      <button
-                        title="Copy handle"
-                        onClick={(e) => { e.stopPropagation(); copyUsername(account.id, account.username!); }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.1rem 0.25rem', color: copiedAccountId === account.id ? '#10b981' : 'var(--color-textTertiary)', display: 'flex', alignItems: 'center', borderRadius: '4px', transition: 'color 0.2s' }}
-                      >
-                        {copiedAccountId === account.id ? <Check size={13} /> : <Copy size={13} />}
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
-                    className="btn btn-secondary btn-small"
-                    onClick={() => handleTest(account.id)}
-                    disabled={testingAccount === account.id}
+                    onClick={() => setShowOAuthAppModal(true)}
+                    className="btn-icon"
+                    title="Advanced: Custom OAuth App Settings"
+                    style={{ color: 'var(--color-textTertiary)' }}
                   >
-                    <TestTube size={16} />
-                    {testingAccount === account.id ? 'Testing...' : 'Test'}
-                  </button>
-                  <button
-                    className="btn btn-secondary btn-small"
-                    onClick={() => setEditingAccount(account)}
-                  >
-                    <Edit2 size={16} />
-                    Edit
-                  </button>
-                  <button
-                    className="btn btn-danger btn-small"
-                    onClick={() => {
-                      if (confirm(`Delete account "${account.name}"?`)) {
-                        deleteMutation.mutate(account.id);
-                      }
-                    }}
-                  >
-                    <Trash2 size={16} />
-                    Delete
+                    <Settings size={18} />
                   </button>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
 
-      {showOAuthModal && (
-        <OAuthModal
-          platforms={platforms}
-          oauthApps={oauthAppsData?.oauth_apps || []}
-          onClose={() => setShowOAuthModal(false)}
-          onOpenOAuthApps={() => {
-            setShowOAuthModal(false);
-            setShowOAuthAppModal(true);
-          }}
-          onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ['accounts'] });
-            setShowOAuthModal(false);
-          }}
-        />
+                {platformAccounts.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
+                    {platformAccounts.map((account: Account) => (
+                      <div key={account.id} style={{
+                        padding: '1rem',
+                        backgroundColor: 'var(--color-bgPrimary)',
+                        borderRadius: '8px',
+                        border: '1px solid var(--color-borderLight)'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                          <div>
+                            <div style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>{account.name}</div>
+                            {account.username && (
+                              <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
+                                @{account.username}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); copyUsername(account.id, account.username!); }}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: copiedAccountId === account.id ? '#10b981' : 'var(--color-textTertiary)' }}
+                                >
+                                  {copiedAccountId === account.id ? <Check size={12} /> : <Copy size={12} />}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {!account.enabled && <span className="badge badge-error" style={{ fontSize: '0.7rem' }}>Disabled</span>}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button
+                            className="btn btn-secondary btn-small"
+                            onClick={() => handleTest(account.id)}
+                            disabled={testingAccount === account.id}
+                            style={{ flex: 1 }}
+                          >
+                            {testingAccount === account.id ? <RefreshCw size={14} className="spin" /> : <TestTube size={14} />}
+                            {testingAccount === account.id ? 'Testing...' : 'Test'}
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-small"
+                            onClick={() => initConnect(platform.name)}
+                            disabled={isConnecting === platform.name}
+                            title="Refresh tokens without losing history"
+                            style={{ flex: 1 }}
+                          >
+                            <RefreshCw size={14} />
+                            Reconnect
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-small"
+                            onClick={() => setViewingLogsAccount(account)}
+                            title="View Connection Logs"
+                          >
+                            Logs
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-small"
+                            onClick={() => setEditingAccount(account)}
+                            title="Edit"
+                          >
+                            <Edit2 size={14} />
+                          </button>
+                          <button
+                            className="btn btn-danger btn-small"
+                            onClick={() => {
+                              if (confirm(`Delete account "${account.name}"?`)) {
+                                deleteMutation.mutate(account.id);
+                              }
+                            }}
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <button
+                      onClick={() => initConnect(platform.name)}
+                      className="btn btn-secondary"
+                      disabled={isConnecting === platform.name}
+                      style={{ marginTop: 'auto' }}
+                    >
+                      {isConnecting === platform.name ? <RefreshCw size={16} className="spin" /> : <Plus size={16} />}
+                      Add Another Account
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <p style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem', marginBottom: '1.25rem', textAlign: 'center' }}>
+                      No accounts connected for {platform.display_name}. Connect one to start posting.
+                    </p>
+                    <button
+                      onClick={() => initConnect(platform.name)}
+                      className="btn btn-primary w-full"
+                      disabled={isConnecting === platform.name}
+                      style={{ marginTop: 'auto' }}
+                    >
+                      {isConnecting === platform.name ? <RefreshCw size={18} className="spin" /> : <Zap size={18} />}
+                      {isConnecting === platform.name ? 'Connecting...' : `Connect ${platform.display_name}`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {editingAccount && (
@@ -207,6 +302,21 @@ export default function AccountsPage() {
           onSave={(data) => {
             updateMutation.mutate({ id: editingAccount.id, data });
           }}
+        />
+      )}
+
+      {viewingLogsAccount && (
+        <AuditLogModal
+          account={viewingLogsAccount}
+          onClose={() => setViewingLogsAccount(null)}
+        />
+      )}
+
+      {showScopeModal && (
+        <ScopeSelectionModal
+          platform={showScopeModal}
+          onClose={() => setShowScopeModal(null)}
+          onConnect={(scopes) => handleConnect(showScopeModal, scopes)}
         />
       )}
 
@@ -258,7 +368,7 @@ function EditAccountModal({
               <input
                 type="text"
                 className="form-input"
-                value={username}
+                value={username || ''}
                 onChange={(e) => setUsername(e.target.value)}
               />
             </div>
@@ -289,213 +399,94 @@ function EditAccountModal({
   );
 }
 
-function OAuthModal({
-  platforms,
-  oauthApps = [],
+// ── SCOPE SELECTION MODAL ───────────────────────────────────────────────────
+function ScopeSelectionModal({
+  platform,
   onClose,
-  onOpenOAuthApps,
-  onSuccess,
+  onConnect,
 }: {
-  platforms: Platform[];
-  oauthApps?: any[];
+  platform: string;
   onClose: () => void;
-  onOpenOAuthApps: () => void;
-  onSuccess: () => void;
+  onConnect: (scopes: string[]) => void;
 }) {
-  const [selectedPlatform, setSelectedPlatform] = useState('');
-  const [accountName, setAccountName] = useState('');
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [error, setError] = useState('');
-
-  const hasOAuthApp = (platformName: string) => {
-    return oauthApps.some(app => app.platform === platformName);
+  const getScopes = () => {
+    switch (platform) {
+      case 'twitter':
+        return [
+          { id: 'tweet.read', label: 'Read Tweets', default: true },
+          { id: 'tweet.write', label: 'Write Tweets', default: true },
+          { id: 'users.read', label: 'Read Profile info', default: true },
+          { id: 'offline.access', label: 'Offline Access (Refresh Tokens)', default: true }
+        ];
+      case 'facebook':
+      case 'instagram':
+      case 'threads':
+        return [
+          { id: 'pages_manage_posts', label: 'Manage Page Posts', default: true },
+          { id: 'pages_read_engagement', label: 'Read Page Engagement', default: true },
+          { id: 'pages_show_list', label: 'Show Page List', default: true },
+          { id: 'instagram_basic', label: 'Instagram Basic Info', default: true },
+          { id: 'instagram_content_publish', label: 'Publish to Instagram', default: true }
+        ];
+      case 'linkedin':
+        return [
+          { id: 'w_member_social', label: 'Create posts on LinkedIn', default: true },
+          { id: 'r_liteprofile', label: 'Read basic profile info', default: true },
+          { id: 'r_emailaddress', label: 'Read email address', default: true }
+        ];
+      case 'youtube':
+        return [
+          { id: 'https://www.googleapis.com/auth/youtube.upload', label: 'Upload YouTube Videos', default: true },
+          { id: 'https://www.googleapis.com/auth/youtube', label: 'Manage YouTube Account', default: true }
+        ];
+      default:
+        return [];
+    }
   };
 
-  const handleConnect = async () => {
-    if (!selectedPlatform) {
-      setError('Please select a platform');
-      return;
-    }
+  const initialScopes = getScopes();
+  const [selectedScopes, setSelectedScopes] = useState<string[]>(initialScopes.filter(s => s.default).map(s => s.id));
 
-    setIsConnecting(true);
-    setError('');
-
-    try {
-      // Initialize OAuth flow
-      const response = await oauthApi.initFlow(selectedPlatform);
-      
-      // Check if response exists and OAuth is properly configured
-      if (!response || !response.oauth_url) {
-        throw new Error(
-          `Unable to connect to ${selectedPlatform}. The platform's OAuth connection is not configured yet. ` +
-          `Please contact your administrator or configure custom OAuth credentials in Advanced settings.`
-        );
-      }
-
-      // Open OAuth popup
-      const popup = window.open(
-        response.oauth_url,
-        'oauth_popup',
-        'width=600,height=700,scrollbars=yes'
-      );
-
-      if (!popup) {
-        throw new Error('Popup blocked. Please allow popups for this site.');
-      }
-
-      // Listen for OAuth callback message
-      const handleMessage = async (event: MessageEvent) => {
-        // Verify event origin for security
-        // Accept messages from same origin (frontend) or API server origin
-        const allowedOrigins = [window.location.origin];
-        if (!allowedOrigins.includes(event.origin)) {
-          console.warn('Ignoring message from unauthorized origin:', event.origin);
-          return;
-        }
-
-        if (event.data.type === 'oauth_success') {
-          window.removeEventListener('message', handleMessage);
-          
-          try {
-            // Check if demo mode was used
-            if (event.data.data?.demo_mode) {
-              // Successfully connected but inform about limitations
-              setError(
-                `Note: Connected in demo mode. For full functionality, configure OAuth credentials in Advanced settings.`
-              );
-            }
-            
-            // Complete the OAuth connection
-            await oauthApi.connect({
-              platform: selectedPlatform,
-              oauth_data: event.data.data,
-              account_name: accountName,  // Send as-is, backend will use default if empty
-            });
-
-            setIsConnecting(false);
-            onSuccess();
-          } catch (err: any) {
-            const errorMessage = err.response?.data?.error || err.message || 'Failed to connect account';
-            setError(errorMessage);
-            setIsConnecting(false);
-          }
-        } else if (event.data.type === 'oauth_error') {
-          window.removeEventListener('message', handleMessage);
-          const errorMessage = event.data.error || 'Authorization failed';
-          setError(errorMessage);
-          setIsConnecting(false);
-        }
-      };
-
-      window.addEventListener('message', handleMessage);
-
-      // Check if popup was closed
-      const checkClosed = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(checkClosed);
-          window.removeEventListener('message', handleMessage);
-          setIsConnecting(false);
-        }
-      }, 1000);
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to initialize OAuth';
-      setError(errorMessage);
-      setIsConnecting(false);
-    }
+  const toggleScope = (scopeId: string) => {
+    setSelectedScopes(prev =>
+      prev.includes(scopeId) ? prev.filter(s => s !== scopeId) : [...prev, scopeId]
+    );
   };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>Quick Connect with OAuth</h3>
+          <h3>Select Required Permissions</h3>
           <button className="close-button" onClick={onClose}>×</button>
         </div>
-        <div className="modal-body">
-          {error && (
-            <div className="alert alert-error">
-              <X size={20} />
-              <span>{error}</span>
-            </div>
+        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <p style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
+            Choose the permissions (scopes) you want to grant MastaBlasta to your {platform} account. Checking fewer options might restrict some features.
+          </p>
+          {initialScopes.map(scope => (
+            <label key={scope.id} className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="checkbox"
+                checked={selectedScopes.includes(scope.id)}
+                onChange={() => toggleScope(scope.id)}
+              />
+              <span style={{ fontWeight: '500' }}>{scope.label}</span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-textTertiary)' }}>({scope.id})</span>
+            </label>
+          ))}
+          {initialScopes.length === 0 && (
+            <div className="alert alert-info">No configurable scopes for this platform.</div>
           )}
-
-          <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
-            <Zap size={20} />
-            <div>
-              <span style={{ fontSize: '0.875rem' }}>
-                <strong>Connect your social media accounts in one click!</strong> Select a platform below and you'll be redirected to authorize access.
-              </span>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Platform *</label>
-            <select
-              className="form-select"
-              value={selectedPlatform}
-              onChange={(e) => setSelectedPlatform(e.target.value)}
-              disabled={isConnecting}
-              required
-            >
-              <option value="">Select a platform</option>
-              {platforms.map(p => (
-                <option key={p.name} value={p.name}>
-                  {p.display_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label className="form-label">Account Name (Optional)</label>
-            <input
-              type="text"
-              className="form-input"
-              value={accountName}
-              onChange={(e) => setAccountName(e.target.value)}
-              placeholder="e.g., My Business Account"
-              disabled={isConnecting}
-            />
-            <p style={{ color: 'var(--color-textTertiary)', fontSize: '0.75rem', marginTop: '0.5rem' }}>
-              Leave empty to use default name
-            </p>
-          </div>
-
-          {/* Advanced options - link to OAuth Apps for custom credentials */}
-          <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-borderLight)' }}>
-            <details style={{ fontSize: '0.875rem' }}>
-              <summary style={{ cursor: 'pointer', color: 'var(--color-textSecondary)', userSelect: 'none' }}>
-                <strong>Advanced:</strong> Use custom OAuth credentials
-              </summary>
-              <div style={{ marginTop: '0.75rem', padding: '0.75rem', backgroundColor: 'var(--color-bgSecondary)', borderRadius: '4px' }}>
-                <p style={{ color: 'var(--color-textSecondary)', marginBottom: '0.5rem' }}>
-                  By default, connections use the application's OAuth credentials. If you want to use your own API apps, you can configure custom OAuth credentials.
-                </p>
-                <button
-                  type="button"
-                  onClick={onOpenOAuthApps}
-                  className="btn btn-secondary btn-small"
-                  style={{ marginTop: '0.5rem' }}
-                >
-                  <Settings size={16} />
-                  Manage OAuth Apps
-                </button>
-              </div>
-            </details>
-          </div>
         </div>
         <div className="modal-footer">
-          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isConnecting}>
-            Cancel
-          </button>
-          <button 
-            type="button" 
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button
             className="btn btn-primary"
-            onClick={handleConnect}
-            disabled={isConnecting || !selectedPlatform}
+            onClick={() => onConnect(selectedScopes)}
+            disabled={selectedScopes.length === 0 && initialScopes.length > 0}
           >
-            <Zap size={18} />
-            {isConnecting ? 'Connecting...' : 'Connect'}
+            Continue to auth
           </button>
         </div>
       </div>

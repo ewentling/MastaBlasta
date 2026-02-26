@@ -109,6 +109,30 @@ class Account(Base):
         return f"<Account {self.platform}:{self.platform_username}>"
 
 
+class ConnectionAuditLog(Base):
+    """Audit log for OAuth connection events"""
+    __tablename__ = 'connection_audit_logs'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    platform = Column(String(50), nullable=False)
+    account_id = Column(String(36), ForeignKey('accounts.id'), nullable=True)
+    action = Column(String(50), nullable=False)  # 'connect', 'disconnect', 'refresh', 'scope_update'
+    scopes = Column(JSON, nullable=True)  # List of scopes granted/requested
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(Text, nullable=True)
+    status = Column(String(20), nullable=False)  # 'success', 'failed'
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+
+    # Relationships
+    user = relationship("User")
+    account = relationship("Account")
+
+    def __repr__(self):
+        return f"<ConnectionAuditLog {self.action} on {self.platform} ({self.status})>"
+
+
 class Post(Base):
     """Post model"""
     __tablename__ = 'posts'

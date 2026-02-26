@@ -32,7 +32,8 @@ from sqlalchemy import or_
 try:
     from database import db_session_scope, init_db
     from models import (
-        User, Account, Post, Media, PostAnalytics, PostStatus, Webhook
+        User, Account, Post, Media, PostAnalytics, PostStatus, Webhook,
+        ConnectionAuditLog
     )
     from auth import (
         verify_token, decrypt_token
@@ -174,20 +175,20 @@ class OAuthManager:
         self.google = GoogleOAuth() if DB_ENABLED else None
         self.enabled = DB_ENABLED
 
-    def get_authorization_url(self, platform: str, user_id: str) -> Dict:
+    def get_authorization_url(self, platform: str, user_id: str, requested_scopes: list = None) -> Dict:
         """Get OAuth authorization URL for platform"""
         if not self.enabled:
             return {'error': 'OAuth not enabled'}
 
         try:
             if platform == 'twitter':
-                return self.twitter.get_authorization_url(user_id)
+                return self.twitter.get_authorization_url(user_id, requested_scopes=requested_scopes)
             elif platform in ['facebook', 'instagram', 'threads']:
-                return self.meta.get_authorization_url(user_id, platform)
+                return self.meta.get_authorization_url(user_id, platform, requested_scopes=requested_scopes)
             elif platform == 'linkedin':
-                return self.linkedin.get_authorization_url(user_id)
+                return self.linkedin.get_authorization_url(user_id, requested_scopes=requested_scopes)
             elif platform == 'youtube':
-                return self.google.get_authorization_url(user_id)
+                return self.google.get_authorization_url(user_id, requested_scopes=requested_scopes)
             else:
                 return {'error': f'Platform {platform} not supported'}
         except Exception as e:
@@ -998,6 +999,77 @@ class RetryManager:
         return results
 
 
+# ==================== VIDEO MANAGEMENT ====================
+
+import threading
+from typing import Dict, Any
+
+class VideoManager:
+    """Manages long-form video generation using FFMPEG and TTS"""
+    
+    def __init__(self):
+        self.jobs = {}  # In-memory job tracker: {job_id: {status, result, error}}
+
+    def start_video_generation(self, project_data: Dict[str, Any]) -> str:
+        """Starts a video generation task in a background thread"""
+        import uuid
+        job_id = str(uuid.uuid4())
+        project_data['id'] = job_id
+        
+        self.jobs[job_id] = {
+            "status": "processing",
+            "progress": 0
+        }
+        
+        # Start background thread
+        thread = threading.Thread(target=self._generate_video_task, args=(job_id, project_data))
+        thread.daemon = True
+        thread.start()
+        
+        return job_id
+        
+    def _generate_video_task(self, job_id: str, project_data: Dict[str, Any]):
+        try:
+            from video_generator import VideoGenerator
+            from media_utils import MEDIA_DIR
+            
+            self.jobs[job_id]["progress"] = 20
+            generator = VideoGenerator(str(MEDIA_DIR))
+            
+            self.jobs[job_id]["progress"] = 50
+            result = generator.generate_project(project_data)
+            
+            if "error" in result:
+                self.jobs[job_id] = {
+                    "status": "failed",
+                    "error": result["error"],
+                    "progress": 0
+                }
+            else:
+                job_result = {
+                    "status": "completed",
+                    "progress": 100,
+                    "video_path": result.get("video_path"),
+                    "video_url": f"/api/media/generated/video_{job_id}.mp4" 
+                }
+                if result.get("srt_path"):
+                    job_result["srt_url"] = f"/api/media/generated/video_{job_id}.srt"
+                    
+                self.jobs[job_id] = job_result
+        except Exception as e:
+            logger.error(f"Video generation task failed: {e}")
+            self.jobs[job_id] = {
+                "status": "failed",
+                "error": str(e)
+            }
+            
+    def get_job_status(self, job_id: str) -> Dict[str, Any]:
+        """Returns the status of a video generation job"""
+        if job_id not in self.jobs:
+            return {"status": "not_found"}
+        return self.jobs[job_id]
+
+
 # Initialize managers
 db_manager = DatabaseManager()
 oauth_manager = OAuthManager()
@@ -1007,5 +1079,7 @@ webhook_manager = WebhookManager()
 search_manager = SearchManager()
 bulk_ops_manager = BulkOperationsManager()
 retry_manager = RetryManager()
+audit_manager = AuditLogManager()
+video_manager = VideoManager()
 
 logger.info("Application extensions initialized")
