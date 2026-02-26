@@ -260,11 +260,15 @@ export interface VideoJobStatus {
 
 export const videoApi = {
   generate: async (data: { settings: any, slides: any[] }): Promise<{ job_id: string; message: string; status: string }> => {
-    const response = await api.post('/video/generate', data);
+    const response = await api.post('/v2/video/generate', data);
     return response.data;
   },
   getStatus: async (id: string): Promise<VideoJobStatus> => {
-    const response = await api.get(`/video/status/${id}`);
+    const response = await api.get(`/v2/video/status/${id}`);
+    return response.data;
+  },
+  generateMusic: async (prompt: string): Promise<{ url: string }> => {
+    const response = await api.post('/v2/video/generate-music', { prompt });
     return response.data;
   }
 };

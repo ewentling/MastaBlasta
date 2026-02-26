@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
@@ -150,9 +150,9 @@ function Avatar({ name, email }: { name?: string; email: string }) {
 
 function TierBadge({ tier }: { tier: string }) {
   const map: Record<string, { style: CSSProperties; icon: ReactNode }> = {
-    free:       { style: { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#8090c2' }, icon: null },
-    starter:    { style: { background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.25)', color: '#00e5ff' }, icon: <Zap className="w-3 h-3" /> },
-    pro:        { style: { background: 'rgba(124,77,255,0.1)', border: '1px solid rgba(124,77,255,0.3)', color: '#a78bfa' }, icon: <Crown className="w-3 h-3" /> },
+    free: { style: { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#8090c2' }, icon: null },
+    starter: { style: { background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.25)', color: '#00e5ff' }, icon: <Zap className="w-3 h-3" /> },
+    pro: { style: { background: 'rgba(124,77,255,0.1)', border: '1px solid rgba(124,77,255,0.3)', color: '#a78bfa' }, icon: <Crown className="w-3 h-3" /> },
     enterprise: { style: { background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24' }, icon: <TrendingUp className="w-3 h-3" /> },
   };
   const { style, icon } = map[tier] ?? map.free;
@@ -165,11 +165,11 @@ function TierBadge({ tier }: { tier: string }) {
 
 function SubStatusBadge({ status }: { status: string }) {
   const map: Record<string, CSSProperties> = {
-    active:    { background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399' },
-    trial:     { background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8' },
+    active: { background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)', color: '#34d399' },
+    trial: { background: 'rgba(56,189,248,0.1)', border: '1px solid rgba(56,189,248,0.3)', color: '#38bdf8' },
     suspended: { background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.3)', color: '#fbbf24' },
     cancelled: { background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5' },
-    expired:   { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#8090c2' },
+    expired: { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', color: '#8090c2' },
   };
   return (
     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" style={map[status] ?? map.expired}>
@@ -182,9 +182,30 @@ type Tab = 'users' | 'metrics' | 'analytics' | 'revenue' | 'email' | 'moderation
 
 export default function AdminPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<Tab>('users');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const hash = window.location.hash.replace('#', '') as Tab;
+    const validTabs: Tab[] = ['users', 'metrics', 'analytics', 'revenue', 'email', 'moderation', 'platforms', 'square'];
+    return validTabs.includes(hash) ? hash : 'users';
+  });
+
+  useEffect(() => {
+    window.location.hash = activeTab;
+  }, [activeTab]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace('#', '') as Tab;
+      const validTabs: Tab[] = ['users', 'metrics', 'analytics', 'revenue', 'email', 'moderation', 'platforms', 'square'];
+      if (validTabs.includes(hash) && hash !== activeTab) {
+        setActiveTab(hash);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [activeTab]);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [editingSubscription, setEditingSubscription] = useState(false);
   const [subscriptionForm, setSubscriptionForm] = useState({ tier: '', status: '', admin_notes: '' });
@@ -193,6 +214,7 @@ export default function AdminPage() {
   const [showAddUser, setShowAddUser] = useState(false);
   const [addUserForm, setAddUserForm] = useState({ email: '', full_name: '', role: 'editor', password: '' });
   const [addUserError, setAddUserError] = useState('');
+  const [subscriptionSaveResult, setSubscriptionSaveResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
@@ -221,7 +243,7 @@ export default function AdminPage() {
     queryFn: adminApi.getUsers,
   });
 
-  const { data: metricsData, isLoading: metricsLoading } = useQuery({
+  const { data: metricsData, isLoading: metricsLoading, dataUpdatedAt: metricsUpdatedAt, refetch: refetchMetrics } = useQuery({
     queryKey: ['admin-metrics'],
     queryFn: adminApi.getMetrics,
     refetchInterval: 30000,
@@ -279,6 +301,11 @@ export default function AdminPage() {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       queryClient.invalidateQueries({ queryKey: ['admin-user-details'] });
       setEditingSubscription(false);
+      setSubscriptionSaveResult({ success: true, message: 'Subscription updated successfully.' });
+      setTimeout(() => setSubscriptionSaveResult(null), 3000);
+    },
+    onError: (e: Error) => {
+      setSubscriptionSaveResult({ success: false, message: e.message || 'Failed to update subscription.' });
     },
   });
 
@@ -330,11 +357,14 @@ export default function AdminPage() {
     const q = searchQuery.toLowerCase();
     return (usersData?.users ?? []).filter(
       (u) =>
-        u.email.toLowerCase().includes(q) ||
-        (u.full_name ?? '').toLowerCase().includes(q) ||
-        u.role.toLowerCase().includes(q)
+        (roleFilter === 'all' || u.role === roleFilter) &&
+        (
+          u.email.toLowerCase().includes(q) ||
+          (u.full_name ?? '').toLowerCase().includes(q) ||
+          u.role.toLowerCase().includes(q)
+        )
     );
-  }, [usersData, searchQuery]);
+  }, [usersData, searchQuery, roleFilter]);
 
   const handleTestSquareConnection = async () => {
     setTestingConnection(true);
@@ -353,14 +383,14 @@ export default function AdminPage() {
   };
 
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
-    { id: 'users',      label: 'Users',      icon: <Users className="w-4 h-4" /> },
-    { id: 'metrics',    label: 'Metrics',    icon: <BarChart3 className="w-4 h-4" /> },
-    { id: 'analytics',  label: 'Analytics',  icon: <Activity className="w-4 h-4" /> },
-    { id: 'revenue',    label: 'Revenue',    icon: <DollarSign className="w-4 h-4" /> },
-    { id: 'email',      label: 'Email',      icon: <Mail className="w-4 h-4" /> },
+    { id: 'users', label: 'Users', icon: <Users className="w-4 h-4" /> },
+    { id: 'metrics', label: 'Metrics', icon: <BarChart3 className="w-4 h-4" /> },
+    { id: 'analytics', label: 'Analytics', icon: <Activity className="w-4 h-4" /> },
+    { id: 'revenue', label: 'Revenue', icon: <DollarSign className="w-4 h-4" /> },
+    { id: 'email', label: 'Email', icon: <Mail className="w-4 h-4" /> },
     { id: 'moderation', label: 'Moderation', icon: <Flag className="w-4 h-4" /> },
-    { id: 'platforms',  label: 'Platforms',  icon: <Globe className="w-4 h-4" /> },
-    { id: 'square',     label: 'Square',     icon: <CreditCard className="w-4 h-4" /> },
+    { id: 'platforms', label: 'Platforms', icon: <Globe className="w-4 h-4" /> },
+    { id: 'square', label: 'Square', icon: <CreditCard className="w-4 h-4" /> },
   ];
 
   return (
@@ -391,6 +421,13 @@ export default function AdminPage() {
               </div>
               <div className="w-px h-10 bg-slate-700" />
               <div>
+                <p className="text-2xl font-bold text-cyan-400">
+                  {metricsData.users.total > 0 ? Math.round((metricsData.users.active / metricsData.users.total) * 100) : 0}%
+                </p>
+                <p className="text-xs text-slate-400 uppercase tracking-wide">Active Rate</p>
+              </div>
+              <div className="w-px h-10 bg-slate-700" />
+              <div>
                 <p className="text-2xl font-bold text-white">{metricsData.usage_this_month.posts_created}</p>
                 <p className="text-xs text-slate-400 uppercase tracking-wide">Posts / Month</p>
               </div>
@@ -407,11 +444,10 @@ export default function AdminPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors rounded-t-lg ${
-                  activeTab === tab.id
-                    ? 'border-cyan-400 text-cyan-400 bg-cyan-400/10'
-                    : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500 hover:bg-white/5'
-                }`}
+                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors rounded-t-lg ${activeTab === tab.id
+                  ? 'border-cyan-400 text-cyan-400 bg-cyan-400/10'
+                  : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500 hover:bg-white/5'
+                  }`}
               >
                 {tab.icon}
                 {tab.label}
@@ -436,9 +472,33 @@ export default function AdminPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'white' }}
-                  className="w-full pl-9 pr-4 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 placeholder-slate-500"
+                  className="w-full pl-9 pr-10 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 placeholder-slate-500"
                 />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="py-2 px-3 text-sm rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                <option value="all">All Roles</option>
+                <option value="admin">Admin</option>
+                <option value="editor">Editor</option>
+                <option value="viewer">Viewer</option>
+              </select>
+              {(searchQuery || roleFilter !== 'all') && usersData && (
+                <span className="text-xs text-slate-400 whitespace-nowrap">
+                  {filteredUsers.length} / {usersData.users?.length ?? 0} users
+                </span>
+              )}
               <button
                 onClick={() => setShowAddUser(true)}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg hover:opacity-90 transition-opacity whitespace-nowrap text-white"
@@ -488,7 +548,7 @@ export default function AdminPage() {
                       <tr
                         key={user.id}
                         className="transition-colors hover:bg-white/5"
-                        style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                        style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', ...(user.subscription?.status === 'suspended' ? { background: 'rgba(251,191,36,0.04)' } : {}), ...(!user.is_active ? { opacity: 0.6 } : {}) }}
                       >
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
@@ -528,7 +588,16 @@ export default function AdminPage() {
                             >
                               Details
                             </button>
-                            {user.role !== 'admin' && (
+                            {user.role === 'admin' ? (
+                              <>
+                                <button disabled title="Cannot suspend other admins" className="p-1.5 rounded text-slate-600 cursor-not-allowed">
+                                  <Ban className="w-4 h-4" />
+                                </button>
+                                <button disabled title="Cannot delete other admins" className="p-1.5 rounded text-slate-600 cursor-not-allowed">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </>
+                            ) : (
                               <>
                                 {user.is_active ? (
                                   <button
@@ -581,6 +650,25 @@ export default function AdminPage() {
               </div>
             ) : (
               <>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500"></span>
+                  <div className="flex items-center gap-3">
+                    {metricsUpdatedAt > 0 && (
+                      <span className="text-xs text-slate-500 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        Last updated: {new Date(metricsUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => refetchMetrics()}
+                      className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg transition-colors"
+                      style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Refresh
+                    </button>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                   {[
                     { label: 'Total Users', value: metricsData?.users.total, icon: <Users className="w-5 h-5" />, color: 'text-cyan-400', iconBg: 'rgba(0,229,255,0.1)', sub: `${metricsData?.users.active} active · ${metricsData?.users.inactive} inactive` },
@@ -588,7 +676,7 @@ export default function AdminPage() {
                     { label: 'API Calls', value: metricsData?.usage_this_month.api_calls?.toLocaleString(), icon: <Zap className="w-5 h-5" />, color: 'text-violet-400', iconBg: 'rgba(124,77,255,0.1)', sub: undefined },
                     { label: 'AI Requests', value: metricsData?.usage_this_month.ai_requests, icon: <Activity className="w-5 h-5" />, color: 'text-amber-400', iconBg: 'rgba(251,191,36,0.1)', sub: undefined },
                   ].map((card) => (
-                    <div key={card.label} className="rounded-xl p-6 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    <div key={card.label} className="rounded-xl p-6 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-cyan-500/10 hover:shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
                       <div className="flex items-center justify-between mb-4">
                         <p className="text-sm font-medium text-slate-400">{card.label}</p>
                         <div className={`w-9 h-9 ${card.color} rounded-lg flex items-center justify-center`} style={{ background: card.iconBg }}>{card.icon}</div>
@@ -782,8 +870,8 @@ export default function AdminPage() {
                         },
                         {
                           step: 2,
-                          title: 'Copy your Access Token',
-                          desc: 'In your app\'s Credentials tab, copy either the Sandbox or Production Access Token.',
+                          title: `Copy your ${squareForm.environment === 'production' ? 'Production' : 'Sandbox'} Access Token`,
+                          desc: `In your app's Credentials tab, copy the ${squareForm.environment === 'production' ? 'Production' : 'Sandbox'} Access Token.`,
                           link: 'https://developer.squareup.com/apps',
                           linkLabel: 'View credentials →',
                         },
@@ -833,7 +921,7 @@ export default function AdminPage() {
                   </div>
 
                   {/* Credentials Form */}
-                  <div className="lg:col-span-3 rounded-xl shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div className={`lg:col-span-3 rounded-xl shadow-lg transition-all duration-300 ${squareForm.environment === 'production' ? 'shadow-[0_0_30px_rgba(239,68,68,0.25)] ring-2 ring-red-500/50' : ''}`} style={{ background: 'rgba(5,7,30,0.85)', border: squareForm.environment === 'production' ? '1px solid rgba(239,68,68,0.8)' : '1px solid rgba(255,255,255,0.08)' }}>
                     <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                       <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Credentials</h3>
                       {squareFormDirty && (
@@ -850,13 +938,12 @@ export default function AdminPage() {
                             <button
                               key={env}
                               onClick={() => handleSquareFieldChange('environment', env)}
-                              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${
-                                squareForm.environment === env
-                                  ? env === 'production'
-                                    ? 'border-emerald-400 text-emerald-300'
-                                    : 'border-cyan-400 text-cyan-300'
-                                  : 'text-slate-400 hover:text-slate-200'
-                              }`}
+                              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${squareForm.environment === env
+                                ? env === 'production'
+                                  ? 'border-emerald-400 text-emerald-300'
+                                  : 'border-cyan-400 text-cyan-300'
+                                : 'text-slate-400 hover:text-slate-200'
+                                }`}
                               style={{ border: squareForm.environment === env ? (env === 'production' ? '2px solid rgba(52,211,153,0.6)' : '2px solid rgba(0,229,255,0.6)') : '2px solid rgba(255,255,255,0.1)', background: squareForm.environment === env ? (env === 'production' ? 'rgba(52,211,153,0.1)' : 'rgba(0,229,255,0.1)') : 'rgba(255,255,255,0.04)' }}
                             >
                               {env === 'sandbox' ? '🧪 Sandbox' : '🚀 Production'}
@@ -884,7 +971,7 @@ export default function AdminPage() {
                             type={showAccessToken ? 'text' : 'password'}
                             value={squareForm.access_token}
                             onChange={(e) => handleSquareFieldChange('access_token', e.target.value)}
-                          placeholder={squareConfig.configured_fields?.access_token ? '(saved — enter new value to replace)' : 'EAAAl...'}
+                            placeholder={squareConfig.configured_fields?.access_token ? '(saved — enter new value to replace)' : 'EAAAl...'}
                             className="w-full pl-3 pr-10 py-2.5 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
                           />
                           <button
@@ -906,13 +993,25 @@ export default function AdminPage() {
                             <span className="ml-2 text-emerald-400 normal-case font-normal">✓ saved</span>
                           )}
                         </label>
-                        <input
-                          type="text"
-                          value={squareForm.location_id}
-                          onChange={(e) => handleSquareFieldChange('location_id', e.target.value)}
-                          placeholder={squareConfig.location_id || 'L0XXXXXXXXXXXXXXXXXX'}
-                          className="w-full px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
-                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={squareForm.location_id}
+                            onChange={(e) => handleSquareFieldChange('location_id', e.target.value)}
+                            placeholder={squareConfig.location_id || 'L0XXXXXXXXXXXXXXXXXX'}
+                            className="flex-1 px-3 py-2.5 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+                          />
+                          {squareForm.location_id && (
+                            <button
+                              type="button"
+                              onClick={() => handleCopyToClipboard(squareForm.location_id, 'sq_location_id')}
+                              className="p-2 text-slate-500 hover:text-cyan-400 transition-colors"
+                              title="Copy Location ID"
+                            >
+                              {copiedField === 'sq_location_id' ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                            </button>
+                          )}
+                        </div>
                         <p className="mt-1 text-xs text-slate-400">
                           Found in{' '}
                           <a href="https://squareup.com/dashboard/locations" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">
@@ -968,7 +1067,17 @@ export default function AdminPage() {
                                 placeholder={squareConfig[configKey] || placeholder}
                                 className="flex-1 px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
                               />
-                              {squareConfig.configured_fields?.[configKey as keyof typeof squareConfig.configured_fields] && (
+                              {squareForm[field as keyof typeof squareForm] && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyToClipboard(squareForm[field as keyof typeof squareForm], `sq_cat_${field}`)}
+                                  className="p-1.5 text-slate-500 hover:text-cyan-400 transition-colors flex-shrink-0"
+                                  title={`Copy ${label}`}
+                                >
+                                  {copiedField === `sq_cat_${field}` ? <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
+                              )}
+                              {!squareForm[field as keyof typeof squareForm] && squareConfig.configured_fields?.[configKey as keyof typeof squareConfig.configured_fields] && (
                                 <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                               )}
                             </div>
@@ -1090,7 +1199,21 @@ export default function AdminPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Password <span className="text-red-400">*</span></label>
-                <input type="password" value={addUserForm.password} onChange={(e) => setAddUserForm({ ...addUserForm, password: e.target.value })} placeholder="Min. 8 characters" className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                <div className="relative">
+                  <input type="text" value={addUserForm.password} onChange={(e) => setAddUserForm({ ...addUserForm, password: e.target.value })} placeholder="Min. 8 characters" className="w-full px-3 py-2 pr-10 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+                      const pass = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+                      setAddUserForm({ ...addUserForm, password: pass });
+                    }}
+                    title="Generate secure password"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-cyan-400 transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
             <div className="px-6 py-4 flex justify-end gap-3 rounded-b-2xl" style={{ borderTop: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
@@ -1103,7 +1226,7 @@ export default function AdminPage() {
         </div>
       )}
 
-            {/* Delete Confirmation */}
+      {/* Delete Confirmation */}
       {deleteTarget && (
         <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
           <div className="rounded-2xl shadow-2xl w-full max-w-sm" style={{ background: 'rgba(5,7,30,0.98)', border: '1px solid rgba(239,68,68,0.3)' }}>
@@ -1113,7 +1236,7 @@ export default function AdminPage() {
               </div>
               <h2 className="text-lg font-semibold text-white mb-2">Delete User</h2>
               <p className="text-sm text-slate-400">
-                Are you sure you want to permanently delete <strong className="text-slate-200">{deleteTarget.email}</strong>? This action cannot be undone.
+                Are you sure you want to permanently delete <strong className="text-red-300">{deleteTarget.email}</strong>? This action cannot be undone.
               </p>
             </div>
             <div className="px-6 pb-6 flex gap-3">
@@ -1126,15 +1249,26 @@ export default function AdminPage() {
         </div>
       )}
 
-            {/* User Details Modal */}
+      {/* User Details Modal */}
       {selectedUser && userDetails && (
         <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
           <div className="rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" style={{ background: 'rgba(5,7,30,0.98)', border: '1px solid rgba(0,229,255,0.2)' }}>
             <div className="sticky top-0 px-6 py-5 flex items-center gap-4 rounded-t-2xl" style={{ background: 'rgba(5,7,30,0.98)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
               <Avatar name={userDetails.full_name} email={userDetails.email} />
               <div className="flex-1 min-w-0">
-                <h2 className="font-semibold text-white truncate">{userDetails.full_name || userDetails.email}</h2>
-                <p className="text-sm text-slate-400 truncate">{userDetails.email}</p>
+                <h2 className="font-semibold text-white truncate flex items-center gap-2">
+                  {userDetails.full_name || userDetails.email}
+                  <button onClick={() => handleCopyToClipboard(userDetails.id, 'user_id')} title="Copy User ID" className="text-slate-500 hover:text-white transition-colors">
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </h2>
+                <p className="text-sm text-slate-400 truncate flex items-center gap-2">
+                  {userDetails.email}
+                  <button onClick={() => handleCopyToClipboard(userDetails.email, 'user_email')} title="Copy Email" className="text-slate-500 hover:text-white transition-colors">
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                  {(copiedField === 'user_email' || copiedField === 'user_id') && <span className="text-emerald-400 text-xs ml-2">Copied!</span>}
+                </p>
               </div>
               <span className={`inline-block w-2 h-2 rounded-full ${userDetails.is_active ? 'bg-emerald-400' : 'bg-slate-600'}`} />
               <button onClick={() => { setSelectedUser(null); setEditingSubscription(false); setSuspendReason(''); }} className="text-slate-500 hover:text-slate-300">
@@ -1192,9 +1326,14 @@ export default function AdminPage() {
                         <textarea value={subscriptionForm.admin_notes} onChange={(e) => setSubscriptionForm({ ...subscriptionForm, admin_notes: e.target.value })} className="w-full text-sm rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }} rows={2} />
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => updateSubscriptionMutation.mutate({ userId: selectedUser, data: subscriptionForm })} disabled={updateSubscriptionMutation.isPending} className="flex-1 text-white text-sm px-4 py-2 rounded-lg disabled:opacity-50" style={{ background: 'linear-gradient(120deg, #00e5ff 0%, #7c4dff 100%)' }}>Save</button>
-                        <button onClick={() => setEditingSubscription(false)} className="flex-1 text-sm px-4 py-2 rounded-lg text-slate-300 hover:text-white" style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}>Cancel</button>
+                        <button onClick={() => { updateSubscriptionMutation.mutate({ userId: selectedUser, data: subscriptionForm }); setSubscriptionSaveResult(null); }} disabled={updateSubscriptionMutation.isPending} className="flex-1 text-white text-sm px-4 py-2 rounded-lg disabled:opacity-50" style={{ background: 'linear-gradient(120deg, #00e5ff 0%, #7c4dff 100%)' }}>Save</button>
+                        <button onClick={() => { setEditingSubscription(false); setSubscriptionSaveResult(null); }} className="flex-1 text-sm px-4 py-2 rounded-lg text-slate-300 hover:text-white" style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}>Cancel</button>
                       </div>
+                      {subscriptionSaveResult && (
+                        <div className="p-2.5 rounded-lg flex items-center gap-2" style={{ background: subscriptionSaveResult.success ? 'rgba(52,211,153,0.1)' : 'rgba(239,68,68,0.08)', border: `1px solid ${subscriptionSaveResult.success ? 'rgba(52,211,153,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                          <p className={`text-xs font-medium ${subscriptionSaveResult.success ? 'text-emerald-300' : 'text-red-300'}`}>{subscriptionSaveResult.message}</p>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-4">
@@ -1239,6 +1378,14 @@ export default function AdminPage() {
               {userDetails.role !== 'admin' && (
                 <div className="pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
                   <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3">Actions</h3>
+
+                  {userDetails.subscription?.status === 'suspended' && (
+                    <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg mb-4 text-sm font-medium flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                      Account is currently suspended. Review user activity before activating.
+                    </div>
+                  )}
+
                   <div className="flex flex-col gap-3">
                     {userDetails.is_active && userDetails.subscription?.status !== 'suspended' && (
                       <div className="flex gap-2">

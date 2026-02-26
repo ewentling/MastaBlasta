@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { Clock, RefreshCw } from 'lucide-react';
 
 const COLORS = ['#00e5ff', '#7c4dff', '#ff4fed', '#34d399'];
 
 export function SubscriptionDistributionChart() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, dataUpdatedAt, refetch, isFetching } = useQuery({
     queryKey: ['subscription-distribution'],
     queryFn: async () => {
       const response = await fetch(
@@ -41,7 +42,25 @@ export function SubscriptionDistributionChart() {
 
   return (
     <div className="rounded-xl p-6 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <h3 className="text-sm font-semibold text-white mb-4">Subscription Distribution</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-white">Subscription Distribution</h3>
+        <div className="flex items-center gap-2">
+          {dataUpdatedAt > 0 && (
+            <span className="text-xs text-slate-500 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              {new Date(dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-1.5 text-slate-500 hover:text-white transition-colors disabled:opacity-50"
+            title="Refresh distribution"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-cyan-400' : ''}`} />
+          </button>
+        </div>
+      </div>
       <div className="flex flex-col items-center">
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
@@ -50,7 +69,7 @@ export function SubscriptionDistributionChart() {
               cx="50%"
               cy="50%"
               labelLine={false}
-              label={({ tier, percentage }) => `${tier}: ${percentage}%`}
+              label={((props: any) => `${props.tier}: ${props.percentage}%`) as any}
               outerRadius={100}
               fill="#7c4dff"
               dataKey="count"

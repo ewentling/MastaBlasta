@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Mail } from 'lucide-react';
+import { AlertTriangle, Copy, CheckCircle2, Clock, RefreshCw } from 'lucide-react';
 
 export function FailedPaymentsTable() {
-  const { data, isLoading, error } = useQuery({
+  const [copiedEmail, setCopiedEmail] = useState<string | null>(null);
+
+  const { data, isLoading, error, dataUpdatedAt, refetch, isFetching } = useQuery({
     queryKey: ['failed-payments'],
     queryFn: async () => {
       const response = await fetch('/api/admin/revenue/failed-payments', {
@@ -55,8 +58,24 @@ export function FailedPaymentsTable() {
     <div className="rounded-xl shadow-lg overflow-hidden" style={cardStyle}>
       <div className="flex justify-between items-center px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <h3 className="text-sm font-semibold text-white">Failed Payments</h3>
-        <div className="text-sm text-slate-400">
-          Total at risk: <span className="font-bold text-red-400">${data?.total_value?.toFixed(2) || '0.00'}</span>
+        <div className="flex items-center gap-3">
+          {dataUpdatedAt > 0 && (
+            <span className="text-xs text-slate-500 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              {new Date(dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-1.5 text-slate-500 hover:text-white transition-colors disabled:opacity-50"
+            title="Refresh failed payments"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-cyan-400' : ''}`} />
+          </button>
+          <div className="text-sm text-slate-400">
+            Total at risk: <span className="font-bold text-red-400">${data?.total_value?.toFixed(2) || '0.00'}</span>
+          </div>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -93,12 +112,21 @@ export function FailedPaymentsTable() {
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   <button
                     onClick={() => {
-                      alert(`Email functionality would open for ${payment.user_email}`);
+                      navigator.clipboard.writeText(payment.user_email);
+                      setCopiedEmail(payment.user_email);
+                      setTimeout(() => setCopiedEmail(null), 2000);
                     }}
-                    className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 transition-colors"
+                    className={`flex items-center gap-1.5 transition-colors font-medium ${copiedEmail === payment.user_email
+                      ? 'text-emerald-400'
+                      : 'text-slate-400 hover:text-cyan-400'
+                      }`}
+                    title="Copy user email"
                   >
-                    <Mail className="w-4 h-4" />
-                    Send Reminder
+                    {copiedEmail === payment.user_email ? (
+                      <><CheckCircle2 className="w-4 h-4" /> Copied</>
+                    ) : (
+                      <><Copy className="w-4 h-4" /> Copy Email</>
+                    )}
                   </button>
                 </td>
               </tr>

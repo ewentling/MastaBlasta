@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Mail, Save, CheckCircle, XCircle, RefreshCw, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Mail, Save, CheckCircle, XCircle, RefreshCw, Eye, EyeOff, AlertTriangle, Copy } from 'lucide-react';
 import { api } from '../../api';
 
 interface SmtpConfig {
@@ -31,6 +31,15 @@ export function SmtpConfigPanel() {
   const [saveResult, setSaveResult] = useState<{ success: boolean; message: string } | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [testing, setTesting] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopyToClipboard = (text: string, field: string) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    });
+  };
 
   const { data: config, isLoading, isError } = useQuery<SmtpConfig>({
     queryKey: ['admin-smtp-config'],
@@ -171,8 +180,18 @@ export function SmtpConfigPanel() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Host */}
           <div className="sm:col-span-2">
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
-              SMTP Host <span className="text-red-500">*</span>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center justify-between">
+              <span>SMTP Host <span className="text-red-500">*</span></span>
+              {form.host && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyToClipboard(form.host, 'host')}
+                  className="text-slate-500 hover:text-cyan-400 flex items-center gap-1 transition-colors"
+                  title="Copy SMTP host"
+                >
+                  {copiedField === 'host' ? <span className="text-emerald-400 normal-case text-xs">Copied!</span> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              )}
             </label>
             <input
               type="text"
@@ -185,8 +204,18 @@ export function SmtpConfigPanel() {
           </div>
           {/* Port */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
-              Port <span className="text-red-500">*</span>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center justify-between">
+              <span>Port <span className="text-red-500">*</span></span>
+              {form.port && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyToClipboard(form.port, 'port')}
+                  className="text-slate-500 hover:text-cyan-400 flex items-center gap-1 transition-colors"
+                  title="Copy port"
+                >
+                  {copiedField === 'port' ? <span className="text-emerald-400 normal-case text-xs">Copied!</span> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              )}
             </label>
             <input
               type="number"
@@ -202,8 +231,18 @@ export function SmtpConfigPanel() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Username */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
-              Username / Email <span className="text-red-500">*</span>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center justify-between">
+              <span>Username / Email <span className="text-red-500">*</span></span>
+              {form.user && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyToClipboard(form.user, 'user')}
+                  className="text-slate-500 hover:text-cyan-400 flex items-center gap-1 transition-colors"
+                  title="Copy username"
+                >
+                  {copiedField === 'user' ? <span className="text-emerald-400 normal-case text-xs">Copied!</span> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              )}
             </label>
             <input
               type="text"
@@ -238,8 +277,18 @@ export function SmtpConfigPanel() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* From Email */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
-              From Email <span className="text-red-500">*</span>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center justify-between">
+              <span>From Email <span className="text-red-500">*</span></span>
+              {form.from_email && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyToClipboard(form.from_email, 'from_email')}
+                  className="text-slate-500 hover:text-cyan-400 flex items-center gap-1 transition-colors"
+                  title="Copy from email"
+                >
+                  {copiedField === 'from_email' ? <span className="text-emerald-400 normal-case text-xs">Copied!</span> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              )}
             </label>
             <input
               type="email"
@@ -252,7 +301,19 @@ export function SmtpConfigPanel() {
           </div>
           {/* From Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">From Name</label>
+            <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center justify-between">
+              <span>From Name</span>
+              {form.from_name && (
+                <button
+                  type="button"
+                  onClick={() => handleCopyToClipboard(form.from_name, 'from_name')}
+                  className="text-slate-500 hover:text-cyan-400 flex items-center gap-1 transition-colors"
+                  title="Copy from name"
+                >
+                  {copiedField === 'from_name' ? <span className="text-emerald-400 normal-case text-xs">Copied!</span> : <Copy className="w-3.5 h-3.5" />}
+                </button>
+              )}
+            </label>
             <input
               type="text"
               value={form.from_name}

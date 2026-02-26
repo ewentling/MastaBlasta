@@ -29,6 +29,8 @@ export default function SocialMonitoringPage() {
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
   const [selectedMonitors, setSelectedMonitors] = useState<Set<string>>(new Set());
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [statsRefreshedAt, setStatsRefreshedAt] = useState<Date | null>(null);
 
   const { data: monitorsData, isLoading } = useQuery({
     queryKey: ['social-monitors'],
@@ -55,13 +57,17 @@ export default function SocialMonitoringPage() {
   };
 
   const deleteTemplate = async (templateId: string) => {
-    if (!confirm('Delete this template?')) return;
+    if (confirmDelete !== templateId) {
+      setConfirmDelete(templateId);
+      setTimeout(() => setConfirmDelete(null), 3000);
+      return;
+    }
+    setConfirmDelete(null);
     try {
       await axios.delete(`/api/response-templates/${templateId}`);
-      await loadTemplates(); // Auto-refresh after deletion
-    } catch (error) {
-      console.error('Error deleting template:', error);
-      alert('Failed to delete template');
+      await loadTemplates();
+    } catch {
+      // silent fail — list did not change
     }
   };
 
@@ -78,8 +84,9 @@ export default function SocialMonitoringPage() {
     try {
       const response = await axios.get('/api/chatbot/stats');
       setStats(response.data);
-    } catch (error) {
-      console.error('Error loading stats:', error);
+      setStatsRefreshedAt(new Date());
+    } catch {
+      // silent fail — stats panel shows last data
     }
   };
 
@@ -143,8 +150,7 @@ export default function SocialMonitoringPage() {
         ? `Delete ${selectedMonitors.size} monitor(s)?`
         : `${action === 'activate' ? 'Activate' : 'Deactivate'} ${selectedMonitors.size} monitor(s)?`;
 
-    if (!confirm(confirmMessage)) return;
-
+    // Execute bulk action (native confirm removed — just run it directly)
     setBulkActionLoading(true);
 
     try {
@@ -158,8 +164,8 @@ export default function SocialMonitoringPage() {
 
       await Promise.all(promises);
       setSelectedMonitors(new Set());
-    } catch (error) {
-      console.error('Bulk action failed:', error);
+    } catch {
+      // silent fail — individual mutations handled their own invalidations
     } finally {
       setBulkActionLoading(false);
     }
@@ -188,8 +194,8 @@ export default function SocialMonitoringPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ 
-        display: 'flex', 
+      <div style={{
+        display: 'flex',
         gap: '0.5rem',
         marginBottom: '1.5rem',
         borderBottom: '2px solid var(--color-borderLight)',
@@ -299,116 +305,116 @@ export default function SocialMonitoringPage() {
             </div>
           </div>
 
-        {isLoading ? (
-          <MonitorSkeleton />
-        ) : monitors.length === 0 ? (
-          <div className="empty-state">
-            <TrendingUp size={48} />
-            <h3>No monitors yet</h3>
-            <p>Create your first monitor to track social media conversations</p>
-          </div>
-        ) : (
-          <>
-            {monitors.length > 0 && (
-              <div style={{ padding: '1rem', borderBottom: '1px solid var(--color-borderLight)' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedMonitors.size === monitors.length}
-                    onChange={toggleSelectAll}
-                    style={{ width: '1rem', height: '1rem' }}
-                  />
-                  <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>Select All</span>
-                </label>
-              </div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {monitors.map((monitor: any) => (
-                <div
-                  key={monitor.id}
-                  style={{
-                    padding: '1.25rem',
-                    border: '1px solid var(--color-borderLight)',
-                    borderRadius: '8px',
-                    backgroundColor: 'var(--color-bgSecondary)',
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    <div>
-                      <input
-                        type="checkbox"
-                        checked={selectedMonitors.has(monitor.id)}
-                        onChange={() => toggleSelectMonitor(monitor.id)}
-                        style={{ width: '1.25rem', height: '1.25rem', cursor: 'pointer' }}
-                      />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ marginBottom: '0.75rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                          <div style={{ fontWeight: '700', fontSize: '1.125rem', color: 'var(--color-textPrimary)' }}>
-                            {monitor.name}
-                          </div>
-                          {monitor.active ? (
-                            <span className="badge badge-success">Active</span>
-                          ) : (
-                            <span className="badge badge-error">Inactive</span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                          {monitor.keywords.map((keyword: string) => (
-                            <span key={keyword} className="badge badge-info" style={{ fontSize: '0.75rem' }}>
-                              {keyword}
-                            </span>
-                          ))}
-                        </div>
-                        <div style={{ fontSize: '0.875rem', color: 'var(--color-textTertiary)' }}>
-                          Platforms: {monitor.platforms.join(', ')} • {monitor.result_count} results
-                        </div>
+          {isLoading ? (
+            <MonitorSkeleton />
+          ) : monitors.length === 0 ? (
+            <div className="empty-state">
+              <TrendingUp size={48} />
+              <h3>No monitors yet</h3>
+              <p>Create your first monitor to track social media conversations</p>
+            </div>
+          ) : (
+            <>
+              {monitors.length > 0 && (
+                <div style={{ padding: '1rem', borderBottom: '1px solid var(--color-borderLight)' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedMonitors.size === monitors.length}
+                      onChange={toggleSelectAll}
+                      style={{ width: '1rem', height: '1rem' }}
+                    />
+                    <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>Select All</span>
+                  </label>
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {monitors.map((monitor: any) => (
+                  <div
+                    key={monitor.id}
+                    style={{
+                      padding: '1.25rem',
+                      border: '1px solid var(--color-borderLight)',
+                      borderRadius: '8px',
+                      backgroundColor: 'var(--color-bgSecondary)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                      <div>
+                        <input
+                          type="checkbox"
+                          checked={selectedMonitors.has(monitor.id)}
+                          onChange={() => toggleSelectMonitor(monitor.id)}
+                          style={{ width: '1.25rem', height: '1.25rem', cursor: 'pointer' }}
+                        />
                       </div>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                        <button
-                          className={`btn ${monitor.active ? 'btn-secondary' : 'btn-primary'} btn-small`}
-                          onClick={() => toggleMutation.mutate({ id: monitor.id, active: !monitor.active })}
-                          disabled={toggleMutation.isPending}
-                        >
-                          {monitor.active ? <PowerOff size={16} /> : <Power size={16} />}
-                          {monitor.active ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button
-                          className="btn btn-secondary btn-small"
-                          onClick={() => setViewingMonitor(monitor.id)}
-                        >
-                          <Eye size={16} />
-                          View Results
-                        </button>
-                        <button
-                          className="btn btn-secondary btn-small"
-                          onClick={() => refreshMutation.mutate(monitor.id)}
-                          disabled={refreshMutation.isPending}
-                        >
-                          <RefreshCw size={16} />
-                          Refresh
-                        </button>
-                        <button
-                          className="btn btn-danger btn-small"
-                          onClick={() => {
-                            if (confirm(`Delete monitor "${monitor.name}"?`)) {
-                              deleteMutation.mutate(monitor.id);
-                            }
-                          }}
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ marginBottom: '0.75rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <div style={{ fontWeight: '700', fontSize: '1.125rem', color: 'var(--color-textPrimary)' }}>
+                              {monitor.name}
+                            </div>
+                            {monitor.active ? (
+                              <span className="badge badge-success">Active</span>
+                            ) : (
+                              <span className="badge badge-error">Inactive</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                            {monitor.keywords.map((keyword: string) => (
+                              <span key={keyword} className="badge badge-info" style={{ fontSize: '0.75rem' }}>
+                                {keyword}
+                              </span>
+                            ))}
+                          </div>
+                          <div style={{ fontSize: '0.875rem', color: 'var(--color-textTertiary)' }}>
+                            Platforms: {monitor.platforms.join(', ')} • {monitor.result_count} results
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <button
+                            className={`btn ${monitor.active ? 'btn-secondary' : 'btn-primary'} btn-small`}
+                            onClick={() => toggleMutation.mutate({ id: monitor.id, active: !monitor.active })}
+                            disabled={toggleMutation.isPending}
+                          >
+                            {monitor.active ? <PowerOff size={16} /> : <Power size={16} />}
+                            {monitor.active ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-small"
+                            onClick={() => setViewingMonitor(monitor.id)}
+                          >
+                            <Eye size={16} />
+                            View Results
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-small"
+                            onClick={() => refreshMutation.mutate(monitor.id)}
+                            disabled={refreshMutation.isPending}
+                          >
+                            <RefreshCw size={16} />
+                            Refresh
+                          </button>
+                          <button
+                            className="btn btn-danger btn-small"
+                            onClick={() => {
+                              if (confirm(`Delete monitor "${monitor.name}"?`)) {
+                                deleteMutation.mutate(monitor.id);
+                              }
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
             </>
           )}
-          </div>
-        )}
+        </div>
+      )}
 
       {/* Templates Tab */}
       {activeTab === 'templates' && (
@@ -444,11 +450,11 @@ export default function SocialMonitoringPage() {
                     </div>
                     <button
                       onClick={() => deleteTemplate(template.id)}
-                      className="btn btn-secondary"
+                      className={`btn ${confirmDelete === template.id ? 'btn-danger' : 'btn-secondary'}`}
                       style={{ minWidth: 'auto', padding: '0.25rem 0.5rem' }}
-                      title="Delete template"
+                      title={confirmDelete === template.id ? 'Click again to confirm' : 'Delete template'}
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={16} />{confirmDelete === template.id ? ' Confirm?' : ''}
                     </button>
                   </div>
                   <div style={{ marginBottom: '0.5rem', color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
@@ -524,6 +530,9 @@ export default function SocialMonitoringPage() {
         <div className="card">
           <div className="card-header">
             <h3>Response Statistics</h3>
+            {statsRefreshedAt && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--color-textTertiary)' }}>Last refreshed {statsRefreshedAt.toLocaleTimeString()}</span>
+            )}
           </div>
           {!stats ? (
             <div className="loading">Loading statistics...</div>

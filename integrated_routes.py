@@ -1393,6 +1393,32 @@ def get_video_status(job_id):
         logger.error(f"Error checking video status: {e}")
         return jsonify({'error': str(e)}), 500
 
+@integrated_bp.route('/video/generate-music', methods=['POST'])
+@auth_required
+def generate_music_preview():
+    """Generates an AI background music track and returns the temporary URL"""
+    try:
+        data = request.get_json()
+        prompt = data.get('prompt')
+        if not prompt:
+            return jsonify({'error': 'No prompt provided'}), 400
+            
+        import uuid
+        from media_utils import MEDIA_DIR
+        from ai_audio import generate_ai_music
+        
+        filename = f"bgm_{uuid.uuid4().hex[:8]}.wav"
+        output_path = globals()['os'].path.join(MEDIA_DIR, filename)
+        
+        success = generate_ai_music(prompt, output_path)
+        if success:
+            return jsonify({'url': f"/api/v2/media/generated/{filename}"}), 200
+        else:
+            return jsonify({'error': 'Failed to generate music'}), 500
+    except Exception as e:
+        logger.error(f"Error generating music: {e}")
+        return jsonify({'error': str(e)}), 500
+
 @integrated_bp.route('/media/generated/<filename>', methods=['GET'])
 @auth_required
 def get_generated_video(filename):
@@ -1403,7 +1429,8 @@ def get_generated_video(filename):
     
     try:
         # Validate filename to prevent directory traversal
-        if not (filename.endswith('.mp4') or filename.endswith('.srt')) or '/' in filename or '\\' in filename:
+        allowed_exts = ('.mp4', '.srt', '.wav', '.mp3')
+        if not any(filename.endswith(ext) for ext in allowed_exts) or '/' in filename or '\\' in filename:
             return jsonify({'error': 'Invalid filename'}), 400
             
         file_path = MEDIA_DIR / filename
@@ -1411,7 +1438,11 @@ def get_generated_video(filename):
         if not file_path.exists():
             return jsonify({'error': 'File not found'}), 404
             
-        mimetype = 'video/mp4' if filename.endswith('.mp4') else 'text/plain'
+        mimetype = 'video/mp4' 
+        if filename.endswith('.srt'): mimetype = 'text/plain'
+        elif filename.endswith('.wav'): mimetype = 'audio/wav'
+        elif filename.endswith('.mp3'): mimetype = 'audio/mpeg'
+        
         return send_file(str(file_path), mimetype=mimetype)
         
     except Exception as e:

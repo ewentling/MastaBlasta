@@ -24,6 +24,7 @@ export default function ChatbotPage() {
   const [targetLanguage, setTargetLanguage] = useState('es');
   const [contentTone, setContentTone] = useState('professional');
   const [generationError, setGenerationError] = useState('');
+  const [copiedItemId, setCopiedItemId] = useState<string | null>(null);
 
   const platforms = ['twitter', 'facebook', 'instagram', 'linkedin', 'youtube'];
   const languages = [
@@ -97,8 +98,8 @@ export default function ChatbotPage() {
               return r.json();
             })
           ]);
-          
-          content = captions.map((c, i) => 
+
+          content = captions.map((c, i) =>
             c.success ? `Post Idea ${i + 1}:\n${c.caption}` : `Error: ${c.error || 'Failed to generate'}`
           ).join('\n\n');
           break;
@@ -118,7 +119,7 @@ export default function ChatbotPage() {
             throw new Error(`HTTP ${improveResponse.status}: Failed to improve content`);
           }
           const improveData = await improveResponse.json();
-          content = improveData.success ? 
+          content = improveData.success ?
             `✨ Improved Version:\n\n${improveData.rewritten_content}\n\n${improveData.improvements?.join('\n') || ''}` :
             improveData.error || 'Error improving content';
           break;
@@ -164,7 +165,7 @@ export default function ChatbotPage() {
             translateData.error || 'Error translating content';
           break;
       }
-      
+
       const newContent: GeneratedContent = {
         id: Date.now().toString(),
         type,
@@ -175,14 +176,19 @@ export default function ChatbotPage() {
       setGeneratedContent([newContent, ...generatedContent]);
     } catch (error) {
       setGenerationError('Failed to generate content. Please check your API configuration.');
-      console.error('Generation error:', error);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedItemId(id);
+      setTimeout(() => setCopiedItemId(null), 2000);
+    } catch {
+      // clipboard unavailable – silent fail
+    }
   };
 
   const useInPost = (text: string) => {
@@ -219,8 +225,8 @@ export default function ChatbotPage() {
       )}
 
       {/* Tabs */}
-      <div style={{ 
-        display: 'flex', 
+      <div style={{
+        display: 'flex',
         gap: '0.5rem',
         marginBottom: '1.5rem',
         borderBottom: '2px solid var(--color-borderLight)',
@@ -270,9 +276,9 @@ export default function ChatbotPage() {
               onChange={(e) => setInputText(e.target.value)}
               placeholder={
                 activeTab === 'generate' ? 'e.g., New product launch, industry trends, tips for beginners...' :
-                activeTab === 'improve' ? 'Paste your existing content here...' :
-                activeTab === 'hashtags' ? 'Paste your post content here...' :
-                'Paste content to translate...'
+                  activeTab === 'improve' ? 'Paste your existing content here...' :
+                    activeTab === 'hashtags' ? 'Paste your post content here...' :
+                      'Paste content to translate...'
               }
               rows={4}
               style={{
@@ -285,6 +291,15 @@ export default function ChatbotPage() {
                 resize: 'vertical',
               }}
             />
+            {inputText && (
+              <button
+                type="button"
+                onClick={() => setInputText('')}
+                style={{ marginTop: '0.4rem', background: 'none', border: 'none', color: 'var(--color-textSecondary)', fontSize: '0.75rem', cursor: 'pointer', padding: '0.2rem 0', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+              >
+                ✕ Clear input
+              </button>
+            )}
           </div>
 
           {/* Options */}
@@ -426,11 +441,11 @@ export default function ChatbotPage() {
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
                       className="btn btn-secondary btn-small"
-                      onClick={() => copyToClipboard(item.content)}
+                      onClick={() => copyToClipboard(item.content, item.id)}
                       style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem' }}
                     >
                       <Copy size={14} />
-                      Copy
+                      {copiedItemId === item.id ? 'Copied!' : 'Copy'}
                     </button>
                     <button
                       className="btn btn-primary btn-small"
@@ -442,8 +457,8 @@ export default function ChatbotPage() {
                     </button>
                   </div>
                 </div>
-                <div style={{ 
-                  color: 'var(--color-textPrimary)', 
+                <div style={{
+                  color: 'var(--color-textPrimary)',
                   whiteSpace: 'pre-wrap',
                   lineHeight: '1.6',
                   padding: '1rem',

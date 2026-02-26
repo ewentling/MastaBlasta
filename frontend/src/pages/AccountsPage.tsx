@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountsApi, platformsApi, oauthApi, oauthAppsApi } from '../api';
 import { Plus, Trash2, Edit2, Check, X, TestTube, Zap, Settings, Copy, RefreshCw } from 'lucide-react';
@@ -16,14 +16,15 @@ export default function AccountsPage() {
   const [viewingLogsAccount, setViewingLogsAccount] = useState<Account | null>(null);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
+  const [platformFilter, setAccountPlatformFilter] = useState('all');
 
   const copyUsername = async (accountId: string, username: string) => {
     try {
       await navigator.clipboard.writeText(`@${username}`);
       setCopiedAccountId(accountId);
       setTimeout(() => setCopiedAccountId(null), 2000);
-    } catch (error) {
-      console.error('Failed to copy username to clipboard:', error);
+    } catch {
+      // clipboard unavailable – silent fail
     }
   };
 
@@ -139,6 +140,10 @@ export default function AccountsPage() {
 
   const accounts = accountsData?.accounts || [];
   const platforms: Platform[] = platformsData?.platforms || [];
+  const filteredPlatforms = useMemo(
+    () => platformFilter === 'all' ? platforms : platforms.filter(p => p.name === platformFilter),
+    [platforms, platformFilter]
+  );
 
   return (
     <div>
@@ -157,142 +162,154 @@ export default function AccountsPage() {
       {isLoading ? (
         <div className="loading">Loading accounts...</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '1.5rem' }}>
-          {platforms.map(platform => {
-            const platformAccounts = accounts.filter((a: Account) => a.platform === platform.name);
+        <>
+          {platforms.length > 1 && (
+            <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              <button onClick={() => setAccountPlatformFilter('all')} className={`btn btn-small ${platformFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}>All Platforms</button>
+              {platforms.map(p => (
+                <button key={p.name} onClick={() => setAccountPlatformFilter(platformFilter === p.name ? 'all' : p.name)} className={`btn btn-small ${platformFilter === p.name ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', textTransform: 'capitalize' }}>
+                  {p.icon || '🌐'} {p.display_name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '1.5rem' }}>
+            {filteredPlatforms.map(platform => {
+              const platformAccounts = accounts.filter((a: Account) => a.platform === platform.name);
 
-            return (
-              <div key={platform.name} style={{
-                padding: '1.5rem',
-                border: '1px solid var(--color-borderLight)',
-                borderRadius: '12px',
-                backgroundColor: 'var(--color-bgSecondary)',
-                display: 'flex',
-                flexDirection: 'column'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--color-bgPrimary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', border: '1px solid var(--color-borderLight)' }}>
-                      {platform.icon || '🔗'}
-                    </div>
-                    <h3 style={{ margin: 0, fontSize: '1.125rem' }}>{platform.display_name}</h3>
-                  </div>
-                  <button
-                    onClick={() => setShowOAuthAppModal(true)}
-                    className="btn-icon"
-                    title="Advanced: Custom OAuth App Settings"
-                    style={{ color: 'var(--color-textTertiary)' }}
-                  >
-                    <Settings size={18} />
-                  </button>
-                </div>
-
-                {platformAccounts.length > 0 ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
-                    {platformAccounts.map((account: Account) => (
-                      <div key={account.id} style={{
-                        padding: '1rem',
-                        backgroundColor: 'var(--color-bgPrimary)',
-                        borderRadius: '8px',
-                        border: '1px solid var(--color-borderLight)'
-                      }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
-                          <div>
-                            <div style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>{account.name}</div>
-                            {account.username && (
-                              <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
-                                @{account.username}
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); copyUsername(account.id, account.username!); }}
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: copiedAccountId === account.id ? '#10b981' : 'var(--color-textTertiary)' }}
-                                >
-                                  {copiedAccountId === account.id ? <Check size={12} /> : <Copy size={12} />}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                          {!account.enabled && <span className="badge badge-error" style={{ fontSize: '0.7rem' }}>Disabled</span>}
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <button
-                            className="btn btn-secondary btn-small"
-                            onClick={() => handleTest(account.id)}
-                            disabled={testingAccount === account.id}
-                            style={{ flex: 1 }}
-                          >
-                            {testingAccount === account.id ? <RefreshCw size={14} className="spin" /> : <TestTube size={14} />}
-                            {testingAccount === account.id ? 'Testing...' : 'Test'}
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-small"
-                            onClick={() => initConnect(platform.name)}
-                            disabled={isConnecting === platform.name}
-                            title="Refresh tokens without losing history"
-                            style={{ flex: 1 }}
-                          >
-                            <RefreshCw size={14} />
-                            Reconnect
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-small"
-                            onClick={() => setViewingLogsAccount(account)}
-                            title="View Connection Logs"
-                          >
-                            Logs
-                          </button>
-                          <button
-                            className="btn btn-secondary btn-small"
-                            onClick={() => setEditingAccount(account)}
-                            title="Edit"
-                          >
-                            <Edit2 size={14} />
-                          </button>
-                          <button
-                            className="btn btn-danger btn-small"
-                            onClick={() => {
-                              if (confirm(`Delete account "${account.name}"?`)) {
-                                deleteMutation.mutate(account.id);
-                              }
-                            }}
-                            title="Delete"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
+              return (
+                <div key={platform.name} style={{
+                  padding: '1.5rem',
+                  border: '1px solid var(--color-borderLight)',
+                  borderRadius: '12px',
+                  backgroundColor: 'var(--color-bgSecondary)',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--color-bgPrimary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', border: '1px solid var(--color-borderLight)' }}>
+                        {platform.icon || '🔗'}
                       </div>
-                    ))}
+                      <h3 style={{ margin: 0, fontSize: '1.125rem' }}>{platform.display_name}</h3>
+                    </div>
+                    <button
+                      onClick={() => setShowOAuthAppModal(true)}
+                      className="btn-icon"
+                      title="Advanced: Custom OAuth App Settings"
+                      style={{ color: 'var(--color-textTertiary)' }}
+                    >
+                      <Settings size={18} />
+                    </button>
+                  </div>
 
-                    <button
-                      onClick={() => initConnect(platform.name)}
-                      className="btn btn-secondary"
-                      disabled={isConnecting === platform.name}
-                      style={{ marginTop: 'auto' }}
-                    >
-                      {isConnecting === platform.name ? <RefreshCw size={16} className="spin" /> : <Plus size={16} />}
-                      Add Another Account
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <p style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem', marginBottom: '1.25rem', textAlign: 'center' }}>
-                      No accounts connected for {platform.display_name}. Connect one to start posting.
-                    </p>
-                    <button
-                      onClick={() => initConnect(platform.name)}
-                      className="btn btn-primary w-full"
-                      disabled={isConnecting === platform.name}
-                      style={{ marginTop: 'auto' }}
-                    >
-                      {isConnecting === platform.name ? <RefreshCw size={18} className="spin" /> : <Zap size={18} />}
-                      {isConnecting === platform.name ? 'Connecting...' : `Connect ${platform.display_name}`}
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                  {platformAccounts.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
+                      {platformAccounts.map((account: Account) => (
+                        <div key={account.id} style={{
+                          padding: '1rem',
+                          backgroundColor: 'var(--color-bgPrimary)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--color-borderLight)'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
+                            <div>
+                              <div style={{ fontWeight: '600', color: 'var(--color-textPrimary)' }}>{account.name}</div>
+                              {account.username && (
+                                <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.25rem' }}>
+                                  @{account.username}
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); copyUsername(account.id, account.username!); }}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: copiedAccountId === account.id ? '#10b981' : 'var(--color-textTertiary)' }}
+                                  >
+                                    {copiedAccountId === account.id ? <Check size={12} /> : <Copy size={12} />}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            {!account.enabled && <span className="badge badge-error" style={{ fontSize: '0.7rem' }}>Disabled</span>}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button
+                              className="btn btn-secondary btn-small"
+                              onClick={() => handleTest(account.id)}
+                              disabled={testingAccount === account.id}
+                              style={{ flex: 1 }}
+                            >
+                              {testingAccount === account.id ? <RefreshCw size={14} className="spin" /> : <TestTube size={14} />}
+                              {testingAccount === account.id ? 'Testing...' : 'Test'}
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-small"
+                              onClick={() => initConnect(platform.name)}
+                              disabled={isConnecting === platform.name}
+                              title="Refresh tokens without losing history"
+                              style={{ flex: 1 }}
+                            >
+                              <RefreshCw size={14} />
+                              Reconnect
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-small"
+                              onClick={() => setViewingLogsAccount(account)}
+                              title="View Connection Logs"
+                            >
+                              Logs
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-small"
+                              onClick={() => setEditingAccount(account)}
+                              title="Edit"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              className="btn btn-danger btn-small"
+                              onClick={() => {
+                                if (confirm(`Delete account "${account.name}"?`)) {
+                                  deleteMutation.mutate(account.id);
+                                }
+                              }}
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      <button
+                        onClick={() => initConnect(platform.name)}
+                        className="btn btn-secondary"
+                        disabled={isConnecting === platform.name}
+                        style={{ marginTop: 'auto' }}
+                      >
+                        {isConnecting === platform.name ? <RefreshCw size={16} className="spin" /> : <Plus size={16} />}
+                        Add Another Account
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <p style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem', marginBottom: '1.25rem', textAlign: 'center' }}>
+                        No accounts connected for {platform.display_name}. Connect one to start posting.
+                      </p>
+                      <button
+                        onClick={() => initConnect(platform.name)}
+                        className="btn btn-primary w-full"
+                        disabled={isConnecting === platform.name}
+                        style={{ marginTop: 'auto' }}
+                      >
+                        {isConnecting === platform.name ? <RefreshCw size={18} className="spin" /> : <Zap size={18} />}
+                        {isConnecting === platform.name ? 'Connecting...' : `Connect ${platform.display_name}`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {editingAccount && (

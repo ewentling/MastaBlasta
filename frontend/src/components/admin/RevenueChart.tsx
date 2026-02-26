@@ -1,12 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Clock } from 'lucide-react';
 
 interface RevenueChartProps {
   days?: number;
 }
 
 export function RevenueChart({ days = 90 }: RevenueChartProps) {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, dataUpdatedAt } = useQuery({
     queryKey: ['revenue-analytics', days],
     queryFn: async () => {
       const response = await fetch(
@@ -46,6 +47,12 @@ export function RevenueChart({ days = 90 }: RevenueChartProps) {
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="text-sm font-semibold text-white">Revenue Trend</h3>
+          {dataUpdatedAt > 0 && (
+            <span className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+              <Clock className="w-3 h-3" />
+              Last checked: {new Date(dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          )}
           <div className="mt-2 flex gap-6">
             <div>
               <p className="text-xs text-slate-500">MRR</p>

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   CheckCircle, XCircle, RefreshCw, Save, Eye, EyeOff, Copy, ExternalLink,
-  AlertTriangle,
+  AlertTriangle, Clock, Search
 } from 'lucide-react';
 
 import { api } from '../../api';
@@ -259,13 +259,20 @@ export function PlatformConfigTab() {
   const [saveResults, setSaveResults] = useState<Record<string, { success: boolean; message: string } | null>>({});
   const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [platformSearch, setPlatformSearch] = useState('');
+
+  const filteredPlatforms = useMemo(() => {
+    const q = platformSearch.toLowerCase().trim();
+    if (!q) return PLATFORMS;
+    return PLATFORMS.filter((p) => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q));
+  }, [platformSearch]);
 
   const { data: configs, isLoading } = useQuery({
     queryKey: ['admin-platform-config'],
     queryFn: fetchPlatformConfig,
   });
 
-  const { data: healthData, isLoading: isHealthLoading, refetch: refetchHealth } = useQuery({
+  const { data: healthData, isLoading: isHealthLoading, refetch: refetchHealth, dataUpdatedAt: healthUpdatedAt } = useQuery({
     queryKey: ['admin-platform-health'],
     queryFn: fetchPlatformHealth,
     staleTime: 60000, // cache for 1 minute
@@ -354,14 +361,22 @@ export function PlatformConfigTab() {
             <CheckCircle className="w-4 h-4 text-emerald-400" />
             OAuth Integration Health
           </h3>
-          <button
-            onClick={() => refetchHealth()}
-            disabled={isHealthLoading}
-            className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
-          >
-            <RefreshCw className={`w-3 h-3 ${isHealthLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            {healthUpdatedAt > 0 && (
+              <span className="text-xs text-slate-500 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {new Date(healthUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            )}
+            <button
+              onClick={() => refetchHealth()}
+              disabled={isHealthLoading}
+              className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
+            >
+              <RefreshCw className={`w-3 h-3 ${isHealthLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {isHealthLoading && !healthData ? (
@@ -395,10 +410,23 @@ export function PlatformConfigTab() {
         <div className="w-56 flex-shrink-0">
           <div className="rounded-xl overflow-hidden shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <div className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Platforms</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Platforms</p>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                <input
+                  type="text"
+                  value={platformSearch}
+                  onChange={(e) => setPlatformSearch(e.target.value)}
+                  placeholder="Search…"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+                />
+              </div>
             </div>
             <nav className="p-2">
-              {PLATFORMS.map((p) => {
+              {filteredPlatforms.length === 0 ? (
+                <p className="text-xs text-slate-600 text-center py-4">No platforms found.</p>
+              ) : filteredPlatforms.map((p) => {
                 const cfg = configs?.[p.id];
                 const isConfigured = cfg?.configured ?? false;
                 return (
@@ -533,10 +561,22 @@ export function PlatformConfigTab() {
 
                       return (
                         <div key={fd.key}>
-                          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5">
-                            {fd.label}
-                            {isSaved && !formVal && (
-                              <span className="ml-2 text-emerald-400 normal-case font-normal">✓ saved</span>
+                          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1.5 flex items-center justify-between">
+                            <span>
+                              {fd.label}
+                              {isSaved && !formVal && (
+                                <span className="ml-2 text-emerald-400 normal-case font-normal">✓ saved</span>
+                              )}
+                            </span>
+                            {(formVal || isSaved) && !fd.sensitive && (
+                              <button
+                                type="button"
+                                onClick={() => copyToClipboard(formVal || savedVal, showKey)}
+                                className="text-slate-500 hover:text-cyan-400 flex items-center gap-1 transition-colors normal-case"
+                                title="Copy to clipboard"
+                              >
+                                {copiedKey === showKey ? <span className="text-emerald-400 text-[10px] font-medium tracking-normal">Copied!</span> : <Copy className="w-3 h-3" />}
+                              </button>
                             )}
                           </label>
                           <div className={fd.sensitive ? 'relative' : undefined}>
@@ -583,11 +623,20 @@ export function PlatformConfigTab() {
                         <button
                           onClick={() => testMutation.mutate(selectedPlatform)}
                           disabled={testMutation.isPending || !!dirty[selectedPlatform] || !configData?.configured}
-                          className="flex items-center gap-2 px-5 py-2.5 text-white text-sm font-medium rounded-lg disabled:opacity-40 disabled:cursor-not-allowed border border-slate-600 hover:border-slate-400 bg-transparent transition-colors"
+                          className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-lg disabled:opacity-40 transition-colors ${dirty[selectedPlatform]
+                            ? 'text-amber-400 border border-amber-500/30 bg-amber-500/5 cursor-not-allowed'
+                            : 'text-white border border-slate-600 hover:border-slate-400 bg-transparent disabled:cursor-not-allowed'
+                            }`}
                           title={dirty[selectedPlatform] ? "Save changes before testing" : !configData?.configured ? "Configure missing fields before testing" : "Verify credentials with platform"}
                         >
-                          {testMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin text-slate-400" /> : <CheckCircle className="w-4 h-4 text-emerald-400" />}
-                          {testMutation.isPending ? 'Testing…' : 'Test Connection'}
+                          {testMutation.isPending ? (
+                            <RefreshCw className="w-4 h-4 animate-spin text-slate-400" />
+                          ) : dirty[selectedPlatform] ? (
+                            <AlertTriangle className="w-4 h-4" />
+                          ) : (
+                            <CheckCircle className="w-4 h-4 text-emerald-400" />
+                          )}
+                          {testMutation.isPending ? 'Testing…' : dirty[selectedPlatform] ? 'Save to Test' : 'Test Connection'}
                         </button>
                       </div>
                       <p className="text-xs text-slate-500">Changes apply immediately — no restart needed. Save configuration before testing!</p>

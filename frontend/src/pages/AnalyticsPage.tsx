@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart2, TrendingUp, Users, Eye, Heart, MessageCircle, Share2, Smile, Frown, Meh, Download } from 'lucide-react';
 import { api } from '../api';
@@ -8,7 +8,16 @@ export default function AnalyticsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState(30);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [platformFilter, setPlatformFilter] = useState<string>('all');
+
+  // Close post detail modal on Escape
+  useEffect(() => {
+    if (!selectedPostId) return;
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedPostId(null); };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [selectedPostId]);
 
   // Fetch dashboard analytics
   const { data: dashboardData, isLoading: dashboardLoading } = useQuery({
@@ -25,9 +34,9 @@ export default function AnalyticsPage() {
 
   const exportToCSV = () => {
     if (!dashboardData) return;
-    
+
     setIsExporting(true);
-    
+
     try {
       // Create CSV content
       const headers = ['Post ID', 'Platform', 'Message', 'Likes', 'Comments', 'Shares', 'Impressions', 'Engagement Rate', 'Sentiment'];
@@ -42,12 +51,12 @@ export default function AnalyticsPage() {
         post.engagement_rate ? `${post.engagement_rate.toFixed(2)}%` : '0%',
         post.sentiment ? `${post.sentiment.positive}% positive, ${post.sentiment.neutral}% neutral, ${post.sentiment.negative}% negative` : 'N/A'
       ]);
-      
+
       const csvContent = [
         headers.join(','),
         ...rows.map((row: any[]) => row.join(','))
       ].join('\n');
-      
+
       // Create download link
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
@@ -60,8 +69,8 @@ export default function AnalyticsPage() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export analytics. Please try again.');
+      setExportError('Failed to export analytics. Please try again.');
+      setTimeout(() => setExportError(null), 5000);
     } finally {
       setIsExporting(false);
     }
@@ -85,6 +94,12 @@ export default function AnalyticsPage() {
         </button>
       </div>
 
+      {exportError && (
+        <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+          <Download size={18} />
+          <span>{exportError}</span>
+        </div>
+      )}
       {/* Period Selector */}
       <div style={{ marginBottom: '2rem' }}>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -112,19 +127,19 @@ export default function AnalyticsPage() {
       ) : dashboardData ? (
         <>
           {/* Summary Cards */}
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
             gap: '1.5rem',
             marginBottom: '2rem'
           }}>
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                <div style={{ 
-                  padding: '0.75rem', 
-                  borderRadius: '8px', 
-                  backgroundColor: 'var(--color-accentPrimary)', 
-                  color: 'white' 
+                <div style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  backgroundColor: 'var(--color-accentPrimary)',
+                  color: 'white'
                 }}>
                   <BarChart2 size={24} />
                 </div>
@@ -139,11 +154,11 @@ export default function AnalyticsPage() {
 
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                <div style={{ 
-                  padding: '0.75rem', 
-                  borderRadius: '8px', 
-                  backgroundColor: '#8b5cf6', 
-                  color: 'white' 
+                <div style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  backgroundColor: '#8b5cf6',
+                  color: 'white'
                 }}>
                   <Eye size={24} />
                 </div>
@@ -158,11 +173,11 @@ export default function AnalyticsPage() {
 
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                <div style={{ 
-                  padding: '0.75rem', 
-                  borderRadius: '8px', 
-                  backgroundColor: '#ec4899', 
-                  color: 'white' 
+                <div style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  backgroundColor: '#ec4899',
+                  color: 'white'
                 }}>
                   <Heart size={24} />
                 </div>
@@ -177,11 +192,11 @@ export default function AnalyticsPage() {
 
             <div className="card">
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                <div style={{ 
-                  padding: '0.75rem', 
-                  borderRadius: '8px', 
-                  backgroundColor: '#10b981', 
-                  color: 'white' 
+                <div style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  backgroundColor: '#10b981',
+                  color: 'white'
                 }}>
                   <TrendingUp size={24} />
                 </div>
@@ -198,11 +213,11 @@ export default function AnalyticsPage() {
             {dashboardData.summary.sentiment && (
               <div className="card">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-                  <div style={{ 
-                    padding: '0.75rem', 
-                    borderRadius: '8px', 
-                    backgroundColor: '#10b981', 
-                    color: 'white' 
+                  <div style={{
+                    padding: '0.75rem',
+                    borderRadius: '8px',
+                    backgroundColor: '#10b981',
+                    color: 'white'
                   }}>
                     <MessageCircle size={24} />
                   </div>
@@ -269,37 +284,37 @@ export default function AnalyticsPage() {
                 {Object.entries(dashboardData.platform_breakdown)
                   .filter(([platform]) => platformFilter === 'all' || platform === platformFilter)
                   .map(([platform, data]: [string, any]) => (
-                  <div 
-                    key={platform}
-                    style={{
-                      padding: '1rem',
-                      border: '1px solid var(--color-borderLight)',
-                      borderRadius: '8px',
-                      backgroundColor: 'var(--color-bgSecondary)'
-                    }}
-                  >
-                    <div style={{ 
-                      fontWeight: '600', 
-                      textTransform: 'capitalize', 
-                      marginBottom: '0.75rem',
-                      color: 'var(--color-textPrimary)'
-                    }}>
-                      {platform}
+                    <div
+                      key={platform}
+                      style={{
+                        padding: '1rem',
+                        border: '1px solid var(--color-borderLight)',
+                        borderRadius: '8px',
+                        backgroundColor: 'var(--color-bgSecondary)'
+                      }}
+                    >
+                      <div style={{
+                        fontWeight: '600',
+                        textTransform: 'capitalize',
+                        marginBottom: '0.75rem',
+                        color: 'var(--color-textPrimary)'
+                      }}>
+                        {platform}
+                      </div>
+                      <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)', marginBottom: '0.25rem' }}>
+                        <Eye size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
+                        {data.impressions.toLocaleString()} impressions
+                      </div>
+                      <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)', marginBottom: '0.25rem' }}>
+                        <Heart size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
+                        {data.engagement.toLocaleString()} engagement
+                      </div>
+                      <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)' }}>
+                        <BarChart2 size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
+                        {data.posts} posts
+                      </div>
                     </div>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)', marginBottom: '0.25rem' }}>
-                      <Eye size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
-                      {data.impressions.toLocaleString()} impressions
-                    </div>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)', marginBottom: '0.25rem' }}>
-                      <Heart size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
-                      {data.engagement.toLocaleString()} engagement
-                    </div>
-                    <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)' }}>
-                      <BarChart2 size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
-                      {data.posts} posts
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </div>
           </div>
@@ -339,16 +354,16 @@ export default function AnalyticsPage() {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ flex: 1 }}>
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '0.5rem', 
-                            marginBottom: '0.5rem' 
+                          <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            marginBottom: '0.5rem'
                           }}>
-                            <span style={{ 
-                              fontWeight: '700', 
-                              fontSize: '1.25rem', 
-                              color: 'var(--color-accentPrimary)' 
+                            <span style={{
+                              fontWeight: '700',
+                              fontSize: '1.25rem',
+                              color: 'var(--color-accentPrimary)'
                             }}>
                               #{index + 1}
                             </span>
@@ -356,11 +371,11 @@ export default function AnalyticsPage() {
                               Post ID: {post.post_id.substring(0, 8)}
                             </span>
                           </div>
-                          <div style={{ 
-                            display: 'flex', 
-                            gap: '1.5rem', 
-                            fontSize: '0.875rem', 
-                            color: 'var(--color-textSecondary)' 
+                          <div style={{
+                            display: 'flex',
+                            gap: '1.5rem',
+                            fontSize: '0.875rem',
+                            color: 'var(--color-textSecondary)'
                           }}>
                             <span>
                               <Eye size={14} style={{ display: 'inline', marginRight: '0.25rem' }} />
@@ -376,7 +391,7 @@ export default function AnalyticsPage() {
                             </span>
                           </div>
                         </div>
-                        <button 
+                        <button
                           className="btn btn-secondary btn-small"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -408,9 +423,9 @@ export default function AnalyticsPage() {
               <div style={{ marginBottom: '2rem' }}>
                 <h4 style={{ marginBottom: '1rem', color: 'var(--color-textPrimary)' }}>Overall Performance</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                  <div style={{ 
-                    padding: '1rem', 
-                    backgroundColor: 'var(--color-bgSecondary)', 
+                  <div style={{
+                    padding: '1rem',
+                    backgroundColor: 'var(--color-bgSecondary)',
                     borderRadius: '8px',
                     textAlign: 'center'
                   }}>
@@ -419,9 +434,9 @@ export default function AnalyticsPage() {
                     </div>
                     <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)' }}>Total Impressions</div>
                   </div>
-                  <div style={{ 
-                    padding: '1rem', 
-                    backgroundColor: 'var(--color-bgSecondary)', 
+                  <div style={{
+                    padding: '1rem',
+                    backgroundColor: 'var(--color-bgSecondary)',
                     borderRadius: '8px',
                     textAlign: 'center'
                   }}>
@@ -430,9 +445,9 @@ export default function AnalyticsPage() {
                     </div>
                     <div style={{ fontSize: '0.875rem', color: 'var(--color-textSecondary)' }}>Total Engagement</div>
                   </div>
-                  <div style={{ 
-                    padding: '1rem', 
-                    backgroundColor: 'var(--color-bgSecondary)', 
+                  <div style={{
+                    padding: '1rem',
+                    backgroundColor: 'var(--color-bgSecondary)',
                     borderRadius: '8px',
                     textAlign: 'center'
                   }}>
@@ -458,18 +473,18 @@ export default function AnalyticsPage() {
                         backgroundColor: 'var(--color-bgSecondary)'
                       }}
                     >
-                      <div style={{ 
-                        fontWeight: '600', 
-                        textTransform: 'capitalize', 
+                      <div style={{
+                        fontWeight: '600',
+                        textTransform: 'capitalize',
                         marginBottom: '0.75rem',
                         color: 'var(--color-textPrimary)',
                         fontSize: '1.125rem'
                       }}>
                         {platform}
                       </div>
-                      <div style={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: 'repeat(3, 1fr)', 
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(3, 1fr)',
                         gap: '1rem',
                         fontSize: '0.875rem'
                       }}>
@@ -551,9 +566,9 @@ export default function AnalyticsPage() {
                   <h4 style={{ marginBottom: '1rem', color: 'var(--color-textPrimary)' }}>Audience Demographics</h4>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem' }}>
                     {/* Age Groups */}
-                    <div style={{ 
-                      padding: '1rem', 
-                      border: '1px solid var(--color-borderLight)', 
+                    <div style={{
+                      padding: '1rem',
+                      border: '1px solid var(--color-borderLight)',
                       borderRadius: '8px',
                       backgroundColor: 'var(--color-bgSecondary)'
                     }}>
@@ -569,9 +584,9 @@ export default function AnalyticsPage() {
                     </div>
 
                     {/* Top Locations */}
-                    <div style={{ 
-                      padding: '1rem', 
-                      border: '1px solid var(--color-borderLight)', 
+                    <div style={{
+                      padding: '1rem',
+                      border: '1px solid var(--color-borderLight)',
                       borderRadius: '8px',
                       backgroundColor: 'var(--color-bgSecondary)'
                     }}>

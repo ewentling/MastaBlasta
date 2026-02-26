@@ -1,9 +1,9 @@
 import type { CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Activity, Database, HardDrive, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
+import { Activity, Database, HardDrive, CheckCircle, XCircle, AlertTriangle, RefreshCw, Clock } from 'lucide-react';
 
 export function SystemHealthPanel() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ['system-health'],
     queryFn: async () => {
       const response = await fetch('/api/admin/health/system', {
@@ -49,16 +49,37 @@ export function SystemHealthPanel() {
     return (
       <div className="rounded-xl p-6 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
         <h3 className="text-sm font-semibold text-white mb-4">System Health</h3>
-        <div className="flex items-center justify-center h-32">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-pulse">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="rounded-lg p-4 h-24" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }} />
+          ))}
         </div>
+        <div className="mt-4 rounded-lg h-10 animate-pulse" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }} />
       </div>
     );
   }
 
   return (
     <div className="rounded-xl p-6 shadow-lg" style={{ background: 'rgba(5,7,30,0.85)', border: '1px solid rgba(255,255,255,0.08)' }}>
-      <h3 className="text-sm font-semibold text-white mb-4">System Health</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-white">System Health</h3>
+        <div className="flex items-center gap-3">
+          {dataUpdatedAt > 0 && (
+            <span className="text-xs text-slate-500 flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" />
+              Last checked: {new Date(dataUpdatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          )}
+          <button
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="p-1 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+            title="Force refresh health status"
+          >
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin text-cyan-400' : ''}`} />
+          </button>
+        </div>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Database Health */}
         <div className="rounded-lg p-4" style={getStatusStyle(data?.database?.status || 'unknown')}>
@@ -103,6 +124,21 @@ export function SystemHealthPanel() {
               {data.storage.used_gb} GB used of {data.storage.total_gb} GB ({data.storage.free_gb} GB free)
             </p>
           )}
+          {data?.storage?.usage_percent != null && (
+            <div className="mt-2 w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min(data.storage.usage_percent, 100)}%`,
+                  background: data.storage.usage_percent > 85
+                    ? 'linear-gradient(90deg, #ef4444, #dc2626)'
+                    : data.storage.usage_percent > 65
+                      ? 'linear-gradient(90deg, #f59e0b, #d97706)'
+                      : 'linear-gradient(90deg, #34d399, #10b981)',
+                }}
+              />
+            </div>
+          )}
           {data?.storage?.error && (
             <p className="text-xs text-red-400 mt-1 break-words" title={data.storage.error}>
               Error: {data.storage.error}
@@ -126,7 +162,7 @@ export function SystemHealthPanel() {
       </div>
 
       {/* Overall Status */}
-      <div className="mt-4 p-3 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="mt-4 p-3 rounded-lg transition-all duration-500" style={getStatusStyle(data?.overall || 'unknown')}>
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-slate-400">Overall Status:</span>
           <div className="flex items-center gap-2">

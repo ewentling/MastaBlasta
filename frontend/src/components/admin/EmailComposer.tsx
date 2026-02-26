@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Mail, Send, Eye, Loader, CheckCircle } from 'lucide-react';
+import { Mail, Send, Eye, Loader, CheckCircle, XCircle, AlertTriangle, Users } from 'lucide-react';
 import { api } from '../../api';
 
 interface EmailTemplate {
@@ -18,6 +18,9 @@ export function EmailComposer() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [showPreview, setShowPreview] = useState(false);
+  const [sendSuccess, setSendSuccess] = useState(false);
+  const [validationError, setValidationError] = useState('');
+  const previewRef = useRef<HTMLDivElement>(null);
 
   // Check SMTP configuration status (shares cache with SmtpConfigPanel)
   const { data: smtpConfig } = useQuery({
@@ -38,6 +41,17 @@ export function EmailComposer() {
     },
   });
 
+  // Fetch user count for broadcast display
+  const { data: usersData } = useQuery({
+    queryKey: ['admin-users'],
+    queryFn: async () => {
+      const r = await api.get('/admin/users');
+      return r.data;
+    },
+    staleTime: 60000,
+  });
+  const totalUserCount = usersData?.total ?? null;
+
   // Send email mutation
   const sendEmailMutation = useMutation({
     mutationFn: async (emailData: any) => {
@@ -45,7 +59,9 @@ export function EmailComposer() {
       return r.data;
     },
     onSuccess: () => {
-      alert('Email queued for delivery!');
+      setSendSuccess(true);
+      setValidationError('');
+      setTimeout(() => setSendSuccess(false), 5000);
       // Reset form
       setSubject('');
       setBody('');
@@ -82,9 +98,10 @@ export function EmailComposer() {
 
   const handleSendEmail = () => {
     if (!subject || !body) {
-      alert('Please fill in subject and body');
+      setValidationError('Please fill in both Subject and Message Body before sending.');
       return;
     }
+    setValidationError('');
 
     const emailData: any = {
       recipient_type: recipientType,
@@ -103,6 +120,9 @@ export function EmailComposer() {
   const handlePreview = () => {
     previewMutation.mutate();
     setShowPreview(true);
+    setTimeout(() => {
+      previewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   return (
@@ -157,7 +177,14 @@ export function EmailComposer() {
                 onChange={(e) => setRecipientType(e.target.value as 'all')}
                 className="accent-cyan-400"
               />
-              All Users
+              <span className="flex items-center gap-1.5">
+                All Users
+                {totalUserCount !== null && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: 'rgba(0,229,255,0.1)', border: '1px solid rgba(0,229,255,0.2)', color: '#00e5ff' }}>
+                    <Users className="w-3 h-3" />{totalUserCount}
+                  </span>
+                )}
+              </span>
             </label>
           </div>
         </div>
@@ -207,14 +234,19 @@ export function EmailComposer() {
             className="w-full px-3 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600"
             style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
           />
-          <p className="mt-1 text-xs text-slate-500">
-            Use variables like {'{user_name}'}, {'{upgrade_link}'} in your template
-          </p>
+          <div className="flex justify-between items-center mt-1">
+            <p className="text-xs text-slate-500">
+              Use variables like {'{user_name}'}, {'{upgrade_link}'} in your template
+            </p>
+            <span className={`text-xs font-medium ${body.length > 5000 ? 'text-red-400' : 'text-slate-500'}`}>
+              {body.length} / 5000 chars
+            </span>
+          </div>
         </div>
 
         {/* Preview */}
         {showPreview && previewMutation.data && (
-          <div className="p-4 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div ref={previewRef} className="p-4 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
             <h4 className="font-medium text-slate-200 mb-2">Preview:</h4>
             <div className="mb-2 text-sm text-slate-300">
               <span className="font-medium text-slate-400">Subject:</span> {previewMutation.data.preview.subject}
@@ -223,6 +255,25 @@ export function EmailComposer() {
               <span className="font-medium text-slate-400">Body:</span>
               <div className="mt-1 whitespace-pre-wrap">{previewMutation.data.preview.body}</div>
             </div>
+          </div>
+        )}
+
+        {/* Send success banner */}
+        {sendSuccess && (
+          <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)' }}>
+            <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <p className="text-sm text-emerald-300 font-medium">Email queued for delivery!</p>
+          </div>
+        )}
+
+        {/* Validation error banner */}
+        {validationError && (
+          <div className="p-3 rounded-lg flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)' }}>
+            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+            <p className="text-sm text-red-300">{validationError}</p>
+            <button onClick={() => setValidationError('')} className="ml-auto text-red-500 hover:text-red-300">
+              <XCircle className="w-4 h-4" />
+            </button>
           </div>
         )}
 

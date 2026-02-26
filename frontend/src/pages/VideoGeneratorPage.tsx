@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, X, MapPin, Music, PlayCircle, Plus, LayoutGrid, Type, RefreshCw, FileText, Copy, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Upload, X, MapPin, Music, PlayCircle, Plus, LayoutGrid, Type, RefreshCw, FileText, Copy, ArrowLeft, ArrowRight, Download, UploadCloud, Trash2 } from 'lucide-react';
 import { api, videoApi } from '../api';
 import type { VideoJobStatus } from '../api';
 
@@ -24,12 +24,15 @@ interface VideoSettings {
     bgm_path_or_prompt: string;
     bgm_volume: number;
     bgm_start_time: number;
+    bgm_fade: boolean;
     burn_subtitles: boolean;
     captions: {
         font: string;
         size: number;
         color: string;
         outline_color: string;
+        bg_color: string;
+        bg_opacity: number;
         position: number;
     }
 }
@@ -57,12 +60,15 @@ export default function VideoGeneratorPage() {
             bgm_path_or_prompt: '',
             bgm_volume: 0.5,
             bgm_start_time: 0.0,
+            bgm_fade: true,
             burn_subtitles: true,
             captions: {
                 font: 'Arial',
                 size: 24,
                 color: '&H00FFFFFF',
                 outline_color: '&H00000000',
+                bg_color: '000000', // Black
+                bg_opacity: 50, // 50%
                 position: 2
             }
         };
@@ -75,15 +81,79 @@ export default function VideoGeneratorPage() {
     const [newImageUrl, setNewImageUrl] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const [globalError, setGlobalError] = useState<string | null>(null);
+    const [isGeneratingMusic, setIsGeneratingMusic] = useState(false);
+    const [generatedMusicUrl, setGeneratedMusicUrl] = useState<string | null>(null);
+    const [isCompactMode, setIsCompactMode] = useState(false);
+    const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
+    const slidesEndRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        slidesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [slides.length]);
 
     // Auto-save to localStorage
     useEffect(() => {
         localStorage.setItem('videoGenerator_slides', JSON.stringify(slides));
+        setLastSaved(new Date());
     }, [slides]);
 
     useEffect(() => {
         localStorage.setItem('videoGenerator_settings', JSON.stringify(settings));
     }, [settings]);
+
+    const handleExportProject = () => {
+        const projectData = { slides, settings };
+        const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'masta_blasta_project.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleImportProject = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const parsed = JSON.parse(event.target?.result as string);
+                if (parsed.slides && parsed.settings) {
+                    setSlides(parsed.slides);
+                    setSettings(parsed.settings);
+                    setGlobalError(null);
+                } else {
+                    setGlobalError("Invalid project file format.");
+                }
+            } catch (err) {
+                setGlobalError("Failed to parse project file.");
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    };
+
+    const handleGenerateMusic = async () => {
+        if (!settings.bgm_path_or_prompt) {
+            setGlobalError("Please enter an AI prompt first.");
+            return;
+        }
+        setIsGeneratingMusic(true);
+        setGlobalError(null);
+        try {
+            const res = await videoApi.generateMusic(settings.bgm_path_or_prompt);
+            setGeneratedMusicUrl(res.url);
+        } catch (error: any) {
+            setGlobalError(error.response?.data?.error || "Failed to generate AI music.");
+        } finally {
+            setIsGeneratingMusic(false);
+        }
+    };
 
     const handleClearProgress = () => {
         if (window.confirm("Are you sure you want to clear all slides and text? This cannot be undone.")) {
@@ -151,6 +221,33 @@ export default function VideoGeneratorPage() {
                 target: { files: e.dataTransfer.files }
             } as unknown as React.ChangeEvent<HTMLInputElement>;
             await handleImageUpload(fakeEvent);
+        }
+    };
+
+    const handleSlideImageDrop = async (e: React.DragEvent<HTMLDivElement>, targetIndex: number) => {
+        e.preventDefault();
+        e.stopPropagation(); // prevent main zone drop
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const response = await api.post('/media/upload', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                if (response.data && !response.data.error) {
+                    const newSlides = [...slides];
+                    newSlides[targetIndex] = {
+                        ...newSlides[targetIndex],
+                        image_path: response.data.file_path,
+                        image_url: URL.createObjectURL(file)
+                    };
+                    setSlides(newSlides);
+                }
+            } catch (err) {
+                console.error("Slide image replace failed", err);
+                setGlobalError(`Failed to replace image: ${file.name}`);
+            }
         }
     };
 
@@ -302,6 +399,21 @@ export default function VideoGeneratorPage() {
         }
     };
 
+    const calculateEstimatedDuration = () => {
+        let seconds = 0;
+        slides.forEach(s => {
+            if (s.narration.trim()) {
+                const words = s.narration.trim().split(/\s+/).length;
+                seconds += (words / 2.5); // avg 150 words per minute
+            } else {
+                seconds += settings.default_slide_duration;
+            }
+        });
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m}m ${s}s`;
+    };
+
     // Poll for job status
     useEffect(() => {
         let interval: any;
@@ -325,9 +437,27 @@ export default function VideoGeneratorPage() {
 
     return (
         <div className="space-y-6">
-            <div className="page-header">
-                <h2>Long Form Video Generator</h2>
-                <p>Create automated videos with Gemini-TTS narration, AI Music, and FFmpeg transitions</p>
+            <div className="page-header flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h2>Long Form Video Generator</h2>
+                    <p>Create automated videos with Gemini-TTS narration, AI Music, and FFmpeg transitions</p>
+                </div>
+                <div className="flex flex-col md:flex-row items-start md:items-center gap-2">
+                    {lastSaved && (
+                        <span className="text-xs text-green-600 dark:text-green-400 font-medium animate-pulse mr-2">
+                            Saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                        </span>
+                    )}
+                    <div className="flex gap-2">
+                        <button className="btn btn-secondary text-sm flex items-center gap-1 py-1" onClick={handleExportProject}>
+                            <Download size={14} /> Export Project
+                        </button>
+                        <input type="file" id="import_project" accept=".json" className="hidden" onChange={handleImportProject} />
+                        <label htmlFor="import_project" className="btn btn-secondary text-sm flex items-center gap-1 py-1 cursor-pointer">
+                            <UploadCloud size={14} /> Import Project
+                        </label>
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -346,9 +476,16 @@ export default function VideoGeneratorPage() {
 
                     {/* Images Grid */}
                     <div className="card p-6">
-                        <div className="flex justify-between items-center mb-4">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
                             <h3 className="text-lg font-semibold flex items-center gap-2"><LayoutGrid size={20} /> Slide sequence</h3>
-                            <div className="flex space-x-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    className="btn btn-secondary text-sm py-1 px-3 flex items-center gap-1"
+                                    onClick={() => setIsCompactMode(!isCompactMode)}
+                                    title={isCompactMode ? "Switch to Grid View" : "Switch to Compact List View"}
+                                >
+                                    <LayoutGrid size={14} /> {isCompactMode ? 'Grid View' : 'Compact View'}
+                                </button>
                                 <input
                                     type="text"
                                     className="input-field py-1 px-3 text-sm w-48"
@@ -393,78 +530,134 @@ export default function VideoGeneratorPage() {
                             onDrop={handleDrop}
                         >
                             {slides.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center h-full py-12 text-gray-500 pointer-events-none">
-                                    <Upload size={32} className="mb-2 opacity-50" />
-                                    <p>Drag and drop images here or use the buttons above.</p>
+                                <div className="flex flex-col items-center justify-center h-full py-8 pointer-events-none">
+                                    <div className="bg-white dark:bg-gray-800 shadow-sm rounded-xl p-8 max-w-md text-center border border-gray-100 dark:border-gray-700">
+                                        <div className="mx-auto w-16 h-16 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 rounded-full flex items-center justify-center mb-4">
+                                            <PlayCircle size={32} />
+                                        </div>
+                                        <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">Create Your First Video</h3>
+                                        <p className="text-sm text-gray-500 mb-6">Drag and drop images anywhere in this zone to instantly build your timeline.</p>
+
+                                        <div className="space-y-4 text-left">
+                                            <div className="flex items-start gap-3">
+                                                <div className="bg-blue-100 dark:bg-blue-900/30 p-1.5 rounded text-blue-600 dark:text-blue-400 mt-0.5"><Upload size={16} /></div>
+                                                <div>
+                                                    <h4 className="font-semibold text-sm text-gray-800 dark:text-gray-200">1. Add Visuals</h4>
+                                                    <p className="text-xs text-gray-500">Upload images or paste URLs to create slide cards.</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-start gap-3">
+                                                <div className="bg-purple-100 dark:bg-purple-900/30 p-1.5 rounded text-purple-600 dark:text-purple-400 mt-0.5"><Type size={16} /></div>
+                                                <div>
+                                                    <h4 className="font-semibold text-sm text-gray-800 dark:text-gray-200">2. Write the Script</h4>
+                                                    <p className="text-xs text-gray-500">Type or paste your text narration. AI will speak it aloud.</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-start gap-3">
+                                                <div className="bg-green-100 dark:bg-green-900/30 p-1.5 rounded text-green-600 dark:text-green-400 mt-0.5"><LayoutGrid size={16} /></div>
+                                                <div>
+                                                    <h4 className="font-semibold text-sm text-gray-800 dark:text-gray-200">3. Build Timeline</h4>
+                                                    <p className="text-xs text-gray-500">Add blank slides for text-only moments via the layout grids.</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className={isCompactMode ? "flex flex-col gap-2" : "grid grid-cols-2 md:grid-cols-4 gap-4"}>
                                     {slides.map((slide, index) => (
                                         <div
                                             key={slide.id}
-                                            className="relative group border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden cursor-move bg-gray-50 dark:bg-gray-800"
-                                            draggable
-                                            onDragStart={(e) => (dragItem.current = index)}
-                                            onDragEnter={(e) => (dragOverItem.current = index)}
-                                            onDragEnd={handleSort}
+                                            className={`relative group border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800 transition-all ${isCompactMode ? 'flex flex-row items-stretch h-24' : 'flex flex-col cursor-move'}`}
+                                            draggable={!isCompactMode}
+                                            onDragStart={(e) => { if (!isCompactMode) dragItem.current = index; }}
+                                            onDragEnter={(e) => { if (!isCompactMode) dragOverItem.current = index; }}
+                                            onDragEnd={isCompactMode ? undefined : handleSort}
                                             onDragOver={(e) => e.preventDefault()}
+                                            // Handle drag & drop image replacement onto specific slide
+                                            onDrop={(e) => handleSlideImageDrop(e, index)}
                                         >
-                                            <div className="absolute top-1 left-1 bg-black/60 text-white text-xs px-2 py-1 rounded-full z-10">
-                                                {index + 1}
+                                            <div className={`${isCompactMode ? 'w-32 flex-shrink-0' : 'w-full h-32'} relative`}>
+                                                <div className="absolute top-1 left-1 bg-black/70 border border-white/20 text-white font-mono text-xs font-bold px-2 py-1 rounded shadow-lg z-10">
+                                                    #{index + 1}
+                                                </div>
+                                                <img
+                                                    src={slide.image_url}
+                                                    alt={`Slide ${index + 1}`}
+                                                    className="w-full h-full object-cover"
+                                                />
                                             </div>
-                                            <button
-                                                onClick={() => removeSlide(index)}
-                                                className="absolute top-1 right-1 bg-red-500/80 hover:bg-red-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                                title="Remove slide"
-                                            >
-                                                <X size={14} />
-                                            </button>
-                                            <button
-                                                onClick={() => duplicateSlide(index)}
-                                                className="absolute top-1 right-7 bg-indigo-500/80 hover:bg-indigo-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                                                title="Duplicate slide"
-                                            >
-                                                <Copy size={14} />
-                                            </button>
 
-                                            {/* Reorder Arrows */}
-                                            {index > 0 && (
+                                            <div className={`relative p-2 flex-grow flex flex-col ${isCompactMode ? 'justify-center border-l border-gray-200 dark:border-gray-700' : ''}`}>
+                                                <textarea
+                                                    placeholder={`Narration for slide #${index + 1}...`}
+                                                    className={`w-full text-xs p-2 resize-none bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 ${isCompactMode ? 'h-full' : 'h-16'}`}
+                                                    value={slide.narration}
+                                                    onChange={(e) => updateNarration(index, e.target.value)}
+                                                />
+                                                <div className={`text-[10px] text-right mt-1 ${slide.narration.length > 300 ? 'text-red-500 font-bold' : 'text-gray-400'}`}>
+                                                    {slide.narration.length > 300 && <span className="mr-2 hidden md:inline">Warning: Long narration may clip.</span>}
+                                                    {slide.narration.length} chars
+                                                </div>
+                                            </div>
+
+                                            {/* Top Right Action Buttons (Stack in Compact Mode) */}
+                                            <div className={`absolute ${isCompactMode ? 'right-2 top-2 bottom-2 flex flex-col justify-between' : 'top-1 right-1'} opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-1`}>
+                                                <button
+                                                    onClick={() => duplicateSlide(index)}
+                                                    className="bg-indigo-500/80 hover:bg-indigo-600 shadow text-white p-1.5 rounded-full"
+                                                    title="Duplicate slide"
+                                                >
+                                                    <Copy size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={() => removeSlide(index)}
+                                                    className="bg-red-500/80 hover:bg-red-600 shadow text-white p-1.5 rounded-full"
+                                                    title="Remove slide"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </div>
+
+                                            {/* Bottom Left Move Arrows (Only in Expanded Mode for now) */}
+                                            {!isCompactMode && index > 0 && (
                                                 <button
                                                     onClick={() => moveSlide(index, 'left')}
-                                                    className="absolute top-1 left-7 bg-black/60 hover:bg-black/90 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                                    className="absolute bottom-20 left-1 bg-black/60 shadow hover:bg-black/90 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
                                                     title="Move left"
                                                 >
                                                     <ArrowLeft size={14} />
                                                 </button>
                                             )}
-                                            {index < slides.length - 1 && (
+                                            {!isCompactMode && index < slides.length - 1 && (
                                                 <button
                                                     onClick={() => moveSlide(index, 'right')}
-                                                    className="absolute top-1 left-[52px] bg-black/60 hover:bg-black/90 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                                                    className="absolute bottom-20 left-8 bg-black/60 shadow hover:bg-black/90 text-white p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
                                                     title="Move right"
                                                 >
                                                     <ArrowRight size={14} />
                                                 </button>
                                             )}
-
-                                            <img
-                                                src={slide.image_url}
-                                                alt={`Slide ${index + 1}`}
-                                                className="w-full h-32 object-cover"
-                                            />
-                                            <div className="p-2">
-                                                <textarea
-                                                    placeholder={`Narration for slide ${index + 1}...`}
-                                                    className="w-full text-xs p-1 h-16 resize-none bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                    value={slide.narration}
-                                                    onChange={(e) => updateNarration(index, e.target.value)}
-                                                />
-                                                <div className="text-[10px] text-right text-gray-400 mt-1">
-                                                    {slide.narration.length} chars
-                                                </div>
-                                            </div>
                                         </div>
                                     ))}
+
+                                    {/* Add Blank Slide Card */}
+                                    <button
+                                        className={`group border-2 border-dashed border-gray-300 dark:border-gray-700 hover:border-indigo-500 dark:hover:border-indigo-500 rounded-lg flex flex-col items-center justify-center text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors ${isCompactMode ? 'h-24' : 'h-full min-h-[160px]'}`}
+                                        onClick={() => {
+                                            setSlides([...slides, {
+                                                id: Math.random().toString(36).substr(2, 9),
+                                                image_path: 'blank', // Special flag for backend
+                                                image_url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', // 1x1 transparent px
+                                                narration: ''
+                                            }])
+                                        }}
+                                    >
+                                        <Plus size={isCompactMode ? 24 : 32} className="mb-2 group-hover:scale-110 transition-transform" />
+                                        <span className="font-medium text-sm">Add Blank Slide</span>
+                                    </button>
+
+                                    <div ref={slidesEndRef} />
                                 </div>
                             )}
                         </div>
@@ -472,7 +665,14 @@ export default function VideoGeneratorPage() {
 
                     {/* Bulk Script Parser */}
                     <div className="card p-6">
-                        <h3 className="text-lg font-semibold flex items-center gap-2 mb-4"><FileText size={20} /> Bulk Script Parser</h3>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold flex items-center gap-2"><FileText size={20} /> Bulk Script Parser</h3>
+                            {bulkScript.trim() && (
+                                <button className="text-gray-400 hover:text-red-500 transition-colors" onClick={() => setBulkScript('')} title="Clear Script">
+                                    <Trash2 size={18} />
+                                </button>
+                            )}
+                        </div>
                         <p className="text-sm text-gray-500 mb-2">
                             Paste your script here. Preface each slide's narration with its number.
                             <br />Example: <code>[1] This is the first slide. [2] And the second.</code>
@@ -483,13 +683,15 @@ export default function VideoGeneratorPage() {
                             value={bulkScript}
                             onChange={(e) => setBulkScript(e.target.value)}
                         />
-                        <button
-                            className="btn btn-secondary mt-3"
-                            onClick={handleApplyScript}
-                            disabled={!bulkScript.trim() || slides.length === 0}
-                        >
-                            Apply to Slides
-                        </button>
+                        <div className="flex justify-end mt-3">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={handleApplyScript}
+                                disabled={!bulkScript.trim() || slides.length === 0}
+                            >
+                                Apply to Slides
+                            </button>
+                        </div>
                         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500">
                             Or use an external <strong>Google Sheet</strong> with 2 columns: Image Number and Narration, and export it as CSV to paste above.
                         </div>
@@ -539,7 +741,7 @@ export default function VideoGeneratorPage() {
                 </div>
 
                 {/* Sidebar Settings Panel */}
-                <div className="space-y-6">
+                <div className="space-y-6 lg:sticky lg:top-6 self-start">
                     <div className="card p-6">
                         <h3 className="text-lg font-semibold mb-4 border-b pb-2 dark:border-gray-700">FFmpeg Settings</h3>
 
@@ -547,7 +749,7 @@ export default function VideoGeneratorPage() {
                             <div>
                                 <label className="block text-sm font-medium mb-1">Resolution</label>
                                 <select
-                                    className="input-select"
+                                    className="input-select bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
                                     value={settings.resolution}
                                     onChange={e => setSettings({ ...settings, resolution: e.target.value })}
                                 >
@@ -560,7 +762,7 @@ export default function VideoGeneratorPage() {
                             <div>
                                 <label className="block text-sm font-medium mb-1">Framerate</label>
                                 <select
-                                    className="input-select"
+                                    className="input-select bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
                                     value={settings.fps}
                                     onChange={e => setSettings({ ...settings, fps: Number(e.target.value) })}
                                 >
@@ -573,7 +775,7 @@ export default function VideoGeneratorPage() {
                             <div>
                                 <label className="block text-sm font-medium mb-1">Export Quality Preset</label>
                                 <select
-                                    className="input-select"
+                                    className="input-select bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
                                     value={settings.quality}
                                     onChange={e => setSettings({ ...settings, quality: e.target.value })}
                                 >
@@ -597,7 +799,7 @@ export default function VideoGeneratorPage() {
                             <div>
                                 <label className="block text-sm font-medium mb-1">Transition Effect</label>
                                 <select
-                                    className="input-select"
+                                    className="input-select bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
                                     value={settings.transition}
                                     onChange={e => setSettings({ ...settings, transition: e.target.value })}
                                 >
@@ -639,7 +841,7 @@ export default function VideoGeneratorPage() {
                             )}
 
                             <div className="pt-4 border-t dark:border-gray-700">
-                                <label className="flex items-center gap-2 cursor-pointer">
+                                <label className="flex items-center gap-2 cursor-pointer mb-3">
                                     <input
                                         type="checkbox"
                                         checked={settings.burn_subtitles}
@@ -648,6 +850,34 @@ export default function VideoGeneratorPage() {
                                     />
                                     <span className="text-sm font-medium">Burn Subtitles into Video</span>
                                 </label>
+
+                                {settings.burn_subtitles && (
+                                    <div className="pl-6 space-y-3 p-3 bg-gray-50 dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700">
+                                        <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Subtitle Style</h4>
+                                        <div className="flex gap-4">
+                                            <div className="flex-1">
+                                                <label className="block text-xs mb-1">Background Alpha ({settings.captions.bg_opacity}%)</label>
+                                                <input
+                                                    type="range" min="0" max="100" step="5"
+                                                    className="w-full h-1"
+                                                    value={settings.captions.bg_opacity}
+                                                    onChange={e => setSettings({ ...settings, captions: { ...settings.captions, bg_opacity: Number(e.target.value) } })}
+                                                />
+                                            </div>
+                                            <div className="w-1/3">
+                                                <label className="block text-xs mb-1">Color (Hex)</label>
+                                                <input
+                                                    type="text"
+                                                    className="input-field py-1 px-2 text-xs font-mono"
+                                                    placeholder="000000"
+                                                    maxLength={6}
+                                                    value={settings.captions.bg_color}
+                                                    onChange={e => setSettings({ ...settings, captions: { ...settings.captions, bg_color: e.target.value } })}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -659,7 +889,7 @@ export default function VideoGeneratorPage() {
                             <div>
                                 <label className="block text-sm font-medium mb-1">Audio Source</label>
                                 <select
-                                    className="input-select"
+                                    className="input-select bg-white text-gray-900 dark:bg-gray-800 dark:text-gray-100"
                                     value={settings.bgm_source}
                                     onChange={e => setSettings({ ...settings, bgm_source: e.target.value as any })}
                                 >
@@ -691,6 +921,20 @@ export default function VideoGeneratorPage() {
                                         onChange={e => setSettings({ ...settings, bgm_path_or_prompt: e.target.value })}
                                     />
                                     <p className="text-xs text-gray-500 mt-1">Uses a free HF inference endpoint. May take up to 20s to load on first request.</p>
+                                    <div className="flex gap-2 mt-3 items-center flex-wrap">
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary text-sm py-1 px-3 flex items-center gap-1"
+                                            onClick={handleGenerateMusic}
+                                            disabled={isGeneratingMusic || !settings.bgm_path_or_prompt}
+                                        >
+                                            {isGeneratingMusic ? <RefreshCw className="animate-spin" size={14} /> : <Music size={14} />}
+                                            Generate & Preview
+                                        </button>
+                                        {generatedMusicUrl && (
+                                            <audio controls src={generatedMusicUrl} className="h-8 max-w-[200px]" />
+                                        )}
+                                    </div>
                                 </div>
                             )}
 
@@ -727,9 +971,25 @@ export default function VideoGeneratorPage() {
                                             ))}
                                         </div>
                                     </div>
+                                    <div className="pt-2">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={settings.bgm_fade}
+                                                onChange={e => setSettings({ ...settings, bgm_fade: e.target.checked })}
+                                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Auto-Fade In/Out (2 seconds)</span>
+                                        </label>
+                                    </div>
                                 </>
                             )}
                         </div>
+                    </div>
+
+                    <div className="bg-indigo-50 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 p-4 rounded-lg flex justify-between items-center font-medium">
+                        <span>Total Slides: {slides.length}</span>
+                        <span>Est. Duration: ~{calculateEstimatedDuration()}</span>
                     </div>
 
                     <button
@@ -741,7 +1001,7 @@ export default function VideoGeneratorPage() {
                         {isGenerating ? 'Generating Video...' : 'Generate Long Form Video'}
                     </button>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

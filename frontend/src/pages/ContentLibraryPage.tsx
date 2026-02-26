@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Folder, File, Image, Video, FileText, Plus, X, Settings, Download, Trash2, CheckCircle, FolderOpen, Search, Filter } from 'lucide-react';
 
@@ -42,6 +42,7 @@ export default function ContentLibraryPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mediaFilter, setMediaFilter] = useState<'all' | 'images' | 'videos' | 'documents'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | '7' | '30' | '90'>('all');
+  const [driveStatus, setDriveStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [googleSettings, setGoogleSettings] = useState<GoogleDriveSettings>({
     enabled: false,
     accessToken: '',
@@ -75,8 +76,8 @@ export default function ContentLibraryPage() {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/templates`);
       setTemplates(response.data);
-    } catch (error) {
-      console.error('Error loading templates:', error);
+    } catch {
+      // silent fail — template list simply stays empty
     }
   };
 
@@ -93,9 +94,9 @@ export default function ContentLibraryPage() {
         }
       });
       setDriveFiles(response.data);
-    } catch (error) {
-      console.error('Error loading Drive files:', error);
-      alert('Failed to load files from Google Drive');
+    } catch {
+      setDriveStatus({ type: 'error', message: 'Failed to load files from Google Drive.' });
+      setTimeout(() => setDriveStatus(null), 5000);
     }
   };
 
@@ -107,35 +108,30 @@ export default function ContentLibraryPage() {
           'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
-      
+
       const { authorization_url } = response.data;
-      
+
       // Open OAuth popup
       const popup = window.open(authorization_url, 'googleDriveAuth', 'width=600,height=700');
-      
+
       // Listen for auth callback
       const handleMessage = (event: MessageEvent) => {
         if (event.data.type === 'drive_auth_success') {
-          setGoogleSettings({
-            ...googleSettings,
-            enabled: true,
-          });
-          localStorage.setItem('googleDriveSettings', JSON.stringify({
-            ...googleSettings,
-            enabled: true,
-          }));
-          alert('Successfully connected to Google Drive!');
+          setGoogleSettings((prev) => ({ ...prev, enabled: true }));
+          localStorage.setItem('googleDriveSettings', JSON.stringify({ ...googleSettings, enabled: true }));
+          setDriveStatus({ type: 'success', message: 'Successfully connected to Google Drive!' });
+          setTimeout(() => setDriveStatus(null), 5000);
           popup?.close();
           window.removeEventListener('message', handleMessage);
           // Load files after successful auth
           loadDriveFiles();
         }
       };
-      
+
       window.addEventListener('message', handleMessage);
-    } catch (error) {
-      console.error('Error starting Google Drive auth:', error);
-      alert('Failed to connect to Google Drive');
+    } catch {
+      setDriveStatus({ type: 'error', message: 'Failed to connect to Google Drive.' });
+      setTimeout(() => setDriveStatus(null), 5000);
     }
   };
 
@@ -148,7 +144,7 @@ export default function ContentLibraryPage() {
     setGoogleSettings(newSettings);
     localStorage.setItem('googleDriveSettings', JSON.stringify(newSettings));
     setShowFolderPicker(false);
-    
+
     // Reload files from new folder
     try {
       const response = await axios.post(`${API_BASE_URL}/api/google-drive/list`, {
@@ -160,8 +156,8 @@ export default function ContentLibraryPage() {
         }
       });
       setDriveFiles(response.data);
-    } catch (error) {
-      console.error('Error loading files from folder:', error);
+    } catch {
+      // silent fail — stay on current folder list
     }
   };
 
@@ -171,8 +167,8 @@ export default function ContentLibraryPage() {
       setTemplates([...templates, response.data]);
       setShowTemplateModal(false);
       setNewTemplate({ name: '', content: '', platforms: [] });
-    } catch (error) {
-      console.error('Error creating template:', error);
+    } catch {
+      // silent fail — user can retry
     }
   };
 
@@ -180,8 +176,8 @@ export default function ContentLibraryPage() {
     try {
       await axios.delete(`${API_BASE_URL}/api/templates/${templateId}`);
       setTemplates(templates.filter(t => t.id !== templateId));
-    } catch (error) {
-      console.error('Error deleting template:', error);
+    } catch {
+      // silent fail — template list will refresh regardless
     }
   };
 
@@ -214,6 +210,13 @@ export default function ContentLibraryPage() {
           Google Drive Settings
         </button>
       </div>
+
+      {driveStatus && (
+        <div className={`alert ${driveStatus.type === 'success' ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: '1rem' }}>
+          <span>{driveStatus.message}</span>
+          <button onClick={() => setDriveStatus(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}><X size={14} /></button>
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '2px solid var(--border-color)' }}>
@@ -266,8 +269,11 @@ export default function ContentLibraryPage() {
               fontSize: '0.875rem'
             }}
           />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} style={{ position: 'absolute', right: '0.5rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-textSecondary)', padding: 0, display: 'flex' }}><X size={14} /></button>
+          )}
         </div>
-        
+
         {activeTab === 'media' && (
           <>
             <select
@@ -285,7 +291,7 @@ export default function ContentLibraryPage() {
               <option value="videos">Videos</option>
               <option value="documents">Documents</option>
             </select>
-            
+
             <select
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value as any)}
@@ -303,7 +309,7 @@ export default function ContentLibraryPage() {
             </select>
           </>
         )}
-        
+
         {(searchQuery || mediaFilter !== 'all' || dateFilter !== 'all') && (
           <button
             className="btn btn-secondary btn-small"
@@ -571,8 +577,8 @@ export default function ContentLibraryPage() {
                 </ol>
               </div>
 
-              <button 
-                className="btn btn-primary" 
+              <button
+                className="btn btn-primary"
                 onClick={handleGoogleDriveAuth}
                 style={{ width: '100%', marginBottom: '10px' }}
               >
@@ -580,8 +586,8 @@ export default function ContentLibraryPage() {
               </button>
 
               {googleSettings.enabled && !googleSettings.selectedFolderId && (
-                <button 
-                  className="btn btn-secondary" 
+                <button
+                  className="btn btn-secondary"
                   onClick={() => {
                     setShowGoogleSettings(false);
                     setShowFolderPicker(true);

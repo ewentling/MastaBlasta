@@ -336,6 +336,7 @@ export default function ScheduledPostsPage() {
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [platformFilter, setPlatformFilter] = useState('all');
 
   const { data: postsData, isLoading } = useQuery({
     queryKey: ['posts', 'scheduled'],
@@ -382,25 +383,28 @@ export default function ScheduledPostsPage() {
     const q = searchQuery.trim().toLowerCase();
     let copy = q
       ? rawPosts.filter(
-          (p: any) =>
-            p.content.toLowerCase().includes(q) ||
-            (p.platforms || []).some((platformName: string) => platformName.toLowerCase().includes(q))
-        )
+        (p: any) =>
+          p.content.toLowerCase().includes(q) ||
+          (p.platforms || []).some((platformName: string) => platformName.toLowerCase().includes(q))
+      )
       : [...rawPosts];
+    if (platformFilter !== 'all') {
+      copy = copy.filter((p: any) => (p.platforms || []).some((pn: string) => pn.toLowerCase() === platformFilter));
+    }
     switch (sortKey) {
       case 'soonest': return copy.sort((a: any, b: any) => new Date(a.scheduled_for!).getTime() - new Date(b.scheduled_for!).getTime());
-      case 'latest':  return copy.sort((a: any, b: any) => new Date(b.scheduled_for!).getTime() - new Date(a.scheduled_for!).getTime());
-      case 'newest':  return copy.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      case 'oldest':  return copy.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      case 'latest': return copy.sort((a: any, b: any) => new Date(b.scheduled_for!).getTime() - new Date(a.scheduled_for!).getTime());
+      case 'newest': return copy.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      case 'oldest': return copy.sort((a: any, b: any) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       default: return copy;
     }
   }, [rawPosts, sortKey, searchQuery]);
 
   const SORT_LABELS: Record<SortKey, string> = {
     soonest: '⏰ Soonest first',
-    latest:  '🕰 Latest first',
-    newest:  '🆕 Newest created',
-    oldest:  '📅 Oldest created',
+    latest: '🕰 Latest first',
+    newest: '🆕 Newest created',
+    oldest: '📅 Oldest created',
   };
 
   return (
@@ -497,6 +501,22 @@ export default function ScheduledPostsPage() {
             </div>
           </div>
         </div>
+
+        {/* Platform filter chips — shown when posts from multiple platforms exist */}
+        {rawPosts.length > 0 && (() => {
+          const platforms = Array.from(new Set(rawPosts.flatMap((p: any) => p.platforms || []))) as string[];
+          if (platforms.length < 2) return null;
+          return (
+            <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+              <button onClick={() => setPlatformFilter('all')} className={`btn btn-small ${platformFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}>All</button>
+              {platforms.map(p => (
+                <button key={p} onClick={() => setPlatformFilter(platformFilter === p ? 'all' : p)} className={`btn btn-small ${platformFilter === p ? 'btn-primary' : 'btn-secondary'}`} style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem', textTransform: 'capitalize' }}>
+                  {PLATFORM_EMOJI[p] || '🌐'} {p}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
 
         {isLoading ? (
           <div className="loading">Loading scheduled posts…</div>

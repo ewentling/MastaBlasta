@@ -30,6 +30,7 @@ export default function PostPage() {
   const [isGettingHashtags, setIsGettingHashtags] = useState(false);
   const [isGettingTime, setIsGettingTime] = useState(false);
   const [savedDraft, setSavedDraft] = useState<{ content: string; timestamp: number } | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   // Check for saved auto-draft on mount
   useEffect(() => {
@@ -64,10 +65,10 @@ export default function PostPage() {
     queryFn: () => accountsApi.getAll(),
   });
 
-  // Auto-save draft
-  useState(() => {
+  // Auto-save draft every 30 seconds when there's content
+  useEffect(() => {
     const interval = setInterval(() => {
-      if (content.trim() && !postMutation.isPending) {
+      if (content.trim()) {
         const draft = {
           content,
           account_ids: selectedAccounts,
@@ -77,10 +78,10 @@ export default function PostPage() {
         };
         localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draft));
       }
-    }, 30000); // Auto-save every 30 seconds
-    
+    }, 30000);
+
     return () => clearInterval(interval);
-  });
+  }, [content, selectedAccounts, uploadedMedia]);
 
   const postMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -111,9 +112,9 @@ export default function PostPage() {
       }, 3000);
     },
     onError: (error: any) => {
-      setResult({ 
-        success: false, 
-        message: error.response?.data?.error || `Failed to ${isScheduled ? 'schedule' : 'publish'} post` 
+      setResult({
+        success: false,
+        message: error.response?.data?.error || `Failed to ${isScheduled ? 'schedule' : 'publish'} post`
       });
       setTimeout(() => setResult(null), 5000);
     },
@@ -140,7 +141,7 @@ export default function PostPage() {
       setTimeout(() => setResult(null), 3000);
       return;
     }
-    
+
     // Include uploaded media URLs
     const mediaUrls = uploadedMedia.map(m => m.url);
     const postData: CreatePostRequest | SchedulePostRequest = {
@@ -148,11 +149,11 @@ export default function PostPage() {
       account_ids: selectedAccounts,
       media: mediaUrls
     };
-    
+
     if (isScheduled) {
       (postData as SchedulePostRequest).scheduled_time = toISOString(new Date(scheduledTime));
     }
-    
+
     postMutation.mutate(postData);
   };
 
@@ -163,7 +164,7 @@ export default function PostPage() {
     // Validate file types
     const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'video/mp4', 'video/quicktime'];
     const invalidFiles = files.filter(f => !validTypes.includes(f.type));
-    
+
     if (invalidFiles.length > 0) {
       setResult({ success: false, message: 'Only images (JPEG, PNG, GIF, WebP) and videos (MP4, MOV) are allowed' });
       setTimeout(() => setResult(null), 5000);
@@ -173,7 +174,7 @@ export default function PostPage() {
     // Check file sizes (max 50MB per file)
     const maxSize = 50 * 1024 * 1024;
     const oversizedFiles = files.filter(f => f.size > maxSize);
-    
+
     if (oversizedFiles.length > 0) {
       setResult({ success: false, message: 'Files must be smaller than 50MB' });
       setTimeout(() => setResult(null), 5000);
@@ -313,7 +314,7 @@ export default function PostPage() {
       .filter(acc => selectedAccounts.includes(acc.id))
       .map(acc => acc.platform)
       .join(', ');
-    
+
     if (!platforms) {
       setResult({ success: false, message: 'Please select at least one account first' });
       setTimeout(() => setResult(null), 3000);
@@ -407,9 +408,9 @@ export default function PostPage() {
               required
               style={{ minHeight: '150px' }}
             />
-            <div style={{ 
-              marginTop: '0.5rem', 
-              fontSize: '0.875rem', 
+            <div style={{
+              marginTop: '0.5rem',
+              fontSize: '0.875rem',
               color: isOverLimit ? '#f56565' : charCount > maxChars * 0.9 ? '#f59e0b' : '#718096',
               display: 'flex',
               justifyContent: 'space-between',
@@ -453,12 +454,12 @@ export default function PostPage() {
                 ))}
               </div>
             )}
-            
+
             {/* AI Suggestions Buttons */}
             {isAIEnabled && (
-              <div style={{ 
-                marginTop: '1rem', 
-                display: 'flex', 
+              <div style={{
+                marginTop: '1rem',
+                display: 'flex',
                 gap: '0.5rem',
                 flexWrap: 'wrap'
               }}>
@@ -467,9 +468,9 @@ export default function PostPage() {
                   onClick={handleOptimizeContent}
                   disabled={isOptimizing || !content.trim()}
                   className="btn btn-secondary"
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
                     gap: '0.5rem',
                     fontSize: '0.875rem',
                     padding: '0.5rem 1rem',
@@ -483,9 +484,9 @@ export default function PostPage() {
                   onClick={handleSuggestHashtags}
                   disabled={isGettingHashtags || !content.trim()}
                   className="btn btn-secondary"
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
                     gap: '0.5rem',
                     fontSize: '0.875rem',
                     padding: '0.5rem 1rem',
@@ -499,9 +500,9 @@ export default function PostPage() {
                   onClick={handleSuggestTime}
                   disabled={isGettingTime || selectedAccounts.length === 0}
                   className="btn btn-secondary"
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
                     gap: '0.5rem',
                     fontSize: '0.875rem',
                     padding: '0.5rem 1rem',
@@ -522,9 +523,9 @@ export default function PostPage() {
                 borderRadius: '8px',
                 border: '1px solid var(--color-borderLight)',
               }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
                   gap: '0.5rem',
                   marginBottom: '0.75rem',
                   color: 'var(--color-accentPrimary)',
@@ -536,14 +537,14 @@ export default function PostPage() {
 
                 {aiSuggestions.optimized && (
                   <div style={{ marginBottom: '1rem' }}>
-                    <div style={{ 
-                      fontSize: '0.875rem', 
+                    <div style={{
+                      fontSize: '0.875rem',
                       color: 'var(--color-textSecondary)',
-                      marginBottom: '0.5rem' 
+                      marginBottom: '0.5rem'
                     }}>
                       Optimized Content:
                     </div>
-                    <div style={{ 
+                    <div style={{
                       padding: '0.75rem',
                       background: 'var(--color-bgSecondary)',
                       borderRadius: '6px',
@@ -567,14 +568,14 @@ export default function PostPage() {
 
                 {aiSuggestions.hashtags && aiSuggestions.hashtags.length > 0 && (
                   <div style={{ marginBottom: '1rem' }}>
-                    <div style={{ 
-                      fontSize: '0.875rem', 
+                    <div style={{
+                      fontSize: '0.875rem',
                       color: 'var(--color-textSecondary)',
-                      marginBottom: '0.5rem' 
+                      marginBottom: '0.5rem'
                     }}>
                       Suggested Hashtags:
                     </div>
-                    <div style={{ 
+                    <div style={{
                       padding: '0.75rem',
                       background: 'var(--color-bgSecondary)',
                       borderRadius: '6px',
@@ -611,14 +612,14 @@ export default function PostPage() {
 
                 {aiSuggestions.postingTime && (
                   <div>
-                    <div style={{ 
-                      fontSize: '0.875rem', 
+                    <div style={{
+                      fontSize: '0.875rem',
                       color: 'var(--color-textSecondary)',
-                      marginBottom: '0.5rem' 
+                      marginBottom: '0.5rem'
                     }}>
                       Optimal Posting Time:
                     </div>
-                    <div style={{ 
+                    <div style={{
                       padding: '0.75rem',
                       background: 'var(--color-bgSecondary)',
                       borderRadius: '6px',
@@ -635,38 +636,38 @@ export default function PostPage() {
 
           <div className="form-group">
             <label className="form-label">Media (Optional)</label>
-            <div style={{ 
-              border: '2px dashed var(--color-borderLight)', 
-              borderRadius: '8px', 
+            <div style={{
+              border: '2px dashed var(--color-borderLight)',
+              borderRadius: '8px',
               padding: '1.5rem',
               textAlign: 'center',
               cursor: 'pointer',
               transition: 'all 0.2s',
             }}
-            onClick={() => document.getElementById('media-upload')?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              e.currentTarget.style.borderColor = 'var(--color-accentPrimary)';
-            }}
-            onDragLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-borderLight)';
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.currentTarget.style.borderColor = 'var(--color-borderLight)';
-              const files = Array.from(e.dataTransfer.files);
-              if (files.length > 0) {
-                const input = document.getElementById('media-upload') as HTMLInputElement;
-                const dataTransfer = new DataTransfer();
-                files.forEach(file => dataTransfer.items.add(file));
-                input.files = dataTransfer.files;
-                const changeEvent: React.ChangeEvent<HTMLInputElement> = {
-                  target: input,
-                  currentTarget: input,
-                } as React.ChangeEvent<HTMLInputElement>;
-                handleFileSelect(changeEvent);
-              }
-            }}
+              onClick={() => document.getElementById('media-upload')?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = 'var(--color-accentPrimary)';
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-borderLight)';
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.style.borderColor = 'var(--color-borderLight)';
+                const files = Array.from(e.dataTransfer.files);
+                if (files.length > 0) {
+                  const input = document.getElementById('media-upload') as HTMLInputElement;
+                  const dataTransfer = new DataTransfer();
+                  files.forEach(file => dataTransfer.items.add(file));
+                  input.files = dataTransfer.files;
+                  const changeEvent: React.ChangeEvent<HTMLInputElement> = {
+                    target: input,
+                    currentTarget: input,
+                  } as React.ChangeEvent<HTMLInputElement>;
+                  handleFileSelect(changeEvent);
+                }
+              }}
             >
               <input
                 id="media-upload"
@@ -687,14 +688,14 @@ export default function PostPage() {
             </div>
 
             {mediaFiles.length > 0 && (
-              <div style={{ 
-                marginTop: '1rem', 
-                display: 'grid', 
+              <div style={{
+                marginTop: '1rem',
+                display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
                 gap: '1rem'
               }}>
                 {mediaFiles.map((file, index) => (
-                  <div 
+                  <div
                     key={index}
                     style={{
                       position: 'relative',
@@ -705,13 +706,13 @@ export default function PostPage() {
                     }}
                   >
                     {file.type.startsWith('image/') ? (
-                      <img 
-                        src={URL.createObjectURL(file)} 
+                      <img
+                        src={URL.createObjectURL(file)}
                         alt={file.name}
-                        style={{ 
-                          width: '100%', 
-                          height: '100%', 
-                          objectFit: 'cover' 
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
                         }}
                       />
                     ) : (
@@ -851,8 +852,8 @@ export default function PostPage() {
                     key={account.id}
                     className="checkbox-label"
                     style={{
-                      border: selectedAccounts.includes(account.id) 
-                        ? '2px solid #667eea' 
+                      border: selectedAccounts.includes(account.id)
+                        ? '2px solid #667eea'
                         : '1px solid #e2e8f0',
                       padding: '1rem',
                       borderRadius: '8px',
@@ -899,8 +900,8 @@ export default function PostPage() {
             disabled={postMutation.isPending || accounts.length === 0}
           >
             {isScheduled ? <Calendar size={18} /> : <Send size={18} />}
-            {postMutation.isPending 
-              ? (isScheduled ? 'Scheduling...' : 'Publishing...') 
+            {postMutation.isPending
+              ? (isScheduled ? 'Scheduling...' : 'Publishing...')
               : (isScheduled ? 'Schedule Post' : 'Publish Now')}
           </button>
         </div>

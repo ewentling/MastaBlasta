@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ExternalLink, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 
 interface Step {
@@ -26,6 +26,15 @@ export default function SetupWizard({ steps, platformName }: SetupWizardProps) {
 
     const step = steps[currentStep];
 
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowRight') nextStep();
+            if (e.key === 'ArrowLeft') prevStep();
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [currentStep, steps.length]);
+
     if (!steps || steps.length === 0) {
         return <div className="text-sm text-slate-400">No setup instructions available for {platformName}.</div>;
     }
@@ -35,11 +44,11 @@ export default function SetupWizard({ steps, platformName }: SetupWizardProps) {
             <div className="flex-1 flex flex-col justify-center py-4 px-2">
                 <div className="flex items-start gap-4 mb-4">
                     <span
-                        className="flex-shrink-0 w-8 h-8 rounded-full text-sm font-bold flex items-center justify-center text-white mt-1"
-                        style={{
-                            background: 'linear-gradient(135deg, #00e5ff 0%, #7c4dff 100%)',
-                            boxShadow: '0 0 10px rgba(0, 229, 255, 0.3)'
-                        }}
+                        className="flex-shrink-0 w-8 h-8 rounded-full text-sm font-bold flex items-center justify-center text-white mt-1 transition-all duration-300"
+                        style={currentStep === steps.length - 1
+                            ? { background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', boxShadow: '0 0 12px rgba(16,185,129,0.4)' }
+                            : { background: 'linear-gradient(135deg, #00e5ff 0%, #7c4dff 100%)', boxShadow: '0 0 10px rgba(0, 229, 255, 0.3)' }
+                        }
                     >
                         {currentStep + 1}
                     </span>

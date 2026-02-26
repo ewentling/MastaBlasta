@@ -149,6 +149,11 @@ class VideoGenerator:
                 times = int(len(overall_audio)/len(bgm_segment)) + 1
                 bgm_segment = bgm_segment * times
                 
+            # Loop 6: Optional Fade In/Out for BGM
+            bgm_fade = settings.get("bgm_fade", True)
+            if bgm_fade and len(bgm_segment) > 4000:
+                bgm_segment = bgm_segment.fade_in(2000).fade_out(2000)
+                
             final_audio = overall_audio.overlay(bgm_segment, position=bgm_start_ms)
         else:
             final_audio = overall_audio
@@ -264,8 +269,25 @@ class VideoGenerator:
         outline = cap.get("outline_color", "&H00000000")
         pos = cap.get("position", 2)
         
+        # Parse background opacity/color for advanced subtitle backgrounds
+        bg_color = cap.get("bg_color", "000000").replace("#", "")
+        bg_op_pct = int(cap.get("bg_opacity", 50))
+        
+        # SSA expects AABBGGRR
+        # Calculate alpha: 0% opacity = FF (transparent), 100% opacity = 00 (solid)
+        alpha_val = int((100 - bg_op_pct) / 100 * 255)
+        alpha_hex = f"{alpha_val:02X}"
+        
+        # Rearrange standard hex RRGGBB to BBGGRR
+        if len(bg_color) == 6:
+            bbggrr = bg_color[4:6] + bg_color[2:4] + bg_color[0:2]
+        else:
+            bbggrr = "000000"
+            
+        final_bg_hex = f"&H{alpha_hex}{bbggrr}"
+        
         srt_path_escaped = srt_path.replace("\\", "\\\\").replace(":", "\\:")
-        sub_filter = f"subtitles={srt_path_escaped}:force_style='FontName={font},FontSize={size},PrimaryColour={color},OutlineColour={outline},Alignment={pos},BorderStyle=3,BackColour=&H80000000'"
+        sub_filter = f"subtitles={srt_path_escaped}:force_style='FontName={font},FontSize={size},PrimaryColour={color},OutlineColour={outline},Alignment={pos},BorderStyle=3,BackColour={final_bg_hex}'"
         
         ffmpeg_sub_cmd = [
             "ffmpeg", "-y", "-i", raw_video_path,

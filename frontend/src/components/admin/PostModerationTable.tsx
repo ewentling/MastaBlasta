@@ -1,20 +1,28 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Search, Flag, Trash2, AlertTriangle } from 'lucide-react';
+import { Search, Flag, Trash2, AlertTriangle, X, CheckCircle } from 'lucide-react';
 
 export function PostModerationTable() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [confirmState, setConfirmState] = useState<{
+    type: 'flag' | 'delete';
+    postId: string;
+    reason: string;
+  } | null>(null);
+  const [actionSuccess, setActionSuccess] = useState('');
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['moderation-posts', search, page],
+    queryKey: ['moderation-posts', search, page, statusFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         page: page.toString(),
         per_page: '20',
       });
       if (search) params.append('search', search);
+      if (statusFilter !== 'all') params.append('status', statusFilter);
 
       const response = await fetch(`/api/admin/moderation/posts?${params}`, {
         headers: {
@@ -41,7 +49,9 @@ export function PostModerationTable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['moderation-posts'] });
-      alert('Post flagged successfully');
+      setActionSuccess('Post flagged successfully.');
+      setConfirmState(null);
+      setTimeout(() => setActionSuccess(''), 3000);
     },
   });
 
@@ -60,22 +70,26 @@ export function PostModerationTable() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['moderation-posts'] });
-      alert('Post deleted successfully');
+      setActionSuccess('Post deleted successfully.');
+      setConfirmState(null);
+      setTimeout(() => setActionSuccess(''), 3000);
     },
   });
 
   const handleFlagPost = (postId: string) => {
-    const reason = prompt('Enter reason for flagging this post:');
-    if (reason) {
-      flagPostMutation.mutate({ postId, reason });
-    }
+    setConfirmState({ type: 'flag', postId, reason: '' });
   };
 
   const handleDeletePost = (postId: string) => {
-    const reason = prompt('Enter reason for deleting this post:');
-    if (!reason) return;
-    if (window.confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
-      deletePostMutation.mutate({ postId, reason });
+    setConfirmState({ type: 'delete', postId, reason: '' });
+  };
+
+  const handleConfirmAction = () => {
+    if (!confirmState || !confirmState.reason.trim()) return;
+    if (confirmState.type === 'flag') {
+      flagPostMutation.mutate({ postId: confirmState.postId, reason: confirmState.reason });
+    } else {
+      deletePostMutation.mutate({ postId: confirmState.postId, reason: confirmState.reason });
     }
   };
 
@@ -91,13 +105,69 @@ export function PostModerationTable() {
 
   return (
     <div className="rounded-xl shadow-lg overflow-hidden" style={cardStyle}>
-      <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
         <h3 className="text-sm font-semibold text-white">Content Moderation</h3>
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          <AlertTriangle className="w-4 h-4" />
-          Total Posts: {data?.total || 0}
+        <div className="flex items-center gap-3">
+          <select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+            className="py-1.5 px-2.5 text-xs rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            <option value="all">All Status</option>
+            <option value="published">Published</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="draft">Draft</option>
+            <option value="flagged">Flagged</option>
+          </select>
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <AlertTriangle className="w-4 h-4" />
+            Total: {data?.total || 0}
+          </div>
         </div>
       </div>
+
+      {/* Inline Action Confirmation Panel */}
+      {confirmState && (
+        <div className="mx-6 mt-4 p-4 rounded-lg" style={{ background: confirmState.type === 'delete' ? 'rgba(239,68,68,0.08)' : 'rgba(251,191,36,0.08)', border: `1px solid ${confirmState.type === 'delete' ? 'rgba(239,68,68,0.3)' : 'rgba(251,191,36,0.3)'}` }}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-semibold" style={{ color: confirmState.type === 'delete' ? '#fca5a5' : '#fbbf24' }}>
+              {confirmState.type === 'delete' ? '⚠️ Confirm Delete Post' : '🚩 Confirm Flag Post'}
+            </p>
+            <button onClick={() => setConfirmState(null)} className="text-slate-500 hover:text-slate-300">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <input
+            type="text"
+            value={confirmState.reason}
+            onChange={(e) => setConfirmState((s) => s ? { ...s, reason: e.target.value } : null)}
+            placeholder={`Reason for ${confirmState.type === 'delete' ? 'deletion' : 'flagging'}…`}
+            className="w-full px-3 py-2 text-sm rounded-lg text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-cyan-500 mb-3"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleConfirmAction}
+              disabled={!confirmState.reason.trim() || flagPostMutation.isPending || deletePostMutation.isPending}
+              className="flex-1 px-3 py-1.5 text-sm font-medium text-white rounded-lg disabled:opacity-50 transition-colors"
+              style={{ background: confirmState.type === 'delete' ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+            >
+              Confirm {confirmState.type === 'delete' ? 'Delete' : 'Flag'}
+            </button>
+            <button onClick={() => setConfirmState(null)} className="px-3 py-1.5 text-sm text-slate-400 hover:text-white rounded-lg transition-colors" style={{ border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.04)' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Success toast */}
+      {actionSuccess && (
+        <div className="mx-6 mt-3 p-3 rounded-lg flex items-center gap-2" style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.3)' }}>
+          <CheckCircle className="w-4 h-4 text-emerald-400" />
+          <p className="text-sm text-emerald-300">{actionSuccess}</p>
+        </div>
+      )}
 
       {/* Search */}
       <div className="px-6 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
@@ -108,9 +178,17 @@ export function PostModerationTable() {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search posts by content..."
-            className="w-full pl-10 pr-4 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600"
+            className="w-full pl-10 pr-10 py-2 text-sm rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white placeholder-slate-600"
             style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
           />
+          {search && (
+            <button
+              onClick={() => { setSearch(''); setPage(1); }}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -159,7 +237,12 @@ export function PostModerationTable() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">
-                        {post.created_at ? new Date(post.created_at).toLocaleDateString() : 'N/A'}
+                        {post.created_at ? (
+                          <div className="flex flex-col">
+                            <span>{new Date(post.created_at).toLocaleDateString()}</span>
+                            <span className="text-xs text-slate-500">{new Date(post.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                        ) : 'N/A'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
                         <div className="flex gap-3">
