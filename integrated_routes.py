@@ -32,13 +32,18 @@ def set_no_store_on_auth(response):
         response.headers['Pragma'] = 'no-cache'
     return response
 
+def _is_secure_request() -> bool:
+    """Return True when the current request is over HTTPS (directly or via reverse proxy)."""
+    return request.is_secure or request.headers.get('X-Forwarded-Proto', '') == 'https'
+
+
 def _build_auth_response(user_data, access_token, refresh_token, status_code=200):
     from flask import make_response
     response = make_response(jsonify(user_data))
-    
-    secure = True
-    samesite = 'None'
-    
+
+    secure = _is_secure_request()
+    samesite = 'None' if secure else 'Lax'
+
     response.set_cookie(
         'accessToken', access_token,
         httponly=True, secure=secure, samesite=samesite, max_age=15*60
@@ -251,9 +256,11 @@ def get_me():
 def logout():
     """Logout by clearing HttpOnly cookies"""
     from flask import make_response
+    secure = _is_secure_request()
+    samesite = 'None' if secure else 'Lax'
     response = make_response(jsonify({'message': 'Logged out successfully'}))
-    response.set_cookie('accessToken', '', expires=0, httponly=True, secure=True, samesite='None')
-    response.set_cookie('refreshToken', '', expires=0, httponly=True, secure=True, samesite='None')
+    response.set_cookie('accessToken', '', expires=0, httponly=True, secure=secure, samesite=samesite)
+    response.set_cookie('refreshToken', '', expires=0, httponly=True, secure=secure, samesite=samesite)
     return response, 200
 
 
