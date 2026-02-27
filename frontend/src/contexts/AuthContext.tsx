@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import axios from 'axios';
+import { api } from '../api';
 
 interface User {
   id: string;
@@ -25,14 +26,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing user info
-    const storedUser = localStorage.getItem('user');
+    const initializeAuth = async () => {
+      // Optimistically restore user from localStorage for fast initial render
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch {
+          localStorage.removeItem('user');
+        }
+      }
 
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
+      // Validate session against server (uses HttpOnly cookies)
+      try {
+        const response = await api.get('/v2/auth/me');
+        const serverUser: User = response.data.user;
+        setUser(serverUser);
+        localStorage.setItem('user', JSON.stringify(serverUser));
+      } catch (err) {
+        // Session invalid or network error – clear any stale localStorage data.
+        // Routes remain on the loading spinner until setIsLoading(false) below,
+        // so no incorrect content is shown between the optimistic set and this clear.
+        console.warn('Session validation failed, logging out:', err);
+        setUser(null);
+        localStorage.removeItem('user');
+      }
 
-    setIsLoading(false);
+      setIsLoading(false);
+    };
+
+    initializeAuth();
   }, []);
 
   const login = async (credential: string) => {

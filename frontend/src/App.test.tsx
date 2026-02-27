@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import App, { appRoutes } from './App';
 
 describe('App navigation', () => {
-	it('shows login page when user is not authenticated', () => {
+	it('shows login page when user is not authenticated', async () => {
 		render(<App />);
-		// When not logged in, ProtectedRoute redirects to /login
-		expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument();
+		// When not logged in, ProtectedRoute redirects to /login after auth check
+		await waitFor(() => {
+			expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument();
+		});
 	});
 
 	it('routes array has unique paths', () => {
