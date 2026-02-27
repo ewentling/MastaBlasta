@@ -401,6 +401,7 @@ class MediaManager:
 _user_cache = {}
 _cache_lock = threading.RLock()
 _cache_ttl = 300  # 5 minutes
+_PLACEHOLDER_BEARER_VALUES = frozenset({'', 'null', 'undefined', 'none'})
 
 
 def _get_cached_user(user_id: str) -> Optional[Dict]:
@@ -422,6 +423,26 @@ def _cache_user(user_id: str, user_data: Dict):
         _user_cache[user_id] = (user_data, time.time())
 
 
+def _normalize_bearer_token(raw_token: Optional[str]) -> Optional[str]:
+    """
+    Normalize a bearer token, dropping empty strings and placeholders like 'null', 'undefined', or 'none'.
+
+    Returns:
+        The cleaned token string, or None when the value should be treated as missing.
+    """
+    if raw_token is None:
+        return None
+
+    token = raw_token.strip()
+    if not token:
+        return None
+
+    if token.lower() in _PLACEHOLDER_BEARER_VALUES:
+        return None
+
+    return token
+
+
 def get_current_user() -> Optional[Dict]:
     """Get current authenticated user from request with caching"""
     if not DB_ENABLED:
@@ -431,8 +452,9 @@ def get_current_user() -> Optional[Dict]:
     token = None
     auth_header = request.headers.get('Authorization', '')
     if auth_header.startswith('Bearer '):
-        token = auth_header.split(' ')[1]
-    
+        bearer_value = auth_header[len('Bearer '):]
+        token = _normalize_bearer_token(bearer_value)
+
     if not token:
         token = request.cookies.get('accessToken')
 
