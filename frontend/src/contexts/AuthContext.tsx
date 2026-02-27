@@ -26,12 +26,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+
     const initializeAuth = async () => {
       // Optimistically restore user from localStorage for fast initial render
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         try {
-          setUser(JSON.parse(storedUser));
+          if (isMounted) setUser(JSON.parse(storedUser));
         } catch {
           localStorage.removeItem('user');
         }
@@ -40,10 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Validate session against server (uses HttpOnly cookies)
       try {
         const response = await api.get('/v2/auth/me');
+        if (!isMounted) return;
         const serverUser: User = response.data.user;
         setUser(serverUser);
         localStorage.setItem('user', JSON.stringify(serverUser));
       } catch (err) {
+        if (!isMounted) return;
         // Session invalid or network error – clear any stale localStorage data.
         // Routes remain on the loading spinner until setIsLoading(false) below,
         // so no incorrect content is shown between the optimistic set and this clear.
@@ -52,10 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('user');
       }
 
-      setIsLoading(false);
+      if (isMounted) setIsLoading(false);
     };
 
     initializeAuth();
+    return () => { isMounted = false; };
   }, []);
 
   const login = async (credential: string) => {
