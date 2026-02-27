@@ -476,6 +476,7 @@ def get_current_user() -> Optional[Dict]:
                         'id': user.id,
                         'email': user.email,
                         'name': user.full_name,
+                        'full_name': user.full_name,
                         'role': user.role.value
                     }
                     _cache_user(user_id, user_data)
@@ -1096,6 +1097,35 @@ class VideoManager:
         if job_id not in self.jobs:
             return {"status": "not_found"}
         return self.jobs[job_id]
+
+
+
+class AuditLogManager:
+    """Manager for recording OAuth connection audit log events"""
+
+    def record_event(self, user_id, platform, action, status,
+                     account_id=None, ip_address=None, user_agent=None,
+                     scopes=None, error_message=None):
+        try:
+            from models import ConnectionAuditLog
+            import uuid
+            with db_session_scope() as session:
+                entry = ConnectionAuditLog(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    platform=platform,
+                    action=action,
+                    status=status,
+                    account_id=account_id,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    scopes=scopes,
+                    error_message=error_message,
+                )
+                session.add(entry)
+                session.commit()
+        except Exception as e:
+            logger.warning(f"Failed to record audit event: {e}")
 
 
 # Initialize managers

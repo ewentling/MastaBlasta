@@ -43,14 +43,15 @@ def _build_auth_response(user_data, access_token, refresh_token, status_code=200
 
     secure = _is_secure_request()
     samesite = 'None' if secure else 'Lax'
-
     response.set_cookie(
         'accessToken', access_token,
-        httponly=True, secure=secure, samesite=samesite, max_age=15*60
+        httponly=True, secure=secure, samesite=samesite, max_age=15*60,
+        path='/'
     )
     response.set_cookie(
         'refreshToken', refresh_token,
-        httponly=True, secure=secure, samesite=samesite, max_age=30*24*60*60
+        httponly=True, secure=secure, samesite=samesite, max_age=30*24*60*60,
+        path='/'
     )
     return response, status_code
 
@@ -259,8 +260,8 @@ def logout():
     secure = _is_secure_request()
     samesite = 'None' if secure else 'Lax'
     response = make_response(jsonify({'message': 'Logged out successfully'}))
-    response.set_cookie('accessToken', '', expires=0, httponly=True, secure=secure, samesite=samesite)
-    response.set_cookie('refreshToken', '', expires=0, httponly=True, secure=secure, samesite=samesite)
+    response.set_cookie('accessToken', '', expires=0, httponly=True, secure=secure, samesite=samesite, path='/')
+    response.set_cookie('refreshToken', '', expires=0, httponly=True, secure=secure, samesite=samesite, path='/')
     return response, 200
 
 

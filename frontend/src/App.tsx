@@ -1,9 +1,9 @@
-import { useState, Component } from 'react';
+import { useState, useEffect, useRef, Component } from 'react';
 import type { CSSProperties } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw, Palette, Video } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw, Palette, Video, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -24,7 +24,9 @@ import RegisterPage from './pages/RegisterPage';
 import SubscriptionInfoPage from './pages/SubscriptionInfoPage';
 import SettingsModal from './components/SettingsModal';
 import NotificationCenter from './components/NotificationCenter';
+import Breadcrumbs from './components/Breadcrumbs';
 import { useKeyboardShortcuts, KeyboardShortcutsHelp } from './components/KeyboardShortcuts';
+import { ToastProvider } from './components/Toast';
 import { ThemeProvider, useTheme, themes } from './ThemeContext';
 import type { ThemeName } from './ThemeContext';
 import { AIProvider } from './contexts/AIContext';
@@ -78,7 +80,7 @@ type AppRouteConfig = {
   path: string;
   label: string;
   icon: LucideIcon;
-  element: JSX.Element;
+  element: React.ReactElement;
   adminOnly?: boolean;
 };
 
@@ -100,6 +102,33 @@ export const appRoutes: AppRouteConfig[] = [
   { path: '/admin', label: 'Admin', icon: Shield, element: <AdminPage />, adminOnly: true },
 ];
 
+// ── UX #4: Scroll to top on route change ──────────────────────────────────
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    // Scroll the main content area to top
+    document.querySelector('.main-content')?.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [pathname]);
+  return null;
+}
+
+// ── UX #9: Avatar for sidebar user info ───────────────────────────────────
+function SidebarAvatar({ name, email }: { name?: string; email: string }) {
+  const initials = name
+    ? name.split(' ').filter(w => w).map(w => w[0]).slice(0, 2).join('').toUpperCase()
+    : email.slice(0, 2).toUpperCase();
+  const colors = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
+  const bg = colors[email.charCodeAt(0) % colors.length];
+  return (
+    <div style={{
+      width: 34, height: 34, borderRadius: '50%', background: bg,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      color: 'white', fontSize: '0.8rem', fontWeight: 700, flexShrink: 0,
+      boxShadow: `0 2px 8px ${bg}55`,
+    }}>{initials}</div>
+  );
+}
+
 function Navigation() {
   const location = useLocation();
   const [showSettings, setShowSettings] = useState(false);
@@ -107,6 +136,22 @@ function Navigation() {
   const { logout, user } = useAuth();
   const { themeName, setTheme } = useTheme();
   const { showHelp, setShowHelp, shortcuts } = useKeyboardShortcuts();
+
+  // UX #3: Collapsible sidebar
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
+  const toggleCollapsed = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebar-collapsed', String(next));
+      return next;
+    });
+  };
+
+  // UX #10: Mobile sidebar
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Close mobile sidebar on route change
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   // Fetch connected account count for badge
   const { data: accountsData } = useQuery({
@@ -118,14 +163,10 @@ function Navigation() {
 
   const isActive = (path: string) => (location.pathname === path ? 'nav-link active' : 'nav-link');
 
-  const handleLogout = () => {
-    logout();
-  };
+  const handleLogout = () => { logout(); };
 
-  // Check if user is admin
   const isAdmin = user?.role === 'admin';
 
-  // Theme dot colors for quick switcher
   const themeAccents: Record<ThemeName, string> = {
     dark: '#667eea',
     synthwave: '#ff006e',
@@ -153,14 +194,25 @@ function Navigation() {
 
   return (
     <>
-      <nav className="sidebar">
+      {/* UX #10: Mobile hamburger */}
+      <button className="hamburger-btn" onClick={() => setMobileOpen(true)}>
+        <Menu size={22} />
+      </button>
+      {mobileOpen && <div className="sidebar-overlay visible" onClick={() => setMobileOpen(false)} />}
+
+      <nav className={`sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
+        {/* UX #3: Collapse toggle */}
+        <button className="sidebar-toggle" onClick={toggleCollapsed} title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          {collapsed ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+        </button>
+
         <div className="logo">
           <img src="/logo.png" alt="MastaBlasta" className="logo-image" />
         </div>
         <ul className="nav-menu">
           {appRoutes.filter(route => !route.adminOnly || isAdmin).map(({ path, label, icon: Icon }) => (
             <li key={path}>
-              <Link to={path} className={isActive(path)} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+              <Link to={path} className={isActive(path)} title={collapsed ? label : undefined} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                 <Icon size={20} style={{ flexShrink: 0 }} />
                 <span style={{ flex: 1 }}>{label}</span>
                 {path === '/accounts' && connectedCount > 0 && (
@@ -171,15 +223,19 @@ function Navigation() {
           ))}
         </ul>
         <div className="sidebar-footer">
+          {/* UX #9: Avatar + user info */}
           {user && (
-            <div className="user-info" style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '14px', borderTop: '1px solid var(--border)' }}>
-              <div style={{ fontWeight: '500', color: 'var(--text-primary)' }}>{user.name}</div>
-              <div style={{ fontSize: '12px' }}>{user.email}</div>
+            <div className="user-info" style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '14px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+              <SidebarAvatar name={user.name} email={user.email} />
+              <div style={{ overflow: 'hidden' }}>
+                <div style={{ fontWeight: '500', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</div>
+                <div style={{ fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</div>
+              </div>
             </div>
           )}
 
           {/* Theme quick-switcher */}
-          <div style={{ padding: '8px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div className="sidebar-theme-picker" style={{ padding: '8px 16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
             <button
               onClick={() => setShowThemePicker(v => !v)}
               className="settings-button"
@@ -281,6 +337,12 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// ── UX #1: Page transition wrapper ────────────────────────────────────────
+function PageTransition({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+  return <div className="page-transition" key={pathname}>{children}</div>;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -288,36 +350,42 @@ function App() {
         <AuthProvider>
           <AIProvider>
             <QueryClientProvider client={queryClient}>
-              <Router>
-                <Routes>
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/register" element={<RegisterPage />} />
-                  <Route path="/subscription-info" element={<SubscriptionInfoPage />} />
-                  <Route
-                    path="*"
-                    element={
-                      <ProtectedRoute>
-                        <div className="app-container">
-                          <Navigation />
-                          <main className="main-content">
-                            <ErrorBoundary>
-                              <Routes>
-                                {appRoutes.map(({ path, element, adminOnly }) => (
-                                  <Route
-                                    key={path}
-                                    path={path}
-                                    element={adminOnly ? <AdminRoute>{element}</AdminRoute> : element}
-                                  />
-                                ))}
-                              </Routes>
-                            </ErrorBoundary>
-                          </main>
-                        </div>
-                      </ProtectedRoute>
-                    }
-                  />
-                </Routes>
-              </Router>
+              <ToastProvider>
+                <Router>
+                  <Routes>
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="/register" element={<RegisterPage />} />
+                    <Route path="/subscription-info" element={<SubscriptionInfoPage />} />
+                    <Route
+                      path="*"
+                      element={
+                        <ProtectedRoute>
+                          <div className="app-container">
+                            <Navigation />
+                            <main className="main-content">
+                              <ScrollToTop />
+                              <Breadcrumbs />
+                              <ErrorBoundary>
+                                <PageTransition>
+                                  <Routes>
+                                    {appRoutes.map(({ path, element, adminOnly }) => (
+                                      <Route
+                                        key={path}
+                                        path={path}
+                                        element={adminOnly ? <AdminRoute>{element}</AdminRoute> : element}
+                                      />
+                                    ))}
+                                  </Routes>
+                                </PageTransition>
+                              </ErrorBoundary>
+                            </main>
+                          </div>
+                        </ProtectedRoute>
+                      }
+                    />
+                  </Routes>
+                </Router>
+              </ToastProvider>
             </QueryClientProvider>
           </AIProvider>
         </AuthProvider>

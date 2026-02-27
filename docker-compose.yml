@@ -2,12 +2,9 @@ services:
   mastablasta:
     build: .
     container_name: mastablasta-api
-    # Note: network_mode: host only works on Linux hosts. 
-    # On Windows/macOS, use ports mapping instead:
-    # ports:
-    #   - "33766:33766"
-    # And update DATABASE_URL to use host.docker.internal
-    network_mode: host
+    # network_mode: host
+    ports:
+      - "33766:33766"
     env_file:
       - .env
     environment:

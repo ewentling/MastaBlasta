@@ -19,22 +19,24 @@ export default function DashboardPage() {
   // Take the first space-delimited token as the display name; works for most Western
   // name formats and gracefully degrades to an empty string for single-word names.
   const firstName = user?.name?.split(' ')[0] ?? '';
-  
-  const { data: postsData } = useQuery({
+
+  const { data: postsData, isLoading: postsLoading } = useQuery({
     queryKey: ['posts'],
     queryFn: () => postsApi.getAll(),
   });
 
-  const { data: accountsData } = useQuery({
+  const { data: accountsData, isLoading: accountsLoading } = useQuery({
     queryKey: ['accounts'],
     queryFn: () => accountsApi.getAll(),
   });
 
-  const { data: analyticsData } = useQuery({
+  const { data: analyticsData, isLoading: analyticsLoading } = useQuery({
     queryKey: ['analytics-dashboard', 30],
     queryFn: () => api.get('/analytics/dashboard?days=30').then(r => r.data),
     staleTime: 5 * 60_000,
   });
+
+  const isLoading = postsLoading || accountsLoading;
 
   const posts = postsData?.posts || [];
   const accounts = accountsData?.accounts || [];
@@ -89,9 +91,9 @@ export default function DashboardPage() {
   const StatCard = ({ icon: Icon, value, label, gradient }: StatCardProps) => (
     <article className="card" role="region" aria-label={label}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <div style={{ 
+        <div style={{
           background: gradient,
-          padding: '1rem', 
+          padding: '1rem',
           borderRadius: '1rem',
           color: 'white',
           boxShadow: `0 4px 12px ${gradient.match(/#[0-9a-f]{6}/i)?.[0]}40`,
@@ -100,17 +102,17 @@ export default function DashboardPage() {
           <Icon size={28} />
         </div>
         <div>
-          <div style={{ 
-            fontSize: '2.5rem', 
-            fontWeight: '700', 
+          <div style={{
+            fontSize: '2.5rem',
+            fontWeight: '700',
             color: 'var(--color-textPrimary)',
             letterSpacing: '-0.03em',
             lineHeight: '1'
           }}>
             <AnimatedNumber value={value} />
           </div>
-          <div style={{ 
-            color: 'var(--color-textSecondary)', 
+          <div style={{
+            color: 'var(--color-textSecondary)',
             fontSize: '0.9375rem',
             fontWeight: '500',
             marginTop: '0.25rem'
@@ -129,202 +131,215 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      {/* Bento Grid Layout */}
-      <div className="bento-grid bento-grid-4">
-        
-        {/* Quick Actions - Full width featured card */}
-        <section className="card bento-item-2x" aria-labelledby="quick-actions-heading">
-          <div className="card-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-              <Zap size={22} style={{ color: 'var(--color-accentPrimary)' }} />
-              <h3 id="quick-actions-heading">Quick Actions</h3>
-            </div>
-          </div>
-          <nav style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', 
-            gap: '0.875rem' 
-          }}>
-            {quickActions.map((action) => (
-              <button
-                key={action.label}
-                className="btn btn-secondary btn-ripple"
-                onClick={() => navigate(action.path)}
-                aria-label={action.label}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '1.25rem 1rem',
-                  height: 'auto',
-                }}
-              >
-                <div style={{ 
-                  background: `linear-gradient(135deg, ${action.color} 0%, ${action.color}dd 100%)`,
-                  padding: '0.875rem',
-                  borderRadius: '0.875rem',
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: `0 4px 12px ${action.color}40`,
-                  transition: 'all 0.3s var(--ease-smooth)'
-                }}>
-                  <action.icon size={24} />
-                </div>
-                <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>{action.label}</span>
-              </button>
-            ))}
-          </nav>
-        </section>
+      {/* Skeleton loading state */}
+      {isLoading ? (
+        <div className="bento-grid bento-grid-4">
+          {/* Quick actions skeleton */}
+          <div className="skeleton-themed bento-item-2x" style={{ height: '140px' }} />
+          {/* Stat card skeletons */}
+          <div className="skeleton-themed" style={{ height: '140px' }} />
+          <div className="skeleton-themed" style={{ height: '140px' }} />
+          {/* Recent activity skeleton */}
+          <div className="skeleton-themed bento-item-2x" style={{ height: '260px' }} />
+          <div className="skeleton-themed bento-item-2x" style={{ height: '260px' }} />
+        </div>
+      ) : (
+        <div className="bento-grid bento-grid-4">
 
-        {/* Stats Cards */}
-        <StatCard 
-          icon={Users} 
-          value={activeAccounts} 
-          label="Active Accounts"
-          gradient="linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)"
-        />
-
-        <StatCard 
-          icon={Send} 
-          value={publishedPosts} 
-          label="Published"
-          gradient="linear-gradient(135deg, #10b981 0%, #059669 100%)"
-        />
-
-        <StatCard 
-          icon={Calendar} 
-          value={scheduledPosts} 
-          label="Scheduled"
-          gradient="linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
-        />
-
-        <StatCard 
-          icon={BarChart3} 
-          value={posts.length} 
-          label="Total Posts"
-          gradient="linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
-        />
-
-        {/* Engagement Rate card from analytics */}
-        {analyticsData?.summary && (
-          <article className="card" role="region" aria-label="Engagement Rate">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <div style={{
-                background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
-                padding: '1rem',
-                borderRadius: '1rem',
-                color: 'white',
-                boxShadow: '0 4px 12px rgba(236,72,153,0.4)',
-                transition: 'all 0.3s var(--ease-smooth)',
-              }}>
-                <TrendingUp size={28} />
-              </div>
-              <div>
-                <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'var(--color-textPrimary)', letterSpacing: '-0.03em', lineHeight: '1' }}>
-                  {analyticsData.summary.avg_engagement_rate}%
-                </div>
-                <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.9375rem', fontWeight: '500', marginTop: '0.25rem' }}>
-                  Avg Engagement (30d)
-                </div>
+          {/* Quick Actions - Full width featured card */}
+          <section className="card bento-item-2x" aria-labelledby="quick-actions-heading">
+            <div className="card-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                <Zap size={22} style={{ color: 'var(--color-accentPrimary)' }} />
+                <h3 id="quick-actions-heading">Quick Actions</h3>
               </div>
             </div>
-          </article>
-        )}
-
-        {/* Recent Activity - Takes 2 columns */}
-        <section className="card bento-item-2x" aria-labelledby="recent-activity-heading">
-          <div className="card-header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-              <Activity size={22} style={{ color: 'var(--color-accentPrimary)' }} />
-              <h3 id="recent-activity-heading">Recent Activity</h3>
-            </div>
-            {posts.length > 5 && (
-              <button
-                onClick={() => navigate('/scheduled')}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'none', border: 'none', color: 'var(--color-accentPrimary)', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '500', padding: '0.25rem 0.5rem', borderRadius: '6px' }}
-              >
-                View all <ChevronRight size={14} />
-              </button>
-            )}
-          </div>
-          {recentPosts.length === 0 ? (
-            <div className="empty-state">
-              <Send size={56} />
-              <h3>No posts yet</h3>
-              <p>Create your first post to get started!</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-              {recentPosts.map(post => (
-                <article 
-                  key={post.id} 
-                  style={{ 
-                    padding: '1rem', 
-                    background: 'var(--glass-bg)',
-                    backdropFilter: 'blur(10px)',
-                    borderRadius: '0.75rem',
-                    border: '1px solid var(--glass-border)',
+            <nav style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: '0.875rem'
+            }}>
+              {quickActions.map((action) => (
+                <button
+                  key={action.label}
+                  className="btn btn-secondary btn-ripple"
+                  onClick={() => navigate(action.path)}
+                  aria-label={action.label}
+                  style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
+                    flexDirection: 'column',
                     alignItems: 'center',
-                    gap: '1rem',
-                    transition: 'all 0.2s var(--ease-smooth)',
-                    cursor: 'pointer'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'var(--glass-bg-hover)';
-                    e.currentTarget.style.transform = 'translateX(4px)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'var(--glass-bg)';
-                    e.currentTarget.style.transform = 'translateX(0)';
+                    gap: '0.75rem',
+                    padding: '1.25rem 1rem',
+                    height: 'auto',
                   }}
                 >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ 
-                      fontWeight: '600', 
-                      marginBottom: '0.5rem', 
-                      color: 'var(--color-textPrimary)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {post.content.substring(0, 100)}{post.content.length > 100 ? '...' : ''}
-                    </div>
-                    <div style={{ 
-                      fontSize: '0.875rem', 
-                      color: 'var(--color-textSecondary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem'
-                    }}>
-                      <span>{post.platforms.join(', ')}</span>
-                      <span>•</span>
-                      <time dateTime={post.created_at}>
-                        {formatDateTime.date(post.created_at)}
-                      </time>
-                    </div>
+                  <div style={{
+                    background: `linear-gradient(135deg, ${action.color} 0%, ${action.color}dd 100%)`,
+                    padding: '0.875rem',
+                    borderRadius: '0.875rem',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: `0 4px 12px ${action.color}40`,
+                    transition: 'all 0.3s var(--ease-smooth)'
+                  }}>
+                    <action.icon size={24} />
                   </div>
-                  <div style={{ flexShrink: 0 }}>
-                    {post.status === 'published' && (
-                      <span className="badge badge-success">Published</span>
-                    )}
-                    {post.status === 'scheduled' && (
-                      <span className="badge badge-info">Scheduled</span>
-                    )}
-                    {post.status === 'publishing' && (
-                      <span className="badge badge-warning">Publishing</span>
-                    )}
-                  </div>
-                </article>
+                  <span style={{ fontSize: '0.875rem', fontWeight: '600' }}>{action.label}</span>
+                </button>
               ))}
-            </div>
+            </nav>
+          </section>
+
+          {/* Stats Cards */}
+          <StatCard
+            icon={Users}
+            value={activeAccounts}
+            label="Active Accounts"
+            gradient="linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)"
+          />
+
+          <StatCard
+            icon={Send}
+            value={publishedPosts}
+            label="Published"
+            gradient="linear-gradient(135deg, #10b981 0%, #059669 100%)"
+          />
+
+          <StatCard
+            icon={Calendar}
+            value={scheduledPosts}
+            label="Scheduled"
+            gradient="linear-gradient(135deg, #f59e0b 0%, #d97706 100%)"
+          />
+
+          <StatCard
+            icon={BarChart3}
+            value={posts.length}
+            label="Total Posts"
+            gradient="linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
+          />
+
+          {/* Engagement Rate card from analytics */}
+          {analyticsData?.summary && (
+            <article className="card" role="region" aria-label="Engagement Rate">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+                  padding: '1rem',
+                  borderRadius: '1rem',
+                  color: 'white',
+                  boxShadow: '0 4px 12px rgba(236,72,153,0.4)',
+                  transition: 'all 0.3s var(--ease-smooth)',
+                }}>
+                  <TrendingUp size={28} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '2.5rem', fontWeight: '700', color: 'var(--color-textPrimary)', letterSpacing: '-0.03em', lineHeight: '1' }}>
+                    {analyticsData.summary.avg_engagement_rate}%
+                  </div>
+                  <div style={{ color: 'var(--color-textSecondary)', fontSize: '0.9375rem', fontWeight: '500', marginTop: '0.25rem' }}>
+                    Avg Engagement (30d)
+                  </div>
+                </div>
+              </div>
+            </article>
           )}
-        </section>
-      </div>
+
+          {/* Recent Activity - Takes 2 columns */}
+          <section className="card bento-item-2x" aria-labelledby="recent-activity-heading">
+            <div className="card-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                <Activity size={22} style={{ color: 'var(--color-accentPrimary)' }} />
+                <h3 id="recent-activity-heading">Recent Activity</h3>
+              </div>
+              {posts.length > 5 && (
+                <button
+                  onClick={() => navigate('/scheduled')}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', background: 'none', border: 'none', color: 'var(--color-accentPrimary)', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: '500', padding: '0.25rem 0.5rem', borderRadius: '6px' }}
+                >
+                  View all <ChevronRight size={14} />
+                </button>
+              )}
+            </div>
+            {recentPosts.length === 0 ? (
+              <div className="empty-state">
+                <Send size={56} />
+                <h3>No posts yet</h3>
+                <p>Create your first post to get started!</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+                {recentPosts.map(post => (
+                  <article
+                    key={post.id}
+                    style={{
+                      padding: '1rem',
+                      background: 'var(--glass-bg)',
+                      backdropFilter: 'blur(10px)',
+                      borderRadius: '0.75rem',
+                      border: '1px solid var(--glass-border)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: '1rem',
+                      transition: 'all 0.2s var(--ease-smooth)',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'var(--glass-bg-hover)';
+                      e.currentTarget.style.transform = 'translateX(4px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'var(--glass-bg)';
+                      e.currentTarget.style.transform = 'translateX(0)';
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontWeight: '600',
+                        marginBottom: '0.5rem',
+                        color: 'var(--color-textPrimary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {post.content.substring(0, 100)}{post.content.length > 100 ? '...' : ''}
+                      </div>
+                      <div style={{
+                        fontSize: '0.875rem',
+                        color: 'var(--color-textSecondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}>
+                        <span>{post.platforms.join(', ')}</span>
+                        <span>•</span>
+                        <time dateTime={post.created_at}>
+                          {formatDateTime.date(post.created_at)}
+                        </time>
+                      </div>
+                    </div>
+                    <div style={{ flexShrink: 0 }}>
+                      {post.status === 'published' && (
+                        <span className="badge badge-success">Published</span>
+                      )}
+                      {post.status === 'scheduled' && (
+                        <span className="badge badge-info">Scheduled</span>
+                      )}
+                      {post.status === 'publishing' && (
+                        <span className="badge badge-warning">Publishing</span>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </div>
   );
 }

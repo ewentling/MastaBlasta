@@ -5,6 +5,7 @@ import { Plus, Trash2, Edit2, Check, X, TestTube, Zap, Settings, Copy, RefreshCw
 import type { Account, Platform } from '../types';
 import OAuthAppModal from '../components/OAuthAppModal';
 import AuditLogModal from '../components/AuditLogModal';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
@@ -17,6 +18,7 @@ export default function AccountsPage() {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
   const [platformFilter, setAccountPlatformFilter] = useState('all');
+  const [pendingDelete, setPendingDelete] = useState<Account | null>(null);
 
   const copyUsername = async (accountId: string, username: string) => {
     try {
@@ -266,11 +268,7 @@ export default function AccountsPage() {
                             </button>
                             <button
                               className="btn btn-danger btn-small"
-                              onClick={() => {
-                                if (confirm(`Delete account "${account.name}"?`)) {
-                                  deleteMutation.mutate(account.id);
-                                }
-                              }}
+                              onClick={() => setPendingDelete(account)}
                               title="Delete"
                             >
                               <Trash2 size={14} />
@@ -338,6 +336,16 @@ export default function AccountsPage() {
       )}
 
       <OAuthAppModal isOpen={showOAuthAppModal} onClose={() => setShowOAuthAppModal(false)} />
+
+      <ConfirmDialog
+        isOpen={!!pendingDelete}
+        onClose={() => setPendingDelete(null)}
+        onConfirm={() => { if (pendingDelete) deleteMutation.mutate(pendingDelete.id); }}
+        title="Delete Account"
+        message={`Are you sure you want to delete "${pendingDelete?.name}"? This action cannot be undone and all associated data will be lost.`}
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
