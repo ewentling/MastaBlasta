@@ -341,11 +341,11 @@ class SecurityHeaders:
         # Content Security Policy - Prevent XSS
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com; "
-            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://accounts.google.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "img-src 'self' data: https: blob:; "
-            "font-src 'self' data:; "
-            "connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com; "
+            "font-src 'self' data: https://fonts.gstatic.com; "
+            "connect-src 'self' https://accounts.google.com https://generativelanguage.googleapis.com; "
             "frame-ancestors 'none'; "
             "base-uri 'self'; "
             "form-action 'self'"
@@ -560,4 +560,3 @@ def init_security_middleware(app):
         response = SecurityHeaders.set_security_headers(response)
         response = CORSConfig.set_cors_headers(response)
         return response
-
