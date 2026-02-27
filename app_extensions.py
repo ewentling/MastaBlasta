@@ -401,7 +401,7 @@ class MediaManager:
 _user_cache = {}
 _cache_lock = threading.RLock()
 _cache_ttl = 300  # 5 minutes
-_PLACEHOLDER_BEARER_VALUES = frozenset({'', 'null', 'undefined', 'none'})
+_PLACEHOLDER_BEARER_VALUES = frozenset({'', 'null', 'undefined', 'none', '******'})
 
 
 def _get_cached_user(user_id: str) -> Optional[Dict]:
