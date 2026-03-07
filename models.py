@@ -61,7 +61,7 @@ class User(Base):
 
     # Relationships
     accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
-    posts = relationship("Post", back_populates="user", cascade="all, delete-orphan")
+    posts = relationship("Post", back_populates="user", cascade="all, delete-orphan", foreign_keys="[Post.user_id]")
     media = relationship("Media", back_populates="user", cascade="all, delete-orphan")
     templates = relationship("Template", back_populates="user", cascade="all, delete-orphan")
     google_services = relationship("GoogleService", back_populates="user", cascade="all, delete-orphan")
