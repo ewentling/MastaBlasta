@@ -107,7 +107,7 @@ export default function ContentCalendarPage() {
     }
 
     try {
-      // Update locally first for immediate feedback (end is used to update the visual event block)
+      // Update locally first for immediate feedback (newEnd is used to update the visual event block)
       setEvents(prev => prev.map(e => 
         e.id === event.id 
           ? { ...e, start, end: newEnd }
