@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import { Lightbulb, Sparkles, Copy, Check, Clock, Image, Video, FileText, Hash, Loader2 } from 'lucide-react';
+import { Lightbulb, Sparkles, Copy, Check, Clock, Image, Video, FileText, Hash, Loader2, Send, Star, StarOff } from 'lucide-react';
 
 interface PostIdea {
   headline: string;
@@ -11,6 +12,7 @@ interface PostIdea {
 }
 
 export default function PostIdeasPage() {
+  const navigate = useNavigate();
   const [topic, setTopic] = useState('');
   const [industry, setIndustry] = useState('');
   const [platform, setPlatform] = useState('general');
@@ -20,6 +22,20 @@ export default function PostIdeasPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [savedIdeas, setSavedIdeas] = useState<number[]>([]);
+
+  // Load saved ideas from localStorage on init
+  useState(() => {
+    const saved = localStorage.getItem('savedPostIdeas');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          setSavedIdeas(parsed.map((_, i) => i));
+        }
+      } catch (e) { /* ignore */ }
+    }
+  });
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +71,39 @@ export default function PostIdeasPage() {
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
+  const useIdea = (idea: PostIdea) => {
+    // Build content with hashtags
+    let content = idea.content;
+    if (idea.hashtags && idea.hashtags.length > 0) {
+      const hashtagsStr = idea.hashtags.map(h => h.startsWith('#') ? h : `#${h}`).join(' ');
+      content = `${content}\n\n${hashtagsStr}`;
+    }
+    
+    // Store in localStorage for PostPage to pick up
+    localStorage.setItem('postIdeaDraft', JSON.stringify({
+      content,
+      headline: idea.headline,
+      platform: platform !== 'general' ? platform : null
+    }));
+    
+    navigate('/post');
+  };
+
+  const toggleSaveIdea = (index: number, idea: PostIdea) => {
+    const saved = JSON.parse(localStorage.getItem('savedPostIdeas') || '[]');
+    if (savedIdeas.includes(index)) {
+      // Remove from saved
+      setSavedIdeas(prev => prev.filter(i => i !== index));
+      const updated = saved.filter((s: PostIdea) => s.content !== idea.content);
+      localStorage.setItem('savedPostIdeas', JSON.stringify(updated));
+    } else {
+      // Add to saved
+      setSavedIdeas(prev => [...prev, index]);
+      saved.push(idea);
+      localStorage.setItem('savedPostIdeas', JSON.stringify(saved));
+    }
+  };
+
   const getContentTypeIcon = (type: string) => {
     switch (type?.toLowerCase()) {
       case 'image': return <Image size={16} />;
@@ -64,7 +113,7 @@ export default function PostIdeasPage() {
     }
   };
 
-  const getTimeIcon = (time: string) => {
+  const getTimeIcon = (_time: string) => {
     return <Clock size={16} />;
   };
 
@@ -80,7 +129,7 @@ export default function PostIdeasPage() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '400px 1fr', gap: '24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 400px) 1fr', gap: '24px' }}>
         {/* Input Form */}
         <div style={{
           backgroundColor: 'var(--card-bg)',
@@ -297,23 +346,41 @@ export default function PostIdeasPage() {
                     <h4 style={{ margin: 0, fontSize: '16px', flex: 1 }}>
                       {idea.headline || `Idea ${index + 1}`}
                     </h4>
-                    <button
-                      onClick={() => copyToClipboard(idea.content, index)}
-                      className="btn btn-secondary"
-                      style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
-                    >
-                      {copiedIndex === index ? (
-                        <>
-                          <Check size={14} />
-                          Copied!
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={14} />
-                          Copy
-                        </>
-                      )}
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => toggleSaveIdea(index, idea)}
+                        className="btn btn-secondary"
+                        style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        title={savedIdeas.includes(index) ? 'Remove from saved' : 'Save idea'}
+                      >
+                        {savedIdeas.includes(index) ? <Star size={14} fill="#f59e0b" color="#f59e0b" /> : <StarOff size={14} />}
+                      </button>
+                      <button
+                        onClick={() => copyToClipboard(idea.content, index)}
+                        className="btn btn-secondary"
+                        style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        {copiedIndex === index ? (
+                          <>
+                            <Check size={14} />
+                            Copied!
+                          </>
+                        ) : (
+                          <>
+                            <Copy size={14} />
+                            Copy
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => useIdea(idea)}
+                        className="btn btn-primary"
+                        style={{ padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <Send size={14} />
+                        Use
+                      </button>
+                    </div>
                   </div>
 
                   <div style={{

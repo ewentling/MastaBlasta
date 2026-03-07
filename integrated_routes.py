@@ -1683,6 +1683,112 @@ def add_workspace_member(workspace_id):
         return jsonify({'error': str(e)}), 500
 
 
+@integrated_bp.route('/workspaces/<workspace_id>', methods=['PUT'])
+@auth_required
+def update_workspace(workspace_id):
+    """Update a workspace"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import Workspace
+        
+        data = request.get_json() or {}
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            workspace = session.query(Workspace).filter_by(id=workspace_id, owner_id=user_id).first()
+            if not workspace:
+                return jsonify({'error': 'Workspace not found or access denied'}), 404
+            
+            if 'name' in data:
+                workspace.name = data['name']
+            if 'description' in data:
+                workspace.description = data['description']
+            if 'logo_url' in data:
+                workspace.logo_url = data['logo_url']
+            if 'settings' in data:
+                workspace.settings = data['settings']
+            
+            return jsonify({'message': 'Workspace updated successfully'})
+    except Exception as e:
+        logger.error(f"Error updating workspace: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/workspaces/<workspace_id>', methods=['DELETE'])
+@auth_required
+def delete_workspace(workspace_id):
+    """Delete a workspace (owner only)"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import Workspace, WorkspaceMember
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            workspace = session.query(Workspace).filter_by(id=workspace_id, owner_id=user_id).first()
+            if not workspace:
+                return jsonify({'error': 'Workspace not found or access denied'}), 404
+            
+            # Delete all members first
+            session.query(WorkspaceMember).filter_by(workspace_id=workspace_id).delete()
+            
+            # Delete the workspace
+            session.delete(workspace)
+            return jsonify({'message': 'Workspace deleted successfully'})
+    except Exception as e:
+        logger.error(f"Error deleting workspace: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/workspaces/<workspace_id>/members/<member_user_id>', methods=['DELETE'])
+@auth_required
+def remove_workspace_member(workspace_id, member_user_id):
+    """Remove a member from a workspace"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import Workspace, WorkspaceMember
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            workspace = session.query(Workspace).filter_by(id=workspace_id).first()
+            if not workspace:
+                return jsonify({'error': 'Workspace not found'}), 404
+            
+            # Only owner or admin can remove members
+            if workspace.owner_id != user_id:
+                member_check = session.query(WorkspaceMember).filter_by(
+                    workspace_id=workspace_id, user_id=user_id, role='admin'
+                ).first()
+                if not member_check:
+                    return jsonify({'error': 'Only owner or admin can remove members'}), 403
+            
+            # Can't remove the owner
+            if member_user_id == workspace.owner_id:
+                return jsonify({'error': 'Cannot remove workspace owner'}), 400
+            
+            member = session.query(WorkspaceMember).filter_by(
+                workspace_id=workspace_id, user_id=member_user_id
+            ).first()
+            if not member:
+                return jsonify({'error': 'Member not found'}), 404
+            
+            session.delete(member)
+            return jsonify({'message': 'Member removed successfully'})
+    except Exception as e:
+        logger.error(f"Error removing workspace member: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 # ==================== CAMPAIGN ROUTES ====================
 
 @integrated_bp.route('/campaigns', methods=['GET'])
@@ -1839,6 +1945,71 @@ def update_campaign(campaign_id):
             return jsonify({'message': 'Campaign updated successfully'})
     except Exception as e:
         logger.error(f"Error updating campaign: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/campaigns/<campaign_id>', methods=['DELETE'])
+@auth_required
+def delete_campaign(campaign_id):
+    """Delete a campaign"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import Campaign, Post
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            campaign = session.query(Campaign).filter_by(id=campaign_id, user_id=user_id).first()
+            if not campaign:
+                return jsonify({'error': 'Campaign not found'}), 404
+            
+            # Unlink posts from this campaign (don't delete them)
+            session.query(Post).filter_by(campaign_id=campaign_id).update({'campaign_id': None})
+            
+            session.delete(campaign)
+            return jsonify({'message': 'Campaign deleted successfully'})
+    except Exception as e:
+        logger.error(f"Error deleting campaign: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/campaigns/<campaign_id>/posts', methods=['GET'])
+@auth_required
+def get_campaign_posts(campaign_id):
+    """Get all posts in a campaign"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import Campaign, Post
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            campaign = session.query(Campaign).filter_by(id=campaign_id, user_id=user_id).first()
+            if not campaign:
+                return jsonify({'error': 'Campaign not found'}), 404
+            
+            posts = session.query(Post).filter_by(campaign_id=campaign_id).order_by(Post.created_at.desc()).all()
+            
+            result = []
+            for p in posts:
+                result.append({
+                    'id': p.id,
+                    'content': p.content[:100] + ('...' if len(p.content) > 100 else ''),
+                    'status': p.status.value if hasattr(p.status, 'value') else p.status,
+                    'scheduled_time': p.scheduled_time.isoformat() if p.scheduled_time else None,
+                    'published_at': p.published_at.isoformat() if p.published_at else None,
+                    'created_at': p.created_at.isoformat() if p.created_at else None
+                })
+            
+            return jsonify({'posts': result, 'count': len(result)})
+    except Exception as e:
+        logger.error(f"Error fetching campaign posts: {e}")
         return jsonify({'error': str(e)}), 500
 
 

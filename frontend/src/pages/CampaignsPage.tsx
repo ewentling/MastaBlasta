@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import { Briefcase, Plus, Calendar, Target, Tag, Edit2, Trash2, ChevronRight, X } from 'lucide-react';
+import { Briefcase, Plus, Calendar, Target, Tag, Edit2, Trash2, ChevronRight, X, Eye, AlertCircle, CheckCircle } from 'lucide-react';
 
 interface Campaign {
   id: string;
@@ -16,11 +17,20 @@ interface Campaign {
   created_at: string | null;
 }
 
+interface Toast {
+  id: number;
+  message: string;
+  type: 'success' | 'error';
+}
+
 export default function CampaignsPage() {
+  const navigate = useNavigate();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -30,6 +40,12 @@ export default function CampaignsPage() {
     color: '#3b82f6',
     tags: ''
   });
+
+  const showToast = (message: string, type: 'success' | 'error') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+  };
 
   useEffect(() => {
     loadCampaigns();
@@ -42,6 +58,7 @@ export default function CampaignsPage() {
       setCampaigns(response.data.campaigns || []);
     } catch (error) {
       console.error('Error loading campaigns:', error);
+      showToast('Failed to load campaigns', 'error');
     } finally {
       setLoading(false);
     }
@@ -62,8 +79,10 @@ export default function CampaignsPage() {
 
       if (editingCampaign) {
         await api.put(`/api/v2/campaigns/${editingCampaign.id}`, payload);
+        showToast('Campaign updated successfully', 'success');
       } else {
         await api.post('/api/v2/campaigns', payload);
+        showToast('Campaign created successfully', 'success');
       }
 
       setShowModal(false);
@@ -80,7 +99,19 @@ export default function CampaignsPage() {
       loadCampaigns();
     } catch (error) {
       console.error('Error saving campaign:', error);
-      alert('Failed to save campaign');
+      showToast('Failed to save campaign', 'error');
+    }
+  };
+
+  const handleDelete = async (campaignId: string) => {
+    try {
+      await api.delete(`/api/v2/campaigns/${campaignId}`);
+      showToast('Campaign deleted successfully', 'success');
+      setDeleteConfirm(null);
+      loadCampaigns();
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      showToast('Failed to delete campaign', 'error');
     }
   };
 
@@ -108,8 +139,41 @@ export default function CampaignsPage() {
     }
   };
 
+  const getCampaignProgress = (campaign: Campaign): number => {
+    if (!campaign.start_date || !campaign.end_date) return 0;
+    const start = new Date(campaign.start_date).getTime();
+    const end = new Date(campaign.end_date).getTime();
+    const now = Date.now();
+    if (now < start) return 0;
+    if (now > end) return 100;
+    return Math.round(((now - start) / (end - start)) * 100);
+  };
+
   return (
     <div className="page-container">
+      {/* Toast notifications */}
+      <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              backgroundColor: toast.type === 'success' ? '#22c55e' : '#ef4444',
+              color: 'white',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              animation: 'slideIn 0.3s ease'
+            }}
+          >
+            {toast.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+            {toast.message}
+          </div>
+        ))}
+      </div>
+
       <div className="page-header">
         <div>
           <h1>
@@ -190,14 +254,22 @@ export default function CampaignsPage() {
                     {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
                   </span>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '4px' }}>
                   <button
                     onClick={() => openEditModal(campaign)}
                     className="icon-button"
                     title="Edit"
-                    style={{ padding: '8px', borderRadius: '8px', background: 'none', border: 'none', cursor: 'pointer' }}
+                    style={{ padding: '8px', borderRadius: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
                   >
                     <Edit2 size={16} />
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(campaign.id)}
+                    className="icon-button"
+                    title="Delete"
+                    style={{ padding: '8px', borderRadius: '8px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                  >
+                    <Trash2 size={16} />
                   </button>
                 </div>
               </div>
@@ -221,6 +293,25 @@ export default function CampaignsPage() {
                 </div>
               </div>
 
+              {/* Progress bar for campaigns with dates */}
+              {campaign.start_date && campaign.end_date && campaign.status === 'active' && (
+                <div style={{ marginTop: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                    <span>Progress</span>
+                    <span>{getCampaignProgress(campaign)}%</span>
+                  </div>
+                  <div style={{ height: '6px', backgroundColor: 'var(--bg-secondary)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${getCampaignProgress(campaign)}%`,
+                      height: '100%',
+                      backgroundColor: campaign.color || '#3b82f6',
+                      borderRadius: '3px',
+                      transition: 'width 0.3s ease'
+                    }} />
+                  </div>
+                </div>
+              )}
+
               {campaign.tags && campaign.tags.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '12px' }}>
                   {campaign.tags.map((tag, i) => (
@@ -240,8 +331,52 @@ export default function CampaignsPage() {
                   ))}
                 </div>
               )}
+
+              {/* View Posts button */}
+              {campaign.post_count > 0 && (
+                <button
+                  onClick={() => navigate(`/scheduled?campaign=${campaign.id}`)}
+                  className="btn btn-secondary"
+                  style={{ marginTop: '16px', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                >
+                  <Eye size={16} />
+                  View {campaign.post_count} Post{campaign.post_count !== 1 ? 's' : ''}
+                </button>
+              )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2>Delete Campaign</h2>
+              <button className="close-btn" onClick={() => setDeleteConfirm(null)}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '16px' }}>
+                Are you sure you want to delete this campaign? Posts in this campaign will not be deleted, but they will no longer be associated with this campaign.
+              </p>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 20px', borderTop: '1px solid var(--border-color)' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => handleDelete(deleteConfirm)}
+                style={{ backgroundColor: '#ef4444' }}
+              >
+                Delete Campaign
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -415,6 +550,13 @@ export default function CampaignsPage() {
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }

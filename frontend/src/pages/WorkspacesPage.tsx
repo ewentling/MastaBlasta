@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Building2, Plus, Users, Settings, X, UserPlus, Crown, Shield, Eye } from 'lucide-react';
+import { Building2, Plus, Users, Settings, X, UserPlus, Crown, Shield, Eye, Trash2, Edit2, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface Workspace {
   id: string;
@@ -20,15 +20,24 @@ interface WorkspaceMember {
   can_publish: boolean;
 }
 
+interface Toast {
+  id: number;
+  message: string;
+  type: 'success' | 'error';
+}
+
 export default function WorkspacesPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showMembersModal, setShowMembersModal] = useState(false);
   const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<Toast[]>([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -42,6 +51,12 @@ export default function WorkspacesPage() {
     can_publish: true
   });
 
+  const showToast = (message: string, type: 'success' | 'error') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+  };
+
   useEffect(() => {
     loadWorkspaces();
   }, []);
@@ -53,6 +68,7 @@ export default function WorkspacesPage() {
       setWorkspaces(response.data.workspaces || []);
     } catch (error) {
       console.error('Error loading workspaces:', error);
+      showToast('Failed to load workspaces', 'error');
     } finally {
       setLoading(false);
     }
@@ -64,11 +80,49 @@ export default function WorkspacesPage() {
       await api.post('/api/v2/workspaces', formData);
       setShowCreateModal(false);
       setFormData({ name: '', description: '' });
+      showToast('Workspace created successfully', 'success');
       loadWorkspaces();
     } catch (error) {
       console.error('Error creating workspace:', error);
-      alert('Failed to create workspace');
+      showToast('Failed to create workspace', 'error');
     }
+  };
+
+  const handleEditWorkspace = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedWorkspace) return;
+    
+    try {
+      await api.put(`/api/v2/workspaces/${selectedWorkspace.id}`, formData);
+      setShowEditModal(false);
+      setFormData({ name: '', description: '' });
+      showToast('Workspace updated successfully', 'success');
+      loadWorkspaces();
+    } catch (error) {
+      console.error('Error updating workspace:', error);
+      showToast('Failed to update workspace', 'error');
+    }
+  };
+
+  const handleDeleteWorkspace = async (workspaceId: string) => {
+    try {
+      await api.delete(`/api/v2/workspaces/${workspaceId}`);
+      setDeleteConfirm(null);
+      showToast('Workspace deleted successfully', 'success');
+      loadWorkspaces();
+    } catch (error) {
+      console.error('Error deleting workspace:', error);
+      showToast('Failed to delete workspace', 'error');
+    }
+  };
+
+  const openEditModal = (workspace: Workspace) => {
+    setSelectedWorkspace(workspace);
+    setFormData({
+      name: workspace.name,
+      description: workspace.description || ''
+    });
+    setShowEditModal(true);
   };
 
   const openMembersModal = async (workspace: Workspace) => {
@@ -81,6 +135,7 @@ export default function WorkspacesPage() {
       setMembers(response.data.members || []);
     } catch (error) {
       console.error('Error loading members:', error);
+      showToast('Failed to load members', 'error');
     } finally {
       setLoadingMembers(false);
     }
@@ -94,13 +149,30 @@ export default function WorkspacesPage() {
       await api.post(`/api/v2/workspaces/${selectedWorkspace.id}/members`, newMember);
       setShowAddMemberModal(false);
       setNewMember({ email: '', role: 'member', can_approve: false, can_publish: true });
+      showToast('Member added successfully', 'success');
       
       // Reload members
       const response = await api.get(`/api/v2/workspaces/${selectedWorkspace.id}/members`);
       setMembers(response.data.members || []);
     } catch (error: any) {
       console.error('Error adding member:', error);
-      alert(error.response?.data?.error || 'Failed to add member');
+      showToast(error.response?.data?.error || 'Failed to add member', 'error');
+    }
+  };
+
+  const handleRemoveMember = async (memberUserId: string) => {
+    if (!selectedWorkspace) return;
+    
+    try {
+      await api.delete(`/api/v2/workspaces/${selectedWorkspace.id}/members/${memberUserId}`);
+      showToast('Member removed successfully', 'success');
+      
+      // Reload members
+      const response = await api.get(`/api/v2/workspaces/${selectedWorkspace.id}/members`);
+      setMembers(response.data.members || []);
+    } catch (error: any) {
+      console.error('Error removing member:', error);
+      showToast(error.response?.data?.error || 'Failed to remove member', 'error');
     }
   };
 
@@ -116,6 +188,29 @@ export default function WorkspacesPage() {
 
   return (
     <div className="page-container">
+      {/* Toast notifications */}
+      <div style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 1000, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '12px 16px',
+              borderRadius: '8px',
+              backgroundColor: toast.type === 'success' ? '#22c55e' : '#ef4444',
+              color: 'white',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              animation: 'slideIn 0.3s ease'
+            }}
+          >
+            {toast.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+            {toast.message}
+          </div>
+        ))}
+      </div>
+
       <div className="page-header">
         <div>
           <h1>
@@ -181,7 +276,7 @@ export default function WorkspacesPage() {
                 }}>
                   {workspace.name.charAt(0).toUpperCase()}
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                   <h3 style={{ margin: 0, fontSize: '18px' }}>{workspace.name}</h3>
                   <span style={{
                     display: 'inline-flex',
@@ -194,6 +289,24 @@ export default function WorkspacesPage() {
                     {workspace.role.charAt(0).toUpperCase() + workspace.role.slice(1)}
                   </span>
                 </div>
+                {workspace.role === 'owner' && (
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={() => openEditModal(workspace)}
+                      title="Edit"
+                      style={{ padding: '6px', borderRadius: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                    >
+                      <Edit2 size={16} />
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(workspace.id)}
+                      title="Delete"
+                      style={{ padding: '6px', borderRadius: '6px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {workspace.description && (
@@ -210,12 +323,6 @@ export default function WorkspacesPage() {
                 >
                   <Users size={16} />
                   Members
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 12px' }}
-                >
-                  <Settings size={16} />
                 </button>
               </div>
             </div>
@@ -360,11 +467,120 @@ export default function WorkspacesPage() {
                         <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                           {member.role.charAt(0).toUpperCase() + member.role.slice(1)}
                         </span>
+                        {member.role !== 'owner' && (selectedWorkspace.role === 'owner' || selectedWorkspace.role === 'admin') && (
+                          <button
+                            onClick={() => handleRemoveMember(member.user_id)}
+                            title="Remove member"
+                            style={{ marginLeft: '8px', padding: '4px', borderRadius: '4px', background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Workspace Modal */}
+      {showEditModal && selectedWorkspace && (
+        <div className="modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px' }}>
+            <div className="modal-header">
+              <h2>Edit Workspace</h2>
+              <button className="close-btn" onClick={() => setShowEditModal(false)}>
+                <X size={24} />
+              </button>
+            </div>
+            <form onSubmit={handleEditWorkspace}>
+              <div className="modal-body">
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600' }}>
+                    Workspace Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="e.g., My Agency"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--input-bg)',
+                      color: 'var(--text-primary)'
+                    }}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600' }}>
+                    Description
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                    placeholder="Describe this workspace..."
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--input-bg)',
+                      color: 'var(--text-primary)',
+                      resize: 'vertical'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 20px', borderTop: '1px solid var(--border-color)' }}>
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="modal-overlay" onClick={() => setDeleteConfirm(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2>Delete Workspace</h2>
+              <button className="close-btn" onClick={() => setDeleteConfirm(null)}>
+                <X size={24} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '16px' }}>
+                Are you sure you want to delete this workspace? All members will be removed and this action cannot be undone.
+              </p>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 20px', borderTop: '1px solid var(--border-color)' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setDeleteConfirm(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => handleDeleteWorkspace(deleteConfirm)}
+                style={{ backgroundColor: '#ef4444' }}
+              >
+                Delete Workspace
+              </button>
             </div>
           </div>
         </div>
@@ -458,6 +674,13 @@ export default function WorkspacesPage() {
           </div>
         </div>
       )}
+
+      <style>{`
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 }

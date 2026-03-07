@@ -235,16 +235,36 @@ export default function ContentCalendarPage() {
       </div>
 
       <div style={{ height: 'calc(100vh - 200px)', backgroundColor: 'var(--card-bg)', padding: '20px', borderRadius: '12px' }}>
-        <div style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-          <GripVertical size={14} />
-          Drag and drop events to reschedule them
+        <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            <GripVertical size={14} />
+            Drag and drop events to reschedule them
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#3174ad' }} />
+              <span>Scheduled</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#ff9800' }} />
+              <span>Draft</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#8b5cf6' }} />
+              <span>Pending Approval</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#4caf50' }} />
+              <span>Published</span>
+            </div>
+          </div>
         </div>
         <DragAndDropCalendar
           localizer={localizer}
           events={events}
           startAccessor="start"
           endAccessor="end"
-          style={{ height: 'calc(100% - 30px)' }}
+          style={{ height: 'calc(100% - 50px)' }}
           onSelectSlot={handleSelectSlot}
           onSelectEvent={handleSelectEvent}
           onEventDrop={handleEventDrop}
