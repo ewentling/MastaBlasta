@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { Lightbulb, Sparkles, Copy, Check, Clock, Image, Video, FileText, Hash, Loader2, Send, Star, StarOff } from 'lucide-react';
@@ -25,17 +25,17 @@ export default function PostIdeasPage() {
   const [savedIdeas, setSavedIdeas] = useState<number[]>([]);
 
   // Load saved ideas from localStorage on init
-  useState(() => {
+  useEffect(() => {
     const saved = localStorage.getItem('savedPostIdeas');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          setSavedIdeas(parsed.map((_, i) => i));
+          setSavedIdeas(parsed.map((_: unknown, i: number) => i));
         }
-      } catch (e) { /* ignore */ }
+      } catch { /* ignore */ }
     }
-  });
+  }, []);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +113,7 @@ export default function PostIdeasPage() {
     }
   };
 
-  const getTimeIcon = (_time: string) => {
+  const getTimeIcon = () => {
     return <Clock size={16} />;
   };
 
@@ -432,7 +432,7 @@ export default function PostIdeasPage() {
                         borderRadius: '6px',
                         backgroundColor: 'var(--bg-secondary)'
                       }}>
-                        {getTimeIcon(idea.best_time)}
+                        {getTimeIcon()}
                         Best time: {idea.best_time}
                       </div>
                     )}
