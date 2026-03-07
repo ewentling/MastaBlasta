@@ -19,6 +19,7 @@ class UserRole(enum.Enum):
 class PostStatus(enum.Enum):
     """Post status enumeration"""
     DRAFT = "draft"
+    PENDING_APPROVAL = "pending_approval"  # Awaiting team approval
     SCHEDULED = "scheduled"
     PUBLISHED = "published"
     FAILED = "failed"
@@ -139,6 +140,8 @@ class Post(Base):
 
     id = Column(String(36), primary_key=True)
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    workspace_id = Column(String(36), ForeignKey('workspaces.id'), nullable=True, index=True)  # Optional workspace
+    campaign_id = Column(String(36), ForeignKey('campaigns.id'), nullable=True, index=True)  # Optional campaign
     content = Column(Text, nullable=False)
     post_type = Column(String(50))  # standard, thread, reel, story, etc.
     status = Column(Enum(PostStatus), default=PostStatus.DRAFT, nullable=False, index=True)
@@ -146,14 +149,26 @@ class Post(Base):
     published_at = Column(DateTime)
     post_options = Column(JSON)  # Platform-specific options
     parallel_execution = Column(Boolean, default=True)
+    tags = Column(JSON)  # List of tag strings for organization
+    is_evergreen = Column(Boolean, default=False)  # Mark as recyclable/evergreen content
+    recycle_count = Column(Integer, default=0)  # Number of times this post has been recycled
+    last_recycled_at = Column(DateTime, nullable=True)  # Last recycle time
+    approval_status = Column(String(50), nullable=True)  # 'approved', 'rejected', or null
+    approved_by = Column(String(36), ForeignKey('users.id'), nullable=True)  # User who approved
+    approved_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
-    user = relationship("User", back_populates="posts")
+    user = relationship("User", back_populates="posts", foreign_keys=[user_id])
+    approver = relationship("User", foreign_keys=[approved_by])
+    workspace = relationship("Workspace", back_populates="posts")
+    campaign = relationship("Campaign", back_populates="posts")
     accounts = relationship("Account", secondary="post_accounts", back_populates="posts")
     media = relationship("Media", secondary="post_media", back_populates="posts")
     analytics = relationship("PostAnalytics", back_populates="post", cascade="all, delete-orphan")
+    comments = relationship("PostComment", back_populates="post", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Post {self.id} ({self.status.value})>"
@@ -560,3 +575,162 @@ class Webhook(Base):
 
     def __repr__(self):
         return f"<Webhook {self.id} url={self.url} user={self.user_id}>"
+
+
+class Workspace(Base):
+    """Workspace for multi-tenant management (agencies, teams, brands)"""
+    __tablename__ = 'workspaces'
+
+    id = Column(String(36), primary_key=True)
+    owner_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    logo_url = Column(String(512), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    settings = Column(JSON, nullable=True)  # Workspace-specific settings
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    owner = relationship("User", backref="owned_workspaces")
+    members = relationship("WorkspaceMember", back_populates="workspace", cascade="all, delete-orphan")
+    posts = relationship("Post", back_populates="workspace")
+    campaigns = relationship("Campaign", back_populates="workspace")
+
+    def __repr__(self):
+        return f"<Workspace {self.name}>"
+
+
+class WorkspaceMember(Base):
+    """Workspace membership with role-based access"""
+    __tablename__ = 'workspace_members'
+
+    id = Column(String(36), primary_key=True)
+    workspace_id = Column(String(36), ForeignKey('workspaces.id'), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    role = Column(String(50), default='member', nullable=False)  # 'admin', 'editor', 'member', 'viewer'
+    can_approve = Column(Boolean, default=False)  # Can approve posts
+    can_publish = Column(Boolean, default=True)  # Can publish posts
+    invited_by = Column(String(36), ForeignKey('users.id'), nullable=True)
+    joined_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    workspace = relationship("Workspace", back_populates="members")
+    user = relationship("User", foreign_keys=[user_id], backref="workspace_memberships")
+    inviter = relationship("User", foreign_keys=[invited_by])
+
+    def __repr__(self):
+        return f"<WorkspaceMember {self.user_id} in {self.workspace_id} ({self.role})>"
+
+
+class Campaign(Base):
+    """Campaign for grouping related posts together"""
+    __tablename__ = 'campaigns'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    workspace_id = Column(String(36), ForeignKey('workspaces.id'), nullable=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(50), default='active')  # 'draft', 'active', 'paused', 'completed'
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    goals = Column(JSON, nullable=True)  # Campaign goals/KPIs
+    tags = Column(JSON, nullable=True)  # Campaign tags
+    color = Column(String(7), nullable=True)  # Hex color for visual identification
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = relationship("User")
+    workspace = relationship("Workspace", back_populates="campaigns")
+    posts = relationship("Post", back_populates="campaign")
+
+    def __repr__(self):
+        return f"<Campaign {self.name} ({self.status})>"
+
+
+class PostComment(Base):
+    """Team comments on posts for collaboration"""
+    __tablename__ = 'post_comments'
+
+    id = Column(String(36), primary_key=True)
+    post_id = Column(String(36), ForeignKey('posts.id'), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    is_resolved = Column(Boolean, default=False)  # Mark comment as resolved
+    parent_id = Column(String(36), ForeignKey('post_comments.id'), nullable=True)  # For threaded comments
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    post = relationship("Post", back_populates="comments")
+    user = relationship("User")
+    replies = relationship("PostComment", backref="parent", remote_side=[id])
+
+    def __repr__(self):
+        return f"<PostComment {self.id} on post {self.post_id}>"
+
+
+class AutoEngagement(Base):
+    """Auto-engagement rules for milestone-based actions"""
+    __tablename__ = 'auto_engagements'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    
+    # Trigger conditions (milestones)
+    trigger_type = Column(String(50), nullable=False)  # 'likes', 'comments', 'views', 'shares'
+    trigger_threshold = Column(Integer, nullable=False)  # e.g., 100 likes
+    trigger_platform = Column(String(50), nullable=True)  # Platform filter, null = all platforms
+    
+    # Action to perform
+    action_type = Column(String(50), nullable=False)  # 'like', 'comment', 'repost', 'notify'
+    action_content = Column(Text, nullable=True)  # Comment text if action is 'comment'
+    action_options = Column(JSON, nullable=True)  # Additional action configuration
+    
+    # Statistics
+    times_triggered = Column(Integer, default=0)
+    last_triggered_at = Column(DateTime, nullable=True)
+    
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = relationship("User")
+
+    def __repr__(self):
+        return f"<AutoEngagement {self.name} ({self.trigger_type} >= {self.trigger_threshold})>"
+
+
+class ContentRecycleSchedule(Base):
+    """Schedule for recycling evergreen content"""
+    __tablename__ = 'content_recycle_schedules'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    post_id = Column(String(36), ForeignKey('posts.id'), nullable=False, index=True)
+    
+    # Recycle schedule
+    recycle_interval_days = Column(Integer, default=30)  # Days between recycles
+    next_recycle_at = Column(DateTime, nullable=True, index=True)
+    max_recycles = Column(Integer, default=0)  # 0 = unlimited
+    current_recycle_count = Column(Integer, default=0)
+    
+    # Recycle options
+    modify_content = Column(Boolean, default=True)  # Modify content before reposting
+    modification_type = Column(String(50), default='ai_rewrite')  # 'ai_rewrite', 'shuffle', 'none'
+    target_platforms = Column(JSON, nullable=True)  # Platforms to recycle to
+    
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = relationship("User")
+    post = relationship("Post")
+
+    def __repr__(self):
+        return f"<ContentRecycleSchedule for post {self.post_id}>"

@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw, Palette, Video, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw, Palette, Video, ChevronLeft, ChevronRight, Menu, X, Briefcase, Building2, Lightbulb, Repeat, Zap } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -22,6 +22,9 @@ import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import SubscriptionInfoPage from './pages/SubscriptionInfoPage';
+import CampaignsPage from './pages/CampaignsPage';
+import WorkspacesPage from './pages/WorkspacesPage';
+import PostIdeasPage from './pages/PostIdeasPage';
 import SettingsModal from './components/SettingsModal';
 import NotificationCenter from './components/NotificationCenter';
 import Breadcrumbs from './components/Breadcrumbs';
@@ -95,6 +98,9 @@ export const appRoutes: AppRouteConfig[] = [
   { path: '/social-monitoring', label: 'Social Monitoring', icon: TrendingUp, element: <SocialMonitoringPage /> },
   { path: '/calendar', label: 'Content Calendar', icon: CalendarDays, element: <ContentCalendarPage /> },
   { path: '/library', label: 'Content Library', icon: Folder, element: <ContentLibraryPage /> },
+  { path: '/campaigns', label: 'Campaigns', icon: Briefcase, element: <CampaignsPage /> },
+  { path: '/workspaces', label: 'Workspaces', icon: Building2, element: <WorkspacesPage /> },
+  { path: '/post-ideas', label: 'AI Post Ideas', icon: Lightbulb, element: <PostIdeasPage /> },
   { path: '/ab-testing', label: 'A/B Testing', icon: Sparkles, element: <ABTestingPage /> },
   { path: '/chatbot', label: 'AI Assistant', icon: MessageSquare, element: <ChatbotPage /> },
   { path: '/clips', label: 'Video Clipper', icon: Scissors, element: <ClipsPage /> },
