@@ -99,7 +99,7 @@ export default function ContentCalendarPage() {
   }, []);
 
   // Handle drag-and-drop rescheduling
-  const handleEventDrop = useCallback(async ({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
+  const handleEventDrop = useCallback(async ({ event, start, end: newEnd }: { event: CalendarEvent; start: Date; end: Date }) => {
     // Don't allow rescheduling published posts
     if (event.status === 'published') {
       alert('Cannot reschedule published posts');
@@ -107,10 +107,10 @@ export default function ContentCalendarPage() {
     }
 
     try {
-      // Update locally first for immediate feedback
+      // Update locally first for immediate feedback (end is used to update the visual event block)
       setEvents(prev => prev.map(e => 
         e.id === event.id 
-          ? { ...e, start, end }
+          ? { ...e, start, end: newEnd }
           : e
       ));
 

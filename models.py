@@ -154,8 +154,8 @@ class Post(Base):
     recycle_count = Column(Integer, default=0)  # Number of times this post has been recycled
     last_recycled_at = Column(DateTime, nullable=True)  # Last recycle time
     approval_status = Column(String(50), nullable=True)  # 'approved', 'rejected', or null
-    approved_by = Column(String(36), ForeignKey('users.id'), nullable=True)  # User who approved
-    approved_at = Column(DateTime, nullable=True)
+    approved_by = Column(String(36), ForeignKey('users.id'), nullable=True)  # User who reviewed (approved/rejected)
+    approved_at = Column(DateTime, nullable=True)  # When the review decision was made
     rejection_reason = Column(Text, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -666,7 +666,7 @@ class PostComment(Base):
     # Relationships
     post = relationship("Post", back_populates="comments")
     user = relationship("User")
-    replies = relationship("PostComment", backref="parent", remote_side=[id])
+    replies = relationship("PostComment", backref="parent", remote_side="PostComment.id")
 
     def __repr__(self):
         return f"<PostComment {self.id} on post {self.post_id}>"

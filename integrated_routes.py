@@ -1750,6 +1750,17 @@ def create_campaign():
         
         user_id = g.current_user['id']
         
+        # Parse dates safely
+        start_date = None
+        end_date = None
+        try:
+            if data.get('start_date'):
+                start_date = datetime.fromisoformat(data['start_date'].replace('Z', '+00:00'))
+            if data.get('end_date'):
+                end_date = datetime.fromisoformat(data['end_date'].replace('Z', '+00:00'))
+        except ValueError as e:
+            return jsonify({'error': f'Invalid date format: {e}'}), 400
+        
         with db_session_scope() as session:
             campaign = Campaign(
                 id=str(uuid.uuid4()),
@@ -1758,8 +1769,8 @@ def create_campaign():
                 name=name,
                 description=data.get('description'),
                 status=data.get('status', 'active'),
-                start_date=datetime.fromisoformat(data['start_date']) if data.get('start_date') else None,
-                end_date=datetime.fromisoformat(data['end_date']) if data.get('end_date') else None,
+                start_date=start_date,
+                end_date=end_date,
                 goals=data.get('goals'),
                 tags=data.get('tags'),
                 color=data.get('color')
@@ -1802,10 +1813,22 @@ def update_campaign(campaign_id):
                 campaign.description = data['description']
             if 'status' in data:
                 campaign.status = data['status']
-            if 'start_date' in data:
-                campaign.start_date = datetime.fromisoformat(data['start_date']) if data['start_date'] else None
-            if 'end_date' in data:
-                campaign.end_date = datetime.fromisoformat(data['end_date']) if data['end_date'] else None
+            
+            # Parse dates safely
+            try:
+                if 'start_date' in data:
+                    if data['start_date']:
+                        campaign.start_date = datetime.fromisoformat(data['start_date'].replace('Z', '+00:00'))
+                    else:
+                        campaign.start_date = None
+                if 'end_date' in data:
+                    if data['end_date']:
+                        campaign.end_date = datetime.fromisoformat(data['end_date'].replace('Z', '+00:00'))
+                    else:
+                        campaign.end_date = None
+            except ValueError as e:
+                return jsonify({'error': f'Invalid date format: {e}'}), 400
+            
             if 'goals' in data:
                 campaign.goals = data['goals']
             if 'tags' in data:
@@ -2418,7 +2441,10 @@ def reschedule_post(post_id):
             if post.status == PostStatus.PUBLISHED:
                 return jsonify({'error': 'Cannot reschedule published posts'}), 400
             
-            post.scheduled_time = datetime.fromisoformat(new_time.replace('Z', '+00:00'))
+            try:
+                post.scheduled_time = datetime.fromisoformat(new_time.replace('Z', '+00:00'))
+            except ValueError as e:
+                return jsonify({'error': f'Invalid datetime format: {e}'}), 400
             
             # If draft and now has scheduled time, mark as scheduled
             if post.status == PostStatus.DRAFT and post.scheduled_time:
