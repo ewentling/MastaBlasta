@@ -24,7 +24,7 @@ export default function ThreadComposer({
   // Update parent when tweets change
   useEffect(() => {
     onThreadChange(tweets.map(t => t.content).filter(c => c.trim()));
-  }, [tweets]);
+  }, [tweets, onThreadChange]);
 
   // Auto-split long content
   useEffect(() => {

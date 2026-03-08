@@ -18,6 +18,9 @@ from app_extensions import (
 
 logger = logging.getLogger(__name__)
 
+# Constants
+MAX_BULK_OPERATION_SIZE = 100
+
 # Create blueprint
 integrated_bp = Blueprint('integrated', __name__, url_prefix='/api/v2')
 
@@ -3002,13 +3005,14 @@ def schedule_queue():
             scheduled_count = 0
             now = datetime.now(timezone.utc)
             
-            for item in items:
-                # Find next available slot
+            # Pre-calculate all available slot times for the next 4 weeks
+            available_times = []
+            for weeks_ahead in range(4):  # Look 4 weeks ahead
                 for slot in slots:
-                    # Calculate next occurrence of this slot
                     days_ahead = slot.day_of_week - now.weekday()
                     if days_ahead < 0:
                         days_ahead += 7
+                    days_ahead += (weeks_ahead * 7)
                     
                     slot_time = datetime.strptime(slot.time_slot, '%H:%M').time()
                     next_date = now.date() + timedelta(days=days_ahead)
@@ -3020,27 +3024,39 @@ def schedule_queue():
                     except Exception:
                         scheduled_utc = datetime.combine(next_date, slot_time).replace(tzinfo=timezone.utc)
                     
-                    if scheduled_utc <= now:
-                        scheduled_utc += timedelta(days=7)
-                    
-                    # Create post from queue item
-                    post = Post(
-                        id=str(uuid.uuid4()),
-                        user_id=user_id,
-                        content=item.content,
-                        platforms=item.platforms,
-                        status=PostStatus.SCHEDULED,
-                        scheduled_time=scheduled_utc
-                    )
-                    session.add(post)
-                    
-                    # Update queue item
-                    item.status = 'scheduled'
-                    item.scheduled_time = scheduled_utc
-                    item.assigned_slot_id = slot.id
-                    
-                    scheduled_count += 1
-                    break
+                    # Only add if in the future
+                    if scheduled_utc > now:
+                        available_times.append((scheduled_utc, slot.id))
+            
+            # Sort by time
+            available_times.sort(key=lambda x: x[0])
+            
+            # Assign items to slots in order
+            slot_index = 0
+            for item in items:
+                if slot_index >= len(available_times):
+                    break  # No more available slots
+                
+                scheduled_utc, slot_id = available_times[slot_index]
+                slot_index += 1
+                
+                # Create post from queue item
+                post = Post(
+                    id=str(uuid.uuid4()),
+                    user_id=user_id,
+                    content=item.content,
+                    platforms=item.platforms,
+                    status=PostStatus.SCHEDULED,
+                    scheduled_time=scheduled_utc
+                )
+                session.add(post)
+                
+                # Update queue item
+                item.status = 'scheduled'
+                item.scheduled_time = scheduled_utc
+                item.assigned_slot_id = slot_id
+                
+                scheduled_count += 1
             
             return jsonify({
                 'message': f'Scheduled {scheduled_count} items',
@@ -3769,8 +3785,8 @@ def bulk_reschedule_posts():
         if not reschedules:
             return jsonify({'error': 'No reschedules provided'}), 400
         
-        if len(reschedules) > 100:
-            return jsonify({'error': 'Maximum 100 reschedules per operation'}), 400
+        if len(reschedules) > MAX_BULK_OPERATION_SIZE:
+            return jsonify({'error': f'Maximum {MAX_BULK_OPERATION_SIZE} reschedules per operation'}), 400
         
         user_id = g.current_user['id']
         
