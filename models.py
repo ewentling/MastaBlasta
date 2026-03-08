@@ -734,3 +734,178 @@ class ContentRecycleSchedule(Base):
 
     def __repr__(self):
         return f"<ContentRecycleSchedule for post {self.post_id}>"
+
+
+class SmartQueueSlot(Base):
+    """Time slots for smart queue posting"""
+    __tablename__ = 'smart_queue_slots'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    
+    # Schedule configuration
+    day_of_week = Column(Integer, nullable=False)  # 0=Monday, 6=Sunday
+    time_slot = Column(String(5), nullable=False)  # HH:MM format
+    platform = Column(String(50), nullable=True)  # null = all platforms
+    timezone = Column(String(50), default='UTC')
+    
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    user = relationship("User")
+
+    def __repr__(self):
+        return f"<SmartQueueSlot day={self.day_of_week} time={self.time_slot}>"
+
+
+class SmartQueueItem(Base):
+    """Items in the smart queue waiting to be posted"""
+    __tablename__ = 'smart_queue_items'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    
+    content = Column(Text, nullable=False)
+    media_urls = Column(JSON, nullable=True)  # List of media URLs
+    platforms = Column(JSON, nullable=False)  # Target platforms
+    post_type = Column(String(50), default='standard')
+    
+    # Queue position
+    position = Column(Integer, nullable=False, index=True)
+    assigned_slot_id = Column(String(36), ForeignKey('smart_queue_slots.id'), nullable=True)
+    scheduled_time = Column(DateTime, nullable=True)
+    
+    status = Column(String(20), default='queued')  # queued, scheduled, posted, failed
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    user = relationship("User")
+    slot = relationship("SmartQueueSlot")
+
+    def __repr__(self):
+        return f"<SmartQueueItem position={self.position} status={self.status}>"
+
+
+class LinkInBioPage(Base):
+    """Link-in-bio landing page"""
+    __tablename__ = 'link_in_bio_pages'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    
+    # Page settings
+    slug = Column(String(100), unique=True, nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    bio = Column(Text, nullable=True)
+    avatar_url = Column(String(500), nullable=True)
+    theme = Column(String(50), default='default')  # default, dark, gradient, minimal
+    background_color = Column(String(7), default='#1a1a2e')
+    button_style = Column(String(50), default='rounded')  # rounded, pill, square
+    
+    # Social links
+    social_links = Column(JSON, nullable=True)  # {platform: url}
+    
+    # Analytics
+    total_views = Column(Integer, default=0)
+    total_clicks = Column(Integer, default=0)
+    
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    # Relationships
+    user = relationship("User")
+    links = relationship("LinkInBioLink", back_populates="page", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<LinkInBioPage {self.slug}>"
+
+
+class LinkInBioLink(Base):
+    """Individual link on a link-in-bio page"""
+    __tablename__ = 'link_in_bio_links'
+
+    id = Column(String(36), primary_key=True)
+    page_id = Column(String(36), ForeignKey('link_in_bio_pages.id'), nullable=False, index=True)
+    
+    title = Column(String(255), nullable=False)
+    url = Column(String(1000), nullable=False)
+    icon = Column(String(50), nullable=True)  # Icon name or emoji
+    thumbnail_url = Column(String(500), nullable=True)
+    
+    position = Column(Integer, nullable=False)
+    click_count = Column(Integer, default=0)
+    
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    page = relationship("LinkInBioPage", back_populates="links")
+
+    def __repr__(self):
+        return f"<LinkInBioLink {self.title}>"
+
+
+class UnifiedInboxItem(Base):
+    """Unified inbox for comments, DMs, and mentions across platforms"""
+    __tablename__ = 'unified_inbox_items'
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, index=True)
+    account_id = Column(String(36), ForeignKey('accounts.id'), nullable=False, index=True)
+    
+    # Item type
+    item_type = Column(String(20), nullable=False)  # comment, dm, mention, reply
+    platform = Column(String(50), nullable=False)
+    platform_item_id = Column(String(255), nullable=True)  # ID from the platform
+    
+    # Content
+    content = Column(Text, nullable=True)
+    author_name = Column(String(255), nullable=True)
+    author_username = Column(String(255), nullable=True)
+    author_avatar = Column(String(500), nullable=True)
+    
+    # Related post (for comments/replies)
+    related_post_id = Column(String(36), ForeignKey('posts.id'), nullable=True)
+    platform_post_id = Column(String(255), nullable=True)
+    
+    # Status
+    is_read = Column(Boolean, default=False, nullable=False)
+    is_archived = Column(Boolean, default=False, nullable=False)
+    is_replied = Column(Boolean, default=False, nullable=False)
+    sentiment = Column(String(20), nullable=True)  # positive, negative, neutral
+    
+    received_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+    # Relationships
+    user = relationship("User")
+    account = relationship("Account")
+    post = relationship("Post")
+
+    def __repr__(self):
+        return f"<UnifiedInboxItem {self.item_type} from {self.platform}>"
+
+
+class TrendingKeyword(Base):
+    """Cached trending keywords/hashtags by platform"""
+    __tablename__ = 'trending_keywords'
+
+    id = Column(String(36), primary_key=True)
+    platform = Column(String(50), nullable=False, index=True)
+    keyword = Column(String(255), nullable=False)
+    hashtag = Column(String(255), nullable=True)
+    
+    # Trend data
+    trend_volume = Column(Integer, nullable=True)  # Number of posts/mentions
+    trend_rank = Column(Integer, nullable=True)
+    category = Column(String(100), nullable=True)
+    location = Column(String(100), default='worldwide')
+    
+    # Cache timestamp
+    fetched_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    def __repr__(self):
+        return f"<TrendingKeyword {self.keyword} on {self.platform}>"

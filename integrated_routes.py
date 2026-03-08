@@ -6,7 +6,7 @@ These routes implement the 9 improvements by using the managers from app_extensi
 """
 
 from flask import Blueprint, request, jsonify, g, send_file, session
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
 import os
 
@@ -2712,6 +2712,1098 @@ def get_all_tags():
             return jsonify({'tags': sorted(list(all_tags))})
     except Exception as e:
         logger.error(f"Error fetching tags: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== SMART QUEUE ROUTES ====================
+
+@integrated_bp.route('/smart-queue/slots', methods=['GET'])
+@auth_required
+def get_queue_slots():
+    """Get all smart queue time slots"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import SmartQueueSlot
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            slots = session.query(SmartQueueSlot).filter_by(
+                user_id=user_id
+            ).order_by(SmartQueueSlot.day_of_week, SmartQueueSlot.time_slot).all()
+            
+            result = []
+            for s in slots:
+                result.append({
+                    'id': s.id,
+                    'day_of_week': s.day_of_week,
+                    'time_slot': s.time_slot,
+                    'platform': s.platform,
+                    'timezone': s.timezone,
+                    'is_active': s.is_active
+                })
+            
+            return jsonify({'slots': result})
+    except Exception as e:
+        logger.error(f"Error fetching queue slots: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/smart-queue/slots', methods=['POST'])
+@auth_required
+def create_queue_slot():
+    """Create a smart queue time slot"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import SmartQueueSlot
+        import uuid
+        
+        data = request.get_json() or {}
+        
+        if 'day_of_week' not in data or 'time_slot' not in data:
+            return jsonify({'error': 'day_of_week and time_slot are required'}), 400
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            slot = SmartQueueSlot(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                day_of_week=int(data['day_of_week']),
+                time_slot=data['time_slot'],
+                platform=data.get('platform'),
+                timezone=data.get('timezone', 'UTC'),
+                is_active=data.get('is_active', True)
+            )
+            session.add(slot)
+            session.flush()
+            
+            return jsonify({
+                'id': slot.id,
+                'message': 'Time slot created'
+            }), 201
+    except Exception as e:
+        logger.error(f"Error creating queue slot: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/smart-queue/slots/<slot_id>', methods=['DELETE'])
+@auth_required
+def delete_queue_slot(slot_id):
+    """Delete a smart queue time slot"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import SmartQueueSlot
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            slot = session.query(SmartQueueSlot).filter_by(
+                id=slot_id, user_id=user_id
+            ).first()
+            if not slot:
+                return jsonify({'error': 'Slot not found'}), 404
+            
+            session.delete(slot)
+            return jsonify({'message': 'Slot deleted successfully'})
+    except Exception as e:
+        logger.error(f"Error deleting queue slot: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/smart-queue/items', methods=['GET'])
+@auth_required
+def get_queue_items():
+    """Get all items in the smart queue"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import SmartQueueItem
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            items = session.query(SmartQueueItem).filter_by(
+                user_id=user_id
+            ).order_by(SmartQueueItem.position).all()
+            
+            result = []
+            for item in items:
+                result.append({
+                    'id': item.id,
+                    'content': item.content,
+                    'media_urls': item.media_urls,
+                    'platforms': item.platforms,
+                    'post_type': item.post_type,
+                    'position': item.position,
+                    'scheduled_time': item.scheduled_time.isoformat() if item.scheduled_time else None,
+                    'status': item.status,
+                    'created_at': item.created_at.isoformat()
+                })
+            
+            return jsonify({'items': result})
+    except Exception as e:
+        logger.error(f"Error fetching queue items: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/smart-queue/items', methods=['POST'])
+@auth_required
+def add_queue_item():
+    """Add an item to the smart queue"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import SmartQueueItem
+        import uuid
+        
+        data = request.get_json() or {}
+        
+        if not data.get('content') or not data.get('platforms'):
+            return jsonify({'error': 'content and platforms are required'}), 400
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            # Get next position
+            max_pos = session.query(SmartQueueItem).filter_by(
+                user_id=user_id
+            ).order_by(SmartQueueItem.position.desc()).first()
+            next_pos = (max_pos.position + 1) if max_pos else 1
+            
+            item = SmartQueueItem(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                content=data['content'],
+                media_urls=data.get('media_urls'),
+                platforms=data['platforms'],
+                post_type=data.get('post_type', 'standard'),
+                position=next_pos,
+                status='queued'
+            )
+            session.add(item)
+            session.flush()
+            
+            return jsonify({
+                'id': item.id,
+                'position': item.position,
+                'message': 'Item added to queue'
+            }), 201
+    except Exception as e:
+        logger.error(f"Error adding queue item: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/smart-queue/items/<item_id>', methods=['DELETE'])
+@auth_required
+def remove_queue_item(item_id):
+    """Remove an item from the smart queue"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import SmartQueueItem
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            item = session.query(SmartQueueItem).filter_by(
+                id=item_id, user_id=user_id
+            ).first()
+            if not item:
+                return jsonify({'error': 'Item not found'}), 404
+            
+            session.delete(item)
+            return jsonify({'message': 'Item removed from queue'})
+    except Exception as e:
+        logger.error(f"Error removing queue item: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/smart-queue/items/reorder', methods=['POST'])
+@auth_required
+def reorder_queue_items():
+    """Reorder items in the smart queue"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import SmartQueueItem
+        
+        data = request.get_json() or {}
+        item_ids = data.get('item_ids', [])
+        
+        if not item_ids:
+            return jsonify({'error': 'item_ids array is required'}), 400
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            for position, item_id in enumerate(item_ids, start=1):
+                item = session.query(SmartQueueItem).filter_by(
+                    id=item_id, user_id=user_id
+                ).first()
+                if item:
+                    item.position = position
+            
+            return jsonify({'message': 'Queue reordered successfully'})
+    except Exception as e:
+        logger.error(f"Error reordering queue: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/smart-queue/schedule', methods=['POST'])
+@auth_required
+def schedule_queue():
+    """Auto-schedule all queued items to available slots"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import SmartQueueItem, SmartQueueSlot, Post, PostStatus
+        import uuid
+        import pytz
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            # Get queued items
+            items = session.query(SmartQueueItem).filter_by(
+                user_id=user_id, status='queued'
+            ).order_by(SmartQueueItem.position).all()
+            
+            if not items:
+                return jsonify({'message': 'No items to schedule', 'scheduled': 0})
+            
+            # Get active time slots
+            slots = session.query(SmartQueueSlot).filter_by(
+                user_id=user_id, is_active=True
+            ).order_by(SmartQueueSlot.day_of_week, SmartQueueSlot.time_slot).all()
+            
+            if not slots:
+                return jsonify({'error': 'No active time slots configured'}), 400
+            
+            scheduled_count = 0
+            now = datetime.now(timezone.utc)
+            
+            for item in items:
+                # Find next available slot
+                for slot in slots:
+                    # Calculate next occurrence of this slot
+                    days_ahead = slot.day_of_week - now.weekday()
+                    if days_ahead < 0:
+                        days_ahead += 7
+                    
+                    slot_time = datetime.strptime(slot.time_slot, '%H:%M').time()
+                    next_date = now.date() + timedelta(days=days_ahead)
+                    
+                    try:
+                        tz = pytz.timezone(slot.timezone)
+                        scheduled_dt = tz.localize(datetime.combine(next_date, slot_time))
+                        scheduled_utc = scheduled_dt.astimezone(pytz.UTC)
+                    except Exception:
+                        scheduled_utc = datetime.combine(next_date, slot_time).replace(tzinfo=timezone.utc)
+                    
+                    if scheduled_utc <= now:
+                        scheduled_utc += timedelta(days=7)
+                    
+                    # Create post from queue item
+                    post = Post(
+                        id=str(uuid.uuid4()),
+                        user_id=user_id,
+                        content=item.content,
+                        platforms=item.platforms,
+                        status=PostStatus.SCHEDULED,
+                        scheduled_time=scheduled_utc
+                    )
+                    session.add(post)
+                    
+                    # Update queue item
+                    item.status = 'scheduled'
+                    item.scheduled_time = scheduled_utc
+                    item.assigned_slot_id = slot.id
+                    
+                    scheduled_count += 1
+                    break
+            
+            return jsonify({
+                'message': f'Scheduled {scheduled_count} items',
+                'scheduled': scheduled_count
+            })
+    except Exception as e:
+        logger.error(f"Error scheduling queue: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== LINK-IN-BIO ROUTES ====================
+
+@integrated_bp.route('/link-in-bio/pages', methods=['GET'])
+@auth_required
+def get_bio_pages():
+    """Get all link-in-bio pages for the user"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import LinkInBioPage, LinkInBioLink
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            pages = session.query(LinkInBioPage).filter_by(user_id=user_id).all()
+            
+            result = []
+            for page in pages:
+                links = session.query(LinkInBioLink).filter_by(
+                    page_id=page.id
+                ).order_by(LinkInBioLink.position).all()
+                
+                result.append({
+                    'id': page.id,
+                    'slug': page.slug,
+                    'title': page.title,
+                    'bio': page.bio,
+                    'avatar_url': page.avatar_url,
+                    'theme': page.theme,
+                    'background_color': page.background_color,
+                    'button_style': page.button_style,
+                    'social_links': page.social_links,
+                    'total_views': page.total_views,
+                    'total_clicks': page.total_clicks,
+                    'is_active': page.is_active,
+                    'links': [{
+                        'id': l.id,
+                        'title': l.title,
+                        'url': l.url,
+                        'icon': l.icon,
+                        'thumbnail_url': l.thumbnail_url,
+                        'position': l.position,
+                        'click_count': l.click_count,
+                        'is_active': l.is_active
+                    } for l in links]
+                })
+            
+            return jsonify({'pages': result})
+    except Exception as e:
+        logger.error(f"Error fetching bio pages: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/link-in-bio/pages', methods=['POST'])
+@auth_required
+def create_bio_page():
+    """Create a new link-in-bio page"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import LinkInBioPage
+        import uuid
+        import re
+        
+        data = request.get_json() or {}
+        
+        if not data.get('title'):
+            return jsonify({'error': 'title is required'}), 400
+        
+        # Generate slug from title if not provided
+        slug = data.get('slug') or re.sub(r'[^a-z0-9]+', '-', data['title'].lower()).strip('-')
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            # Check if slug exists
+            existing = session.query(LinkInBioPage).filter_by(slug=slug).first()
+            if existing:
+                slug = f"{slug}-{str(uuid.uuid4())[:8]}"
+            
+            page = LinkInBioPage(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                slug=slug,
+                title=data['title'],
+                bio=data.get('bio'),
+                avatar_url=data.get('avatar_url'),
+                theme=data.get('theme', 'default'),
+                background_color=data.get('background_color', '#1a1a2e'),
+                button_style=data.get('button_style', 'rounded'),
+                social_links=data.get('social_links')
+            )
+            session.add(page)
+            session.flush()
+            
+            return jsonify({
+                'id': page.id,
+                'slug': page.slug,
+                'message': 'Page created successfully'
+            }), 201
+    except Exception as e:
+        logger.error(f"Error creating bio page: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/link-in-bio/pages/<page_id>', methods=['PUT'])
+@auth_required
+def update_bio_page(page_id):
+    """Update a link-in-bio page"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import LinkInBioPage
+        
+        data = request.get_json() or {}
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            page = session.query(LinkInBioPage).filter_by(
+                id=page_id, user_id=user_id
+            ).first()
+            if not page:
+                return jsonify({'error': 'Page not found'}), 404
+            
+            if 'title' in data:
+                page.title = data['title']
+            if 'bio' in data:
+                page.bio = data['bio']
+            if 'avatar_url' in data:
+                page.avatar_url = data['avatar_url']
+            if 'theme' in data:
+                page.theme = data['theme']
+            if 'background_color' in data:
+                page.background_color = data['background_color']
+            if 'button_style' in data:
+                page.button_style = data['button_style']
+            if 'social_links' in data:
+                page.social_links = data['social_links']
+            if 'is_active' in data:
+                page.is_active = data['is_active']
+            
+            return jsonify({'message': 'Page updated successfully'})
+    except Exception as e:
+        logger.error(f"Error updating bio page: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/link-in-bio/pages/<page_id>', methods=['DELETE'])
+@auth_required
+def delete_bio_page(page_id):
+    """Delete a link-in-bio page"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import LinkInBioPage
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            page = session.query(LinkInBioPage).filter_by(
+                id=page_id, user_id=user_id
+            ).first()
+            if not page:
+                return jsonify({'error': 'Page not found'}), 404
+            
+            session.delete(page)
+            return jsonify({'message': 'Page deleted successfully'})
+    except Exception as e:
+        logger.error(f"Error deleting bio page: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/link-in-bio/pages/<page_id>/links', methods=['POST'])
+@auth_required
+def add_bio_link(page_id):
+    """Add a link to a bio page"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import LinkInBioPage, LinkInBioLink
+        import uuid
+        
+        data = request.get_json() or {}
+        
+        if not data.get('title') or not data.get('url'):
+            return jsonify({'error': 'title and url are required'}), 400
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            page = session.query(LinkInBioPage).filter_by(
+                id=page_id, user_id=user_id
+            ).first()
+            if not page:
+                return jsonify({'error': 'Page not found'}), 404
+            
+            # Get next position
+            max_pos = session.query(LinkInBioLink).filter_by(
+                page_id=page_id
+            ).order_by(LinkInBioLink.position.desc()).first()
+            next_pos = (max_pos.position + 1) if max_pos else 1
+            
+            link = LinkInBioLink(
+                id=str(uuid.uuid4()),
+                page_id=page_id,
+                title=data['title'],
+                url=data['url'],
+                icon=data.get('icon'),
+                thumbnail_url=data.get('thumbnail_url'),
+                position=next_pos
+            )
+            session.add(link)
+            session.flush()
+            
+            return jsonify({
+                'id': link.id,
+                'position': link.position,
+                'message': 'Link added successfully'
+            }), 201
+    except Exception as e:
+        logger.error(f"Error adding bio link: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/link-in-bio/links/<link_id>', methods=['PUT'])
+@auth_required
+def update_bio_link(link_id):
+    """Update a bio link"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import LinkInBioPage, LinkInBioLink
+        
+        data = request.get_json() or {}
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            link = session.query(LinkInBioLink).join(LinkInBioPage).filter(
+                LinkInBioLink.id == link_id,
+                LinkInBioPage.user_id == user_id
+            ).first()
+            if not link:
+                return jsonify({'error': 'Link not found'}), 404
+            
+            if 'title' in data:
+                link.title = data['title']
+            if 'url' in data:
+                link.url = data['url']
+            if 'icon' in data:
+                link.icon = data['icon']
+            if 'thumbnail_url' in data:
+                link.thumbnail_url = data['thumbnail_url']
+            if 'is_active' in data:
+                link.is_active = data['is_active']
+            
+            return jsonify({'message': 'Link updated successfully'})
+    except Exception as e:
+        logger.error(f"Error updating bio link: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/link-in-bio/links/<link_id>', methods=['DELETE'])
+@auth_required
+def delete_bio_link(link_id):
+    """Delete a bio link"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import LinkInBioPage, LinkInBioLink
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            link = session.query(LinkInBioLink).join(LinkInBioPage).filter(
+                LinkInBioLink.id == link_id,
+                LinkInBioPage.user_id == user_id
+            ).first()
+            if not link:
+                return jsonify({'error': 'Link not found'}), 404
+            
+            session.delete(link)
+            return jsonify({'message': 'Link deleted successfully'})
+    except Exception as e:
+        logger.error(f"Error deleting bio link: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# Public bio page view (no auth required)
+@integrated_bp.route('/bio/<slug>', methods=['GET'])
+def view_bio_page(slug):
+    """View a public link-in-bio page"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import LinkInBioPage, LinkInBioLink
+        
+        with db_session_scope() as session:
+            page = session.query(LinkInBioPage).filter_by(
+                slug=slug, is_active=True
+            ).first()
+            if not page:
+                return jsonify({'error': 'Page not found'}), 404
+            
+            # Increment view count
+            page.total_views += 1
+            
+            links = session.query(LinkInBioLink).filter_by(
+                page_id=page.id, is_active=True
+            ).order_by(LinkInBioLink.position).all()
+            
+            return jsonify({
+                'title': page.title,
+                'bio': page.bio,
+                'avatar_url': page.avatar_url,
+                'theme': page.theme,
+                'background_color': page.background_color,
+                'button_style': page.button_style,
+                'social_links': page.social_links,
+                'links': [{
+                    'id': l.id,
+                    'title': l.title,
+                    'url': l.url,
+                    'icon': l.icon,
+                    'thumbnail_url': l.thumbnail_url
+                } for l in links]
+            })
+    except Exception as e:
+        logger.error(f"Error viewing bio page: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/bio/<slug>/click/<link_id>', methods=['POST'])
+def track_bio_click(slug, link_id):
+    """Track a click on a bio link"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import LinkInBioPage, LinkInBioLink
+        
+        with db_session_scope() as session:
+            page = session.query(LinkInBioPage).filter_by(
+                slug=slug, is_active=True
+            ).first()
+            if not page:
+                return jsonify({'error': 'Page not found'}), 404
+            
+            link = session.query(LinkInBioLink).filter_by(
+                id=link_id, page_id=page.id
+            ).first()
+            if not link:
+                return jsonify({'error': 'Link not found'}), 404
+            
+            link.click_count += 1
+            page.total_clicks += 1
+            
+            return jsonify({
+                'url': link.url,
+                'tracked': True
+            })
+    except Exception as e:
+        logger.error(f"Error tracking bio click: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== UNIFIED INBOX ROUTES ====================
+
+@integrated_bp.route('/inbox', methods=['GET'])
+@auth_required
+def get_inbox():
+    """Get unified inbox items"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import UnifiedInboxItem, Account
+        
+        user_id = g.current_user['id']
+        item_type = request.args.get('type')  # comment, dm, mention
+        platform = request.args.get('platform')
+        is_read = request.args.get('is_read')
+        page = int(request.args.get('page', 1))
+        per_page = min(int(request.args.get('per_page', 50)), 100)
+        
+        with db_session_scope() as session:
+            query = session.query(UnifiedInboxItem).filter_by(
+                user_id=user_id, is_archived=False
+            )
+            
+            if item_type:
+                query = query.filter(UnifiedInboxItem.item_type == item_type)
+            if platform:
+                query = query.filter(UnifiedInboxItem.platform == platform)
+            if is_read is not None:
+                query = query.filter(UnifiedInboxItem.is_read == (is_read.lower() == 'true'))
+            
+            total = query.count()
+            items = query.order_by(UnifiedInboxItem.received_at.desc())\
+                         .offset((page - 1) * per_page)\
+                         .limit(per_page).all()
+            
+            result = []
+            for item in items:
+                account = session.query(Account).filter_by(id=item.account_id).first()
+                result.append({
+                    'id': item.id,
+                    'item_type': item.item_type,
+                    'platform': item.platform,
+                    'account_name': account.display_name if account else None,
+                    'content': item.content,
+                    'author_name': item.author_name,
+                    'author_username': item.author_username,
+                    'author_avatar': item.author_avatar,
+                    'related_post_id': item.related_post_id,
+                    'is_read': item.is_read,
+                    'is_replied': item.is_replied,
+                    'sentiment': item.sentiment,
+                    'received_at': item.received_at.isoformat()
+                })
+            
+            return jsonify({
+                'items': result,
+                'total': total,
+                'page': page,
+                'per_page': per_page,
+                'pages': (total + per_page - 1) // per_page
+            })
+    except Exception as e:
+        logger.error(f"Error fetching inbox: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/inbox/<item_id>/read', methods=['POST'])
+@auth_required
+def mark_inbox_read(item_id):
+    """Mark inbox item as read"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import UnifiedInboxItem
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            item = session.query(UnifiedInboxItem).filter_by(
+                id=item_id, user_id=user_id
+            ).first()
+            if not item:
+                return jsonify({'error': 'Item not found'}), 404
+            
+            item.is_read = True
+            return jsonify({'message': 'Marked as read'})
+    except Exception as e:
+        logger.error(f"Error marking inbox read: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/inbox/<item_id>/archive', methods=['POST'])
+@auth_required
+def archive_inbox_item(item_id):
+    """Archive inbox item"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import UnifiedInboxItem
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            item = session.query(UnifiedInboxItem).filter_by(
+                id=item_id, user_id=user_id
+            ).first()
+            if not item:
+                return jsonify({'error': 'Item not found'}), 404
+            
+            item.is_archived = True
+            return jsonify({'message': 'Item archived'})
+    except Exception as e:
+        logger.error(f"Error archiving inbox item: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/inbox/mark-all-read', methods=['POST'])
+@auth_required
+def mark_all_inbox_read():
+    """Mark all inbox items as read"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import UnifiedInboxItem
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            session.query(UnifiedInboxItem).filter_by(
+                user_id=user_id, is_read=False
+            ).update({'is_read': True})
+            
+            return jsonify({'message': 'All items marked as read'})
+    except Exception as e:
+        logger.error(f"Error marking all read: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/inbox/stats', methods=['GET'])
+@auth_required
+def get_inbox_stats():
+    """Get inbox statistics"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import UnifiedInboxItem
+        from sqlalchemy import func
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            total = session.query(UnifiedInboxItem).filter_by(
+                user_id=user_id, is_archived=False
+            ).count()
+            
+            unread = session.query(UnifiedInboxItem).filter_by(
+                user_id=user_id, is_archived=False, is_read=False
+            ).count()
+            
+            by_type = session.query(
+                UnifiedInboxItem.item_type,
+                func.count(UnifiedInboxItem.id)
+            ).filter_by(
+                user_id=user_id, is_archived=False
+            ).group_by(UnifiedInboxItem.item_type).all()
+            
+            by_platform = session.query(
+                UnifiedInboxItem.platform,
+                func.count(UnifiedInboxItem.id)
+            ).filter_by(
+                user_id=user_id, is_archived=False
+            ).group_by(UnifiedInboxItem.platform).all()
+            
+            return jsonify({
+                'total': total,
+                'unread': unread,
+                'by_type': dict(by_type),
+                'by_platform': dict(by_platform)
+            })
+    except Exception as e:
+        logger.error(f"Error fetching inbox stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== TRENDING KEYWORDS ROUTES ====================
+
+@integrated_bp.route('/trending', methods=['GET'])
+@auth_required
+def get_trending():
+    """Get trending keywords/hashtags"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import TrendingKeyword
+        
+        platform = request.args.get('platform')
+        location = request.args.get('location', 'worldwide')
+        category = request.args.get('category')
+        limit = min(int(request.args.get('limit', 50)), 100)
+        
+        now = datetime.now(timezone.utc)
+        
+        with db_session_scope() as session:
+            query = session.query(TrendingKeyword).filter(
+                TrendingKeyword.expires_at > now
+            )
+            
+            if platform:
+                query = query.filter(TrendingKeyword.platform == platform)
+            if location:
+                query = query.filter(TrendingKeyword.location == location)
+            if category:
+                query = query.filter(TrendingKeyword.category == category)
+            
+            trends = query.order_by(TrendingKeyword.trend_rank).limit(limit).all()
+            
+            result = []
+            for t in trends:
+                result.append({
+                    'keyword': t.keyword,
+                    'hashtag': t.hashtag,
+                    'platform': t.platform,
+                    'volume': t.trend_volume,
+                    'rank': t.trend_rank,
+                    'category': t.category,
+                    'location': t.location
+                })
+            
+            return jsonify({'trends': result})
+    except Exception as e:
+        logger.error(f"Error fetching trends: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@integrated_bp.route('/trending/refresh', methods=['POST'])
+@auth_required
+def refresh_trending():
+    """Refresh trending data from platforms (simulated)"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import TrendingKeyword
+        import uuid
+        import random
+        
+        # Simulated trending data - in production this would fetch from APIs
+        platforms = ['twitter', 'instagram', 'tiktok', 'linkedin']
+        sample_trends = [
+            {'keyword': 'AI', 'hashtag': '#AI', 'category': 'Technology'},
+            {'keyword': 'Marketing', 'hashtag': '#Marketing', 'category': 'Business'},
+            {'keyword': 'Startup', 'hashtag': '#Startup', 'category': 'Business'},
+            {'keyword': 'ContentCreator', 'hashtag': '#ContentCreator', 'category': 'Social'},
+            {'keyword': 'SocialMedia', 'hashtag': '#SocialMedia', 'category': 'Technology'},
+            {'keyword': 'DigitalMarketing', 'hashtag': '#DigitalMarketing', 'category': 'Business'},
+            {'keyword': 'Influencer', 'hashtag': '#Influencer', 'category': 'Social'},
+            {'keyword': 'Growth', 'hashtag': '#Growth', 'category': 'Business'},
+            {'keyword': 'Innovation', 'hashtag': '#Innovation', 'category': 'Technology'},
+            {'keyword': 'Productivity', 'hashtag': '#Productivity', 'category': 'Lifestyle'},
+        ]
+        
+        now = datetime.now(timezone.utc)
+        expires = now + timedelta(hours=1)
+        
+        with db_session_scope() as session:
+            # Clear old trends
+            session.query(TrendingKeyword).filter(
+                TrendingKeyword.expires_at < now
+            ).delete()
+            
+            created = 0
+            for platform in platforms:
+                for rank, trend in enumerate(sample_trends, start=1):
+                    existing = session.query(TrendingKeyword).filter_by(
+                        platform=platform,
+                        keyword=trend['keyword']
+                    ).first()
+                    
+                    if not existing:
+                        t = TrendingKeyword(
+                            id=str(uuid.uuid4()),
+                            platform=platform,
+                            keyword=trend['keyword'],
+                            hashtag=trend['hashtag'],
+                            trend_volume=random.randint(1000, 100000),
+                            trend_rank=rank,
+                            category=trend['category'],
+                            location='worldwide',
+                            fetched_at=now,
+                            expires_at=expires
+                        )
+                        session.add(t)
+                        created += 1
+            
+            return jsonify({
+                'message': 'Trends refreshed',
+                'created': created
+            })
+    except Exception as e:
+        logger.error(f"Error refreshing trends: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== BULK RESCHEDULE ROUTE ====================
+
+@integrated_bp.route('/bulk/posts/reschedule', methods=['POST'])
+@auth_required
+@role_required('editor')
+def bulk_reschedule_posts():
+    """Bulk reschedule posts"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import Post, PostStatus
+        
+        data = request.get_json() or {}
+        reschedules = data.get('reschedules', [])  # [{id: post_id, scheduled_time: ISO string}]
+        
+        if not reschedules:
+            return jsonify({'error': 'No reschedules provided'}), 400
+        
+        if len(reschedules) > 100:
+            return jsonify({'error': 'Maximum 100 reschedules per operation'}), 400
+        
+        user_id = g.current_user['id']
+        
+        results = {'successful': [], 'failed': []}
+        
+        with db_session_scope() as session:
+            for item in reschedules:
+                post_id = item.get('id')
+                new_time = item.get('scheduled_time')
+                
+                if not post_id or not new_time:
+                    results['failed'].append({'id': post_id, 'error': 'Missing id or scheduled_time'})
+                    continue
+                
+                post = session.query(Post).filter_by(id=post_id, user_id=user_id).first()
+                if not post:
+                    results['failed'].append({'id': post_id, 'error': 'Post not found'})
+                    continue
+                
+                if post.status not in [PostStatus.DRAFT, PostStatus.SCHEDULED, PostStatus.PENDING_APPROVAL]:
+                    results['failed'].append({'id': post_id, 'error': 'Cannot reschedule this post'})
+                    continue
+                
+                try:
+                    post.scheduled_time = datetime.fromisoformat(new_time.replace('Z', '+00:00'))
+                    post.status = PostStatus.SCHEDULED
+                    results['successful'].append({'id': post_id, 'new_time': post.scheduled_time.isoformat()})
+                except Exception as e:
+                    results['failed'].append({'id': post_id, 'error': str(e)})
+        
+        return jsonify(results)
+    except Exception as e:
+        logger.error(f"Error bulk rescheduling: {e}")
         return jsonify({'error': str(e)}), 500
 
 

@@ -2,12 +2,12 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { isSameDay, addDays } from 'date-fns';
-import { accountsApi, postsApi, mediaApi } from '../api';
+import { accountsApi, postsApi, mediaApi, api } from '../api';
 import { useAI } from '../contexts/AIContext';
 import { PlatformPreviews } from '../components/PlatformPreviews';
 import {
   Calendar, Trash2, Check, X, Edit2, Plus, Clock, ChevronDown,
-  Sparkles, Hash, Upload, Image as ImageIcon, ExternalLink, AlertTriangle, Search, Copy,
+  Sparkles, Hash, Upload, Image as ImageIcon, ExternalLink, AlertTriangle, Search, Copy, CheckSquare, Square,
 } from 'lucide-react';
 import {
   formatDateTime, toDateTimeLocalValue, getMinDateTime, toISOString, isInPast,
@@ -337,6 +337,12 @@ export default function ScheduledPostsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [platformFilter, setPlatformFilter] = useState('all');
+  
+  // Bulk selection state
+  const [selectedPosts, setSelectedPosts] = useState<Set<string>>(new Set());
+  const [showBulkReschedule, setShowBulkReschedule] = useState(false);
+  const [bulkRescheduleTime, setBulkRescheduleTime] = useState('');
+  const [bulkRescheduleOffset, setBulkRescheduleOffset] = useState(0); // hours offset
 
   const { data: postsData, isLoading } = useQuery({
     queryKey: ['posts', 'scheduled'],
@@ -353,6 +359,74 @@ export default function ScheduledPostsPage() {
     },
     onError: (e: any) => flash(false, e.response?.data?.error || 'Failed to schedule post'),
   });
+  
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (postIds: string[]) => {
+      const res = await api.post('/v2/bulk/posts/delete', { post_ids: postIds });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      setSelectedPosts(new Set());
+      flash(true, `Deleted ${data.successful?.length || 0} posts`);
+    },
+    onError: () => flash(false, 'Failed to delete posts'),
+  });
+  
+  // Bulk reschedule mutation
+  const bulkRescheduleMutation = useMutation({
+    mutationFn: async (reschedules: { id: string; scheduled_time: string }[]) => {
+      const res = await api.post('/v2/bulk/posts/reschedule', { reschedules });
+      return res.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      setSelectedPosts(new Set());
+      setShowBulkReschedule(false);
+      flash(true, `Rescheduled ${data.successful?.length || 0} posts`);
+    },
+    onError: () => flash(false, 'Failed to reschedule posts'),
+  });
+  
+  const togglePostSelection = (postId: string) => {
+    setSelectedPosts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(postId)) {
+        newSet.delete(postId);
+      } else {
+        newSet.add(postId);
+      }
+      return newSet;
+    });
+  };
+  
+  const toggleSelectAll = () => {
+    if (selectedPosts.size === posts.length) {
+      setSelectedPosts(new Set());
+    } else {
+      setSelectedPosts(new Set(posts.map((p: any) => p.id)));
+    }
+  };
+  
+  const handleBulkDelete = () => {
+    if (selectedPosts.size === 0) return;
+    if (confirm(`Delete ${selectedPosts.size} selected posts?`)) {
+      bulkDeleteMutation.mutate(Array.from(selectedPosts));
+    }
+  };
+  
+  const handleBulkReschedule = () => {
+    if (selectedPosts.size === 0 || !bulkRescheduleTime) return;
+    
+    const baseTime = new Date(bulkRescheduleTime);
+    const reschedules = Array.from(selectedPosts).map((id, index) => ({
+      id,
+      scheduled_time: new Date(baseTime.getTime() + index * bulkRescheduleOffset * 60 * 60 * 1000).toISOString(),
+    }));
+    
+    bulkRescheduleMutation.mutate(reschedules);
+  };
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: any }) => postsApi.update(id, data),
@@ -518,6 +592,52 @@ export default function ScheduledPostsPage() {
           );
         })()}
 
+        {/* Bulk Actions Bar */}
+        {posts.length > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem',
+            padding: '0.75rem 1rem', background: selectedPosts.size > 0 ? 'rgba(99, 102, 241, 0.1)' : 'var(--color-bgSecondary)',
+            borderRadius: '0.5rem', border: '1px solid', borderColor: selectedPosts.size > 0 ? 'var(--color-primary)' : 'var(--color-borderLight)',
+          }}>
+            <button
+              onClick={toggleSelectAll}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.375rem',
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--color-textPrimary)', fontSize: '0.875rem',
+              }}
+            >
+              {selectedPosts.size === posts.length ? <CheckSquare size={18} /> : <Square size={18} />}
+              {selectedPosts.size === posts.length ? 'Deselect All' : 'Select All'}
+            </button>
+            
+            {selectedPosts.size > 0 && (
+              <>
+                <span style={{ color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
+                  {selectedPosts.size} selected
+                </span>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setShowBulkReschedule(true)}
+                    style={{ fontSize: '0.8rem', padding: '0.375rem 0.75rem' }}
+                  >
+                    <Clock size={14} /> Reschedule
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleteMutation.isPending}
+                    style={{ fontSize: '0.8rem', padding: '0.375rem 0.75rem', color: '#ef4444', borderColor: '#ef4444' }}
+                  >
+                    <Trash2 size={14} /> {bulkDeleteMutation.isPending ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {isLoading ? (
           <div className="loading">Loading scheduled posts…</div>
         ) : rawPosts.length === 0 ? (
@@ -549,12 +669,25 @@ export default function ScheduledPostsPage() {
                   key={post.id}
                   style={{
                     padding: '1.125rem 1.25rem',
-                    border: '1px solid var(--color-borderLight)',
+                    border: '1px solid',
+                    borderColor: selectedPosts.has(post.id) ? 'var(--color-primary)' : 'var(--color-borderLight)',
                     borderRadius: '10px',
-                    background: 'var(--color-bgSecondary)',
+                    background: selectedPosts.has(post.id) ? 'rgba(99, 102, 241, 0.05)' : 'var(--color-bgSecondary)',
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                    {/* Selection checkbox */}
+                    <button
+                      onClick={() => togglePostSelection(post.id)}
+                      style={{
+                        background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem',
+                        color: selectedPosts.has(post.id) ? 'var(--color-primary)' : 'var(--color-textSecondary)',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {selectedPosts.has(post.id) ? <CheckSquare size={20} /> : <Square size={20} />}
+                    </button>
+                    
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {/* Content preview */}
                       <div style={{ fontWeight: '600', marginBottom: '0.5rem', fontSize: '0.9rem', lineHeight: '1.4', color: 'var(--color-textPrimary)' }}>
@@ -716,6 +849,72 @@ export default function ScheduledPostsPage() {
               >
                 <Trash2 size={15} />
                 {deleteMutation.isPending ? 'Cancelling…' : 'Cancel Post'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Reschedule Modal */}
+      {showBulkReschedule && (
+        <div className="modal-overlay" onClick={() => setShowBulkReschedule(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Clock size={18} /> Bulk Reschedule
+              </h3>
+              <button className="close-button" onClick={() => setShowBulkReschedule(false)}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '1.25rem' }}>
+              <p style={{ color: 'var(--color-textSecondary)', marginBottom: '1rem' }}>
+                Reschedule {selectedPosts.size} selected post{selectedPosts.size !== 1 ? 's' : ''}.
+              </p>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.25rem', color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
+                  Start Date & Time
+                </label>
+                <input
+                  type="datetime-local"
+                  value={bulkRescheduleTime}
+                  onChange={e => setBulkRescheduleTime(e.target.value)}
+                  min={getMinDateTime()}
+                  style={{
+                    width: '100%', padding: '0.5rem', borderRadius: '0.375rem',
+                    border: '1px solid var(--color-borderLight)', background: 'var(--color-bg)',
+                    color: 'var(--color-textPrimary)',
+                  }}
+                />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', marginBottom: '0.25rem', color: 'var(--color-textSecondary)', fontSize: '0.875rem' }}>
+                  Stagger posts by (hours)
+                </label>
+                <input
+                  type="number"
+                  value={bulkRescheduleOffset}
+                  onChange={e => setBulkRescheduleOffset(parseInt(e.target.value) || 0)}
+                  min={0}
+                  max={168}
+                  style={{
+                    width: '100%', padding: '0.5rem', borderRadius: '0.375rem',
+                    border: '1px solid var(--color-borderLight)', background: 'var(--color-bg)',
+                    color: 'var(--color-textPrimary)',
+                  }}
+                />
+                <p style={{ fontSize: '0.75rem', color: 'var(--color-textSecondary)', marginTop: '0.25rem' }}>
+                  Set to 0 to schedule all at the same time, or stagger them apart.
+                </p>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowBulkReschedule(false)}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                onClick={handleBulkReschedule}
+                disabled={bulkRescheduleMutation.isPending || !bulkRescheduleTime}
+              >
+                <Clock size={15} />
+                {bulkRescheduleMutation.isPending ? 'Rescheduling…' : 'Reschedule'}
               </button>
             </div>
           </div>
