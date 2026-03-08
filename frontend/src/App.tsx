@@ -25,6 +25,8 @@ import SubscriptionInfoPage from './pages/SubscriptionInfoPage';
 import CampaignsPage from './pages/CampaignsPage';
 import WorkspacesPage from './pages/WorkspacesPage';
 import PostIdeasPage from './pages/PostIdeasPage';
+import AutoEngagementPage from './pages/AutoEngagementPage';
+import ContentRecyclingPage from './pages/ContentRecyclingPage';
 import SettingsModal from './components/SettingsModal';
 import NotificationCenter from './components/NotificationCenter';
 import Breadcrumbs from './components/Breadcrumbs';
@@ -101,6 +103,8 @@ export const appRoutes: AppRouteConfig[] = [
   { path: '/campaigns', label: 'Campaigns', icon: Briefcase, element: <CampaignsPage /> },
   { path: '/workspaces', label: 'Workspaces', icon: Building2, element: <WorkspacesPage /> },
   { path: '/post-ideas', label: 'AI Post Ideas', icon: Lightbulb, element: <PostIdeasPage /> },
+  { path: '/auto-engagement', label: 'Auto-Engagement', icon: Zap, element: <AutoEngagementPage /> },
+  { path: '/content-recycling', label: 'Content Recycling', icon: Repeat, element: <ContentRecyclingPage /> },
   { path: '/ab-testing', label: 'A/B Testing', icon: Sparkles, element: <ABTestingPage /> },
   { path: '/chatbot', label: 'AI Assistant', icon: MessageSquare, element: <ChatbotPage /> },
   { path: '/clips', label: 'Video Clipper', icon: Scissors, element: <ClipsPage /> },

@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import { api } from '../api';
 import { Folder, File, Image, Video, FileText, Plus, X, Settings, Download, Trash2, CheckCircle, FolderOpen, Search, Filter } from 'lucide-react';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
 
 interface DriveFile {
   id: string;
@@ -74,7 +72,7 @@ export default function ContentLibraryPage() {
 
   const loadTemplates = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/templates`);
+      const response = await api.get('/templates');
       setTemplates(response.data);
     } catch {
       // silent fail — template list simply stays empty
@@ -85,13 +83,9 @@ export default function ContentLibraryPage() {
     if (!googleSettings.enabled) return;
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/google-drive/list`, {
+      const response = await api.post('/google-drive/list', {
         folder_id: googleSettings.selectedFolderId || 'root',
         page_size: 100
-      }, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
       });
       setDriveFiles(response.data);
     } catch {
@@ -103,11 +97,7 @@ export default function ContentLibraryPage() {
   const handleGoogleDriveAuth = async () => {
     try {
       // Get authorization URL from backend
-      const response = await axios.get(`${API_BASE_URL}/api/google-drive/authorize`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
-      });
+      const response = await api.get('/google-drive/authorize');
 
       const { authorization_url } = response.data;
 
@@ -147,13 +137,9 @@ export default function ContentLibraryPage() {
 
     // Reload files from new folder
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/google-drive/list`, {
+      const response = await api.post('/google-drive/list', {
         folder_id: folderId,
         page_size: 100
-      }, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        }
       });
       setDriveFiles(response.data);
     } catch {
@@ -163,7 +149,7 @@ export default function ContentLibraryPage() {
 
   const handleCreateTemplate = async () => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/templates`, newTemplate);
+      const response = await api.post('/templates', newTemplate);
       setTemplates([...templates, response.data]);
       setShowTemplateModal(false);
       setNewTemplate({ name: '', content: '', platforms: [] });
@@ -174,7 +160,7 @@ export default function ContentLibraryPage() {
 
   const handleDeleteTemplate = async (templateId: string) => {
     try {
-      await axios.delete(`${API_BASE_URL}/api/templates/${templateId}`);
+      await api.delete(`/templates/${templateId}`);
       setTemplates(templates.filter(t => t.id !== templateId));
     } catch {
       // silent fail — template list will refresh regardless

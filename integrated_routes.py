@@ -2399,6 +2399,33 @@ def create_recycle_schedule():
         return jsonify({'error': str(e)}), 500
 
 
+@integrated_bp.route('/recycle-schedules/<schedule_id>', methods=['DELETE'])
+@auth_required
+def delete_recycle_schedule(schedule_id):
+    """Delete a content recycle schedule"""
+    if not DB_ENABLED:
+        return jsonify({'error': 'Database not enabled'}), 503
+    
+    try:
+        from database import db_session_scope
+        from models import ContentRecycleSchedule
+        
+        user_id = g.current_user['id']
+        
+        with db_session_scope() as session:
+            schedule = session.query(ContentRecycleSchedule).filter_by(
+                id=schedule_id, user_id=user_id
+            ).first()
+            if not schedule:
+                return jsonify({'error': 'Schedule not found'}), 404
+            
+            session.delete(schedule)
+            return jsonify({'message': 'Schedule deleted successfully'})
+    except Exception as e:
+        logger.error(f"Error deleting recycle schedule: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 # ==================== AUTO-ENGAGEMENT ROUTES ====================
 
 @integrated_bp.route('/auto-engagements', methods=['GET'])

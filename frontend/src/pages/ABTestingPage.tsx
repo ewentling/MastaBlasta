@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { api, postsApi } from '../api';
 import {
   Sparkles, TrendingUp, Award, Plus, X, ChevronDown, ChevronUp,
   Lightbulb, BarChart2, BookOpen, Clock, CheckCircle, Circle,
@@ -84,8 +84,8 @@ export default function ABTestingPage() {
 
   const loadPosts = async () => {
     try {
-      const response = await axios.get('/api/posts');
-      const postsData = response.data.posts || response.data;
+      const response = await postsApi.getAll();
+      const postsData = response.posts || [];
       setPosts(postsData);
       if (postsData.length > 0 && !selectedPost) setSelectedPost(postsData[0].id);
     } catch (error) {
@@ -95,7 +95,7 @@ export default function ABTestingPage() {
 
   const loadVersions = async (postId: string) => {
     try {
-      const response = await axios.get(`/api/post-versions/${postId}`);
+      const response = await api.get(`/post-versions/${postId}`);
       setVersions(response.data);
     } catch (error) {
       console.error('Error loading versions:', error);
@@ -109,7 +109,7 @@ export default function ABTestingPage() {
       const platforms = newVersion.platforms.length > 0
         ? newVersion.platforms
         : (selectedPostData?.platforms || ['twitter']);
-      await axios.post('/api/post-versions', {
+      await api.post('/post-versions', {
         original_post_id: selectedPost,
         version_name: newVersion.version_name,
         content: newVersion.content,
@@ -127,7 +127,7 @@ export default function ABTestingPage() {
 
   const publishVersion = async (versionId: string) => {
     try {
-      await axios.post(`/api/post-versions/${versionId}/publish`);
+      await api.post(`/post-versions/${versionId}/publish`);
       if (selectedPost) loadVersions(selectedPost);
     } catch (error) {
       console.error('Error publishing version:', error);
@@ -136,7 +136,7 @@ export default function ABTestingPage() {
 
   const markAsWinner = async (versionId: string) => {
     try {
-      await axios.post(`/api/post-versions/${versionId}/winner`);
+      await api.post(`/post-versions/${versionId}/winner`);
       if (selectedPost) loadVersions(selectedPost);
     } catch (error) {
       console.error('Error marking winner:', error);
@@ -152,7 +152,7 @@ export default function ABTestingPage() {
   const compareVersions = async () => {
     if (selectedForCompare.length < 2) return;
     try {
-      const response = await axios.post('/api/ab-tests/compare', { version_ids: selectedForCompare });
+      const response = await api.post('/ab-tests/compare', { version_ids: selectedForCompare });
       setComparisonData(response.data);
       setShowCompareModal(true);
     } catch (error) {

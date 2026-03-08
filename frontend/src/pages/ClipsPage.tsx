@@ -1,9 +1,7 @@
 import { useState } from 'react';
-import axios from 'axios';
+import { api } from '../api';
 import { useNavigate } from 'react-router-dom';
 import { Video, Scissors, Sparkles, Download, Calendar, Check, X, Loader, ExternalLink, Clock, Target, TrendingUp, Copy, Play, Save, Send, Type, Maximize2, Square, Smartphone, Monitor } from 'lucide-react';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:33766';
 
 interface VideoInfo {
   title: string;
@@ -109,7 +107,7 @@ export default function ClipsPage() {
     setSelectedClip(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/clips/analyze`, {
+      const response = await api.post('/clips/analyze', {
         video_url: videoUrl,
         num_clips: numClips,
       });
@@ -157,7 +155,7 @@ export default function ClipsPage() {
     setError(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/clips/metadata`, {
+      const response = await api.post('/clips/metadata', {
         clip: selectedClip,
         platform: platform,
       });
@@ -179,7 +177,7 @@ export default function ClipsPage() {
     if (!selectedClip) return;
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/api/clips/download-info`, {
+      const response = await api.post('/clips/download-info', {
         video_url: selectedClip.video_url,
         start_time: selectedClip.start_time,
         end_time: selectedClip.end_time,
