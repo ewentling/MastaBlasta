@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Zap, Plus, Trash2, X, Play, Pause, Clock, Target, MessageSquare, ThumbsUp, Share2, Bell, CheckCircle, AlertCircle } from 'lucide-react';
+import { Zap, Plus, Trash2, X, Play, Pause, Clock, Eye, MessageSquare, ThumbsUp, Share2, Bell, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface AutoEngagementRule {
   id: string;
@@ -25,7 +25,7 @@ const TRIGGER_TYPES = [
   { value: 'likes', label: 'Likes Threshold', icon: ThumbsUp, description: 'When a post reaches X likes' },
   { value: 'comments', label: 'Comments Threshold', icon: MessageSquare, description: 'When a post reaches X comments' },
   { value: 'shares', label: 'Shares Threshold', icon: Share2, description: 'When a post reaches X shares' },
-  { value: 'views', label: 'Views Threshold', icon: Target, description: 'When a post reaches X views' },
+  { value: 'views', label: 'Views Threshold', icon: Eye, description: 'When a post reaches X views' },
 ];
 
 const ACTION_TYPES = [
