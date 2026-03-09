@@ -115,7 +115,7 @@ export default function ContentCalendarPage() {
       ));
 
       // Send reschedule request to backend
-      await api.post(`/api/v2/posts/${event.id}/reschedule`, {
+      await api.post(`/v2/posts/${event.id}/reschedule`, {
         scheduled_time: start.toISOString()
       });
 

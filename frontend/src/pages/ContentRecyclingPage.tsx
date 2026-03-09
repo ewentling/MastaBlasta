@@ -65,7 +65,7 @@ export default function ContentRecyclingPage() {
     try {
       setLoading(true);
       const [schedulesRes, postsRes] = await Promise.all([
-        api.get('/api/v2/recycle-schedules'),
+        api.get('/v2/recycle-schedules'),
         api.get('/posts?status=published')
       ]);
       setSchedules(schedulesRes.data.schedules || []);
@@ -86,7 +86,7 @@ export default function ContentRecyclingPage() {
     }
 
     try {
-      await api.post('/api/v2/recycle-schedules', formData);
+      await api.post('/v2/recycle-schedules', formData);
       showToast('Recycle schedule created successfully', 'success');
       setShowModal(false);
       setFormData({
@@ -105,7 +105,7 @@ export default function ContentRecyclingPage() {
 
   const handleDelete = async (scheduleId: string) => {
     try {
-      await api.delete(`/api/v2/recycle-schedules/${scheduleId}`);
+      await api.delete(`/v2/recycle-schedules/${scheduleId}`);
       showToast('Schedule deleted successfully', 'success');
       setDeleteConfirm(null);
       loadData();

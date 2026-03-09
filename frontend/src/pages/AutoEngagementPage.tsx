@@ -22,18 +22,17 @@ interface Toast {
 }
 
 const TRIGGER_TYPES = [
-  { value: 'likes_threshold', label: 'Likes Threshold', icon: ThumbsUp, description: 'When a post reaches X likes' },
-  { value: 'comments_threshold', label: 'Comments Threshold', icon: MessageSquare, description: 'When a post reaches X comments' },
-  { value: 'shares_threshold', label: 'Shares Threshold', icon: Share2, description: 'When a post reaches X shares' },
-  { value: 'engagement_rate', label: 'Engagement Rate', icon: Target, description: 'When engagement rate exceeds X%' },
-  { value: 'time_since_post', label: 'Time Since Post', icon: Clock, description: 'X hours after posting' },
+  { value: 'likes', label: 'Likes Threshold', icon: ThumbsUp, description: 'When a post reaches X likes' },
+  { value: 'comments', label: 'Comments Threshold', icon: MessageSquare, description: 'When a post reaches X comments' },
+  { value: 'shares', label: 'Shares Threshold', icon: Share2, description: 'When a post reaches X shares' },
+  { value: 'views', label: 'Views Threshold', icon: Target, description: 'When a post reaches X views' },
 ];
 
 const ACTION_TYPES = [
-  { value: 'send_notification', label: 'Send Notification', description: 'Send an in-app notification' },
-  { value: 'auto_reply', label: 'Auto-Reply', description: 'Automatically reply to comments' },
-  { value: 'boost_post', label: 'Boost Post', description: 'Schedule the post for resharing' },
-  { value: 'thank_followers', label: 'Thank Followers', description: 'Send a thank you message' },
+  { value: 'notify', label: 'Send Notification', description: 'Send an in-app notification' },
+  { value: 'comment', label: 'Auto-Comment', description: 'Automatically post a comment' },
+  { value: 'repost', label: 'Repost', description: 'Schedule the post for resharing' },
+  { value: 'like', label: 'Auto-Like', description: 'Automatically like related content' },
 ];
 
 const PLATFORMS = ['all', 'twitter', 'facebook', 'instagram', 'linkedin', 'threads', 'bluesky'];
@@ -47,10 +46,10 @@ export default function AutoEngagementPage() {
 
   const [formData, setFormData] = useState({
     name: '',
-    trigger_type: 'likes_threshold',
+    trigger_type: 'likes',
     trigger_threshold: 100,
     trigger_platform: 'all',
-    action_type: 'send_notification',
+    action_type: 'notify',
     action_content: ''
   });
 
@@ -67,7 +66,7 @@ export default function AutoEngagementPage() {
   const loadRules = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/v2/auto-engagements');
+      const response = await api.get('/v2/auto-engagements');
       setRules(response.data.rules || []);
     } catch (error) {
       console.error('Error loading auto-engagement rules:', error);
@@ -89,15 +88,15 @@ export default function AutoEngagementPage() {
         action_content: formData.action_content || null
       };
 
-      await api.post('/api/v2/auto-engagements', payload);
+      await api.post('/v2/auto-engagements', payload);
       showToast('Rule created successfully', 'success');
       setShowModal(false);
       setFormData({
         name: '',
-        trigger_type: 'likes_threshold',
+        trigger_type: 'likes',
         trigger_threshold: 100,
         trigger_platform: 'all',
-        action_type: 'send_notification',
+        action_type: 'notify',
         action_content: ''
       });
       loadRules();
@@ -109,7 +108,7 @@ export default function AutoEngagementPage() {
 
   const handleDelete = async (ruleId: string) => {
     try {
-      await api.delete(`/api/v2/auto-engagements/${ruleId}`);
+      await api.delete(`/v2/auto-engagements/${ruleId}`);
       showToast('Rule deleted successfully', 'success');
       setDeleteConfirm(null);
       loadRules();

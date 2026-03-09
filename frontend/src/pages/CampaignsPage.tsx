@@ -54,7 +54,7 @@ export default function CampaignsPage() {
   const loadCampaigns = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/v2/campaigns');
+      const response = await api.get('/v2/campaigns');
       setCampaigns(response.data.campaigns || []);
     } catch (error) {
       console.error('Error loading campaigns:', error);
@@ -78,10 +78,10 @@ export default function CampaignsPage() {
       };
 
       if (editingCampaign) {
-        await api.put(`/api/v2/campaigns/${editingCampaign.id}`, payload);
+        await api.put(`/v2/campaigns/${editingCampaign.id}`, payload);
         showToast('Campaign updated successfully', 'success');
       } else {
-        await api.post('/api/v2/campaigns', payload);
+        await api.post('/v2/campaigns', payload);
         showToast('Campaign created successfully', 'success');
       }
 
@@ -105,7 +105,7 @@ export default function CampaignsPage() {
 
   const handleDelete = async (campaignId: string) => {
     try {
-      await api.delete(`/api/v2/campaigns/${campaignId}`);
+      await api.delete(`/v2/campaigns/${campaignId}`);
       showToast('Campaign deleted successfully', 'success');
       setDeleteConfirm(null);
       loadCampaigns();

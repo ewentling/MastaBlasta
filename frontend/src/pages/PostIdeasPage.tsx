@@ -49,7 +49,7 @@ export default function PostIdeasPage() {
     setIdeas([]);
 
     try {
-      const response = await api.post('/api/v2/ai/generate-post-ideas', {
+      const response = await api.post('/v2/ai/generate-post-ideas', {
         topic,
         industry,
         platform,

@@ -64,7 +64,7 @@ export default function WorkspacesPage() {
   const loadWorkspaces = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/api/v2/workspaces');
+      const response = await api.get('/v2/workspaces');
       setWorkspaces(response.data.workspaces || []);
     } catch (error) {
       console.error('Error loading workspaces:', error);
@@ -77,7 +77,7 @@ export default function WorkspacesPage() {
   const handleCreateWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post('/api/v2/workspaces', formData);
+      await api.post('/v2/workspaces', formData);
       setShowCreateModal(false);
       setFormData({ name: '', description: '' });
       showToast('Workspace created successfully', 'success');
@@ -93,7 +93,7 @@ export default function WorkspacesPage() {
     if (!selectedWorkspace) return;
     
     try {
-      await api.put(`/api/v2/workspaces/${selectedWorkspace.id}`, formData);
+      await api.put(`/v2/workspaces/${selectedWorkspace.id}`, formData);
       setShowEditModal(false);
       setFormData({ name: '', description: '' });
       showToast('Workspace updated successfully', 'success');
@@ -106,7 +106,7 @@ export default function WorkspacesPage() {
 
   const handleDeleteWorkspace = async (workspaceId: string) => {
     try {
-      await api.delete(`/api/v2/workspaces/${workspaceId}`);
+      await api.delete(`/v2/workspaces/${workspaceId}`);
       setDeleteConfirm(null);
       showToast('Workspace deleted successfully', 'success');
       loadWorkspaces();
@@ -131,7 +131,7 @@ export default function WorkspacesPage() {
     setLoadingMembers(true);
     
     try {
-      const response = await api.get(`/api/v2/workspaces/${workspace.id}/members`);
+      const response = await api.get(`/v2/workspaces/${workspace.id}/members`);
       setMembers(response.data.members || []);
     } catch (error) {
       console.error('Error loading members:', error);
@@ -146,13 +146,13 @@ export default function WorkspacesPage() {
     if (!selectedWorkspace) return;
 
     try {
-      await api.post(`/api/v2/workspaces/${selectedWorkspace.id}/members`, newMember);
+      await api.post(`/v2/workspaces/${selectedWorkspace.id}/members`, newMember);
       setShowAddMemberModal(false);
       setNewMember({ email: '', role: 'member', can_approve: false, can_publish: true });
       showToast('Member added successfully', 'success');
       
       // Reload members
-      const response = await api.get(`/api/v2/workspaces/${selectedWorkspace.id}/members`);
+      const response = await api.get(`/v2/workspaces/${selectedWorkspace.id}/members`);
       setMembers(response.data.members || []);
     } catch (error: any) {
       console.error('Error adding member:', error);
@@ -164,11 +164,11 @@ export default function WorkspacesPage() {
     if (!selectedWorkspace) return;
     
     try {
-      await api.delete(`/api/v2/workspaces/${selectedWorkspace.id}/members/${memberUserId}`);
+      await api.delete(`/v2/workspaces/${selectedWorkspace.id}/members/${memberUserId}`);
       showToast('Member removed successfully', 'success');
       
       // Reload members
-      const response = await api.get(`/api/v2/workspaces/${selectedWorkspace.id}/members`);
+      const response = await api.get(`/v2/workspaces/${selectedWorkspace.id}/members`);
       setMembers(response.data.members || []);
     } catch (error: any) {
       console.error('Error removing member:', error);
