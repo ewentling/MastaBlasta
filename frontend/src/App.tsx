@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import type { LucideIcon } from 'lucide-react';
-import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw, Palette, Video, ChevronLeft, ChevronRight, Menu, X } from 'lucide-react';
+import { Home, Users, Send, Calendar, Settings, Link2, TrendingUp, BarChart2, Upload, Folder, CalendarDays, Sparkles, MessageSquare, Scissors, LogOut, Shield, AlertTriangle, RefreshCw, Palette, Video, ChevronLeft, ChevronRight, Menu, X, Briefcase, Building2, Lightbulb, Repeat, Zap, Inbox, Clock, Hash } from 'lucide-react';
 import AccountsPage from './pages/AccountsPage';
 import PostPage from './pages/PostPage';
 import ScheduledPostsPage from './pages/ScheduledPostsPage';
@@ -22,6 +22,15 @@ import AdminPage from './pages/AdminPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import SubscriptionInfoPage from './pages/SubscriptionInfoPage';
+import CampaignsPage from './pages/CampaignsPage';
+import WorkspacesPage from './pages/WorkspacesPage';
+import PostIdeasPage from './pages/PostIdeasPage';
+import AutoEngagementPage from './pages/AutoEngagementPage';
+import ContentRecyclingPage from './pages/ContentRecyclingPage';
+import SmartQueuePage from './pages/SmartQueuePage';
+import LinkInBioPage from './pages/LinkInBioPage';
+import UnifiedInboxPage from './pages/UnifiedInboxPage';
+import TrendingPage from './pages/TrendingPage';
 import SettingsModal from './components/SettingsModal';
 import NotificationCenter from './components/NotificationCenter';
 import Breadcrumbs from './components/Breadcrumbs';
@@ -89,12 +98,21 @@ export const appRoutes: AppRouteConfig[] = [
   { path: '/accounts', label: 'Accounts', icon: Users, element: <AccountsPage /> },
   { path: '/post', label: 'Create Post', icon: Send, element: <PostPage /> },
   { path: '/scheduled', label: 'Scheduled Posts', icon: Calendar, element: <ScheduledPostsPage /> },
+  { path: '/smart-queue', label: 'Smart Queue', icon: Clock, element: <SmartQueuePage /> },
+  { path: '/inbox', label: 'Unified Inbox', icon: Inbox, element: <UnifiedInboxPage /> },
   { path: '/analytics', label: 'Analytics', icon: BarChart2, element: <AnalyticsPage /> },
   { path: '/bulk-import', label: 'Bulk Import', icon: Upload, element: <BulkImportPage /> },
   { path: '/url-shortener', label: 'URL Shortener', icon: Link2, element: <URLShortenerPage /> },
+  { path: '/link-in-bio', label: 'Link-in-Bio', icon: Link2, element: <LinkInBioPage /> },
+  { path: '/trending', label: 'Trending', icon: Hash, element: <TrendingPage /> },
   { path: '/social-monitoring', label: 'Social Monitoring', icon: TrendingUp, element: <SocialMonitoringPage /> },
   { path: '/calendar', label: 'Content Calendar', icon: CalendarDays, element: <ContentCalendarPage /> },
   { path: '/library', label: 'Content Library', icon: Folder, element: <ContentLibraryPage /> },
+  { path: '/campaigns', label: 'Campaigns', icon: Briefcase, element: <CampaignsPage /> },
+  { path: '/workspaces', label: 'Workspaces', icon: Building2, element: <WorkspacesPage /> },
+  { path: '/post-ideas', label: 'AI Post Ideas', icon: Lightbulb, element: <PostIdeasPage /> },
+  { path: '/auto-engagement', label: 'Auto-Engagement', icon: Zap, element: <AutoEngagementPage /> },
+  { path: '/content-recycling', label: 'Content Recycling', icon: Repeat, element: <ContentRecyclingPage /> },
   { path: '/ab-testing', label: 'A/B Testing', icon: Sparkles, element: <ABTestingPage /> },
   { path: '/chatbot', label: 'AI Assistant', icon: MessageSquare, element: <ChatbotPage /> },
   { path: '/clips', label: 'Video Clipper', icon: Scissors, element: <ClipsPage /> },

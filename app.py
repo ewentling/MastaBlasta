@@ -4055,6 +4055,177 @@ class TikTokAdapter(PlatformAdapter):
         return formatted
 
 
+class RedditAdapter(PlatformAdapter):
+    """Reddit adapter supporting text posts, link posts, and image/video posts"""
+    MAX_TITLE_LENGTH = 300
+    MAX_SELFTEXT_LENGTH = 40000
+
+    def __init__(self):
+        descriptions = {
+            'text': 'Self-post with title and body text',
+            'link': 'Link post with title and URL',
+            'image': 'Image post with title and image',
+            'video': 'Video post with title and video'
+        }
+        rate_limits = {
+            'text': {'requests_per_hour': 10, 'requests_per_day': 100},
+            'link': {'requests_per_hour': 10, 'requests_per_day': 100},
+            'image': {'requests_per_hour': 10, 'requests_per_day': 100},
+            'video': {'requests_per_hour': 5, 'requests_per_day': 50}
+        }
+        super().__init__('reddit',
+                         supported_post_types=['text', 'link', 'image', 'video'],
+                         post_type_descriptions=descriptions,
+                         rate_limits=rate_limits)
+
+    def get_post_type_requirements(self, post_type):
+        """Get requirements for Reddit post types"""
+        if post_type == 'text':
+            return {
+                'max_title_length': self.MAX_TITLE_LENGTH,
+                'max_body_length': self.MAX_SELFTEXT_LENGTH,
+                'requires_subreddit': True
+            }
+        elif post_type == 'link':
+            return {
+                'max_title_length': self.MAX_TITLE_LENGTH,
+                'requires_url': True,
+                'requires_subreddit': True
+            }
+        elif post_type == 'image':
+            return {
+                'max_title_length': self.MAX_TITLE_LENGTH,
+                'requires_image': True,
+                'requires_subreddit': True
+            }
+        elif post_type == 'video':
+            return {
+                'max_title_length': self.MAX_TITLE_LENGTH,
+                'requires_video': True,
+                'max_duration': 15 * 60,  # 15 minutes
+                'requires_subreddit': True
+            }
+        return {}
+
+    def format_post(self, content, media=None, post_type='text', **kwargs):
+        if not self.validate_post_type(post_type):
+            raise ValueError(
+                f"Unsupported post type '{post_type}' for {self.platform_name}. "
+                f"Supported types: {', '.join(self.supported_post_types)}"
+            )
+
+        subreddit = kwargs.get('subreddit')
+        title = kwargs.get('title', content[:self.MAX_TITLE_LENGTH] if content else '')
+        
+        formatted = {
+            'platform': self.platform_name,
+            'post_type': post_type,
+            'title': title[:self.MAX_TITLE_LENGTH],
+            'subreddit': subreddit,
+            'flair_id': kwargs.get('flair_id'),
+            'nsfw': kwargs.get('nsfw', False),
+            'spoiler': kwargs.get('spoiler', False)
+        }
+
+        if post_type == 'text':
+            formatted['selftext'] = content[:self.MAX_SELFTEXT_LENGTH] if content else ''
+        elif post_type == 'link':
+            formatted['url'] = kwargs.get('url', '')
+        elif post_type in ['image', 'video']:
+            formatted['media'] = media
+            formatted['requires_media'] = True
+            if post_type == 'video':
+                formatted['requires_video'] = True
+
+        return formatted
+
+
+class GoogleBusinessAdapter(PlatformAdapter):
+    """Google Business Profile adapter for local business posts"""
+    MAX_POST_LENGTH = 1500
+
+    def __init__(self):
+        descriptions = {
+            'update': 'Standard business update post',
+            'offer': 'Special offer or promotion',
+            'event': 'Business event announcement',
+            'product': 'Product showcase post'
+        }
+        rate_limits = {
+            'update': {'requests_per_hour': 10, 'requests_per_day': 100},
+            'offer': {'requests_per_hour': 5, 'requests_per_day': 50},
+            'event': {'requests_per_hour': 5, 'requests_per_day': 50},
+            'product': {'requests_per_hour': 10, 'requests_per_day': 100}
+        }
+        super().__init__('google_business',
+                         supported_post_types=['update', 'offer', 'event', 'product'],
+                         post_type_descriptions=descriptions,
+                         rate_limits=rate_limits)
+
+    def get_post_type_requirements(self, post_type):
+        """Get requirements for Google Business post types"""
+        base = {
+            'max_length': self.MAX_POST_LENGTH,
+            'supports_cta': True,
+            'supports_media': True
+        }
+        
+        if post_type == 'offer':
+            base['requires_coupon_code'] = False
+            base['requires_redemption_url'] = False
+            base['requires_offer_dates'] = True
+        elif post_type == 'event':
+            base['requires_event_title'] = True
+            base['requires_event_dates'] = True
+        elif post_type == 'product':
+            base['requires_product_name'] = True
+            base['supports_price'] = True
+            
+        return base
+
+    def format_post(self, content, media=None, post_type='update', **kwargs):
+        if not self.validate_post_type(post_type):
+            raise ValueError(
+                f"Unsupported post type '{post_type}' for {self.platform_name}. "
+                f"Supported types: {', '.join(self.supported_post_types)}"
+            )
+
+        formatted = {
+            'platform': self.platform_name,
+            'post_type': post_type,
+            'content': content[:self.MAX_POST_LENGTH] if content else '',
+            'media': media,
+            'cta_type': kwargs.get('cta_type'),  # BOOK, ORDER, SHOP, LEARN_MORE, SIGN_UP, CALL
+            'cta_url': kwargs.get('cta_url')
+        }
+
+        if post_type == 'offer':
+            formatted['offer_details'] = {
+                'coupon_code': kwargs.get('coupon_code'),
+                'redemption_url': kwargs.get('redemption_url'),
+                'start_date': kwargs.get('offer_start_date'),
+                'end_date': kwargs.get('offer_end_date'),
+                'terms_conditions': kwargs.get('terms_conditions')
+            }
+        elif post_type == 'event':
+            formatted['event_details'] = {
+                'title': kwargs.get('event_title'),
+                'start_date': kwargs.get('event_start_date'),
+                'end_date': kwargs.get('event_end_date')
+            }
+        elif post_type == 'product':
+            formatted['product_details'] = {
+                'name': kwargs.get('product_name'),
+                'price': kwargs.get('price'),
+                'currency': kwargs.get('currency', 'USD')
+            }
+
+        if len(content) > self.MAX_POST_LENGTH:
+            formatted['truncated'] = True
+
+        return formatted
+
+
 # Initialize platform adapters
 PLATFORM_ADAPTERS = {
     'twitter': TwitterAdapter(),
@@ -4066,6 +4237,8 @@ PLATFORM_ADAPTERS = {
     'youtube': YouTubeAdapter(),
     'pinterest': PinterestAdapter(),
     'tiktok': TikTokAdapter(),
+    'reddit': RedditAdapter(),
+    'google_business': GoogleBusinessAdapter(),
 }
 
 

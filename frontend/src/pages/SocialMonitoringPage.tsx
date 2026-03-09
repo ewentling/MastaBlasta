@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { socialMonitorsApi } from '../api';
+import { socialMonitorsApi, api } from '../api';
 import { Plus, Trash2, Eye, RefreshCw, TrendingUp, MessageCircle, ThumbsUp, Share2, MessageSquare, BarChart3, Power, PowerOff } from 'lucide-react';
-import axios from 'axios';
 
 function MonitorSkeleton() {
   return (
@@ -49,7 +48,7 @@ export default function SocialMonitoringPage() {
 
   const loadTemplates = async () => {
     try {
-      const response = await axios.get('/api/response-templates');
+      const response = await api.get('/response-templates');
       setTemplates(response.data);
     } catch (error) {
       console.error('Error loading templates:', error);
@@ -64,7 +63,7 @@ export default function SocialMonitoringPage() {
     }
     setConfirmDelete(null);
     try {
-      await axios.delete(`/api/response-templates/${templateId}`);
+      await api.delete(`/response-templates/${templateId}`);
       await loadTemplates();
     } catch {
       // silent fail — list did not change
@@ -73,7 +72,7 @@ export default function SocialMonitoringPage() {
 
   const loadInteractions = async () => {
     try {
-      const response = await axios.get('/api/chatbot/interactions?per_page=50');
+      const response = await api.get('/chatbot/interactions?per_page=50');
       setInteractions(response.data.interactions || []);
     } catch (error) {
       console.error('Error loading interactions:', error);
@@ -82,7 +81,7 @@ export default function SocialMonitoringPage() {
 
   const loadStats = async () => {
     try {
-      const response = await axios.get('/api/chatbot/stats');
+      const response = await api.get('/chatbot/stats');
       setStats(response.data);
       setStatsRefreshedAt(new Date());
     } catch {
@@ -114,7 +113,7 @@ export default function SocialMonitoringPage() {
 
   const toggleMutation = useMutation({
     mutationFn: async ({ id, active }: { id: string; active: boolean }) => {
-      const response = await axios.put(`/api/social-monitors/${id}`, { active });
+      const response = await api.put(`/social-monitors/${id}`, { active });
       return response.data;
     },
     onSuccess: () => {
@@ -596,7 +595,7 @@ export default function SocialMonitoringPage() {
           onClose={() => setShowCreateTemplateModal(false)}
           onSave={async (data) => {
             try {
-              await axios.post('/api/response-templates', data);
+              await api.post('/response-templates', data);
               setShowCreateTemplateModal(false);
               loadTemplates();
             } catch (error) {
@@ -775,7 +774,7 @@ function CreateMonitorModal({
   useEffect(() => {
     const loadTemplates = async () => {
       try {
-        const response = await axios.get('/api/response-templates');
+        const response = await api.get('/response-templates');
         setTemplates(response.data);
       } catch (error) {
         console.error('Error loading templates:', error);

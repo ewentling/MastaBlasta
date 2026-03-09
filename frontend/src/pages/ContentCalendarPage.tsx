@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
+import withDragAndDrop from 'react-big-calendar/lib/addons/dragAndDrop';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import enUS from 'date-fns/locale/en-US';
 import { postsApi, api } from '../api';
-import { Calendar as CalendarIcon, Plus, X, Settings, CheckCircle, List } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, X, Settings, CheckCircle, List, GripVertical } from 'lucide-react';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import 'react-big-calendar/lib/addons/dragAndDrop/styles.css';
 
 const locales = {
   'en-US': enUS,
@@ -19,6 +21,9 @@ const localizer = dateFnsLocalizer({
   locales,
 });
 
+// Create drag-and-drop enhanced calendar
+const DragAndDropCalendar = withDragAndDrop(Calendar);
+
 interface CalendarEvent {
   id: string;
   title: string;
@@ -26,7 +31,7 @@ interface CalendarEvent {
   end: Date;
   content: string;
   platforms: string[];
-  status: 'draft' | 'scheduled' | 'published';
+  status: 'draft' | 'scheduled' | 'published' | 'pending_approval';
   account_ids?: string[];
 }
 
@@ -93,6 +98,45 @@ export default function ContentCalendarPage() {
     setShowEventModal(true);
   }, []);
 
+  // Handle drag-and-drop rescheduling
+  const handleEventDrop = useCallback(async ({ event, start, end: newEnd }: { event: CalendarEvent; start: Date; end: Date }) => {
+    // Don't allow rescheduling published posts
+    if (event.status === 'published') {
+      alert('Cannot reschedule published posts');
+      return;
+    }
+
+    try {
+      // Update locally first for immediate feedback (newEnd is used to update the visual event block)
+      setEvents(prev => prev.map(e => 
+        e.id === event.id 
+          ? { ...e, start, end: newEnd }
+          : e
+      ));
+
+      // Send reschedule request to backend
+      await api.post(`/v2/posts/${event.id}/reschedule`, {
+        scheduled_time: start.toISOString()
+      });
+
+    } catch (error) {
+      console.error('Error rescheduling post:', error);
+      alert('Failed to reschedule post. Please try again.');
+      // Reload to restore original state
+      loadScheduledPosts();
+    }
+  }, []);
+
+  // Handle event resize (change duration)
+  const handleEventResize = useCallback(({ event, start, end }: { event: CalendarEvent; start: Date; end: Date }) => {
+    // For now, just update the visual - the end time doesn't affect scheduling
+    setEvents(prev => prev.map(e => 
+      e.id === event.id 
+        ? { ...e, start, end }
+        : e
+    ));
+  }, []);
+
   const handleGoogleCalendarAuth = async () => {
     try {
       const response = await api.get('/google-calendar/authorize');
@@ -143,6 +187,7 @@ export default function ContentCalendarPage() {
     let backgroundColor = '#3174ad';
     if (event.status === 'published') backgroundColor = '#4caf50';
     if (event.status === 'draft') backgroundColor = '#ff9800';
+    if (event.status === 'pending_approval') backgroundColor = '#8b5cf6';
     
     return {
       style: {
@@ -152,6 +197,7 @@ export default function ContentCalendarPage() {
         color: 'white',
         border: '0px',
         display: 'block',
+        cursor: event.status === 'published' ? 'default' : 'grab',
       },
     };
   };
@@ -189,15 +235,43 @@ export default function ContentCalendarPage() {
       </div>
 
       <div style={{ height: 'calc(100vh - 200px)', backgroundColor: 'var(--card-bg)', padding: '20px', borderRadius: '12px' }}>
-        <Calendar
+        <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+            <GripVertical size={14} />
+            Drag and drop events to reschedule them
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#3174ad' }} />
+              <span>Scheduled</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#ff9800' }} />
+              <span>Draft</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#8b5cf6' }} />
+              <span>Pending Approval</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ width: '12px', height: '12px', borderRadius: '3px', backgroundColor: '#4caf50' }} />
+              <span>Published</span>
+            </div>
+          </div>
+        </div>
+        <DragAndDropCalendar
           localizer={localizer}
           events={events}
           startAccessor="start"
           endAccessor="end"
-          style={{ height: '100%' }}
+          style={{ height: 'calc(100% - 50px)' }}
           onSelectSlot={handleSelectSlot}
           onSelectEvent={handleSelectEvent}
+          onEventDrop={handleEventDrop}
+          onEventResize={handleEventResize}
           selectable
+          resizable
+          draggableAccessor={(event: CalendarEvent) => event.status !== 'published'}
           eventPropGetter={eventStyleGetter}
           views={['month', 'week', 'day', 'agenda']}
           defaultView="month"
